@@ -3305,14 +3305,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // ── Mark all checks processed ────────────────────────────────────────────
     // Bulk form of the per-check "Payment Processed" toggle: flips
     // crc_transferred on every check of the deal in one click.
+    // Sets crc_transferred on EVERY check on the deal, in both directions.
+    // The deal page has one "Payment Processed" toggle for the whole deal
+    // rather than one per check, so this needs to clear as well as set.
+    // `processed` defaults to true so an older caller sending no flag keeps
+    // the original set-only behaviour. crc_transferred semantics are
+    // unchanged - the payouts report reads it exactly as before.
     if (action === 'set_all_checks_processed') {
+      const processed = body.processed === undefined ? true : !!body.processed
       const { data: flipped, error: bulkError } = await supabase
         .from('checks_received')
-        .update({ crc_transferred: true, updated_at: new Date().toISOString() })
+        .update({ crc_transferred: processed, updated_at: new Date().toISOString() })
         .eq('transaction_id', id)
         .select('id')
       if (bulkError) throw bulkError
-      return NextResponse.json({ success: true, updated: (flipped || []).length })
+      return NextResponse.json({
+        success: true,
+        processed,
+        updated: (flipped || []).length,
+      })
     }
 
     // ── Mark agent paid (TIA) ────────────────────────────────────────────────

@@ -423,7 +423,7 @@ export default function AdminOnboardingPage() {
 
           return (
             <div key={a.id} className="container-card">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <div className="w-9 h-9 rounded-full bg-[#F5EDE2] text-luxury-accent flex items-center justify-center text-xs font-semibold flex-shrink-0">
                   {initials}
                 </div>
@@ -450,7 +450,7 @@ export default function AdminOnboardingPage() {
                     {postCoSign && a.broker_signed_at ? ` · Co-signed ${fmtDate(a.broker_signed_at)}` : ''}
                   </p>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex flex-wrap items-center gap-2 sm:flex-shrink-0">
                   {atW9 && canManage && a.w9_form_id && (
                     <button
                       onClick={() => checkW9(a.id)}

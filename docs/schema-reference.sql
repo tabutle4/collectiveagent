@@ -80,6 +80,7 @@ CREATE TABLE public.users (
   revenue_share_percentage numeric DEFAULT 2,
   payload_payee_id text,
   payload_payout_customer_id text,
+  dashboard_links jsonb DEFAULT '[]'::jsonb,
   bank_connected boolean DEFAULT false,
   bank_connected_at timestamp with time zone,
   qualifying_transaction_count integer DEFAULT 0,

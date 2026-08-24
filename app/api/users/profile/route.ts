@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireAuth, canAccessAgent, canManageAgent } from '@/lib/api-auth'
+import { sanitizeDashboardLinks } from '@/lib/dashboard/links'
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request)
@@ -248,11 +249,17 @@ export async function PATCH(request: NextRequest) {
         'birth_month',
         'shirt_type',
         'shirt_size',
+        // Courtney edits her own broker-dashboard links, so this has to be
+        // self-updatable. Sanitized below - never stored as sent.
+        'dashboard_links',
       ]
       const filteredUpdates: Record<string, any> = {}
       for (const key of Object.keys(updates)) {
         if (allowedSelfUpdateFields.includes(key)) {
-          filteredUpdates[key] = updates[key]
+          filteredUpdates[key] =
+            key === 'dashboard_links'
+              ? sanitizeDashboardLinks(updates[key])
+              : updates[key]
         }
       }
       const { error } = await supabaseAdmin.from('users').update(filteredUpdates).eq('id', id)
@@ -351,13 +358,21 @@ export async function PATCH(request: NextRequest) {
         'onboarding_fee_paid',
         'onboarding_fee_paid_date',
         'admin_notes',
+        // Broker-dashboard custom links. Sanitized below, never stored raw.
+        'dashboard_links',
       ]
       const submittedKeys = Object.keys(updates || {})
       const filteredUpdates: Record<string, any> = {}
       const rejectedKeys: string[] = []
       for (const key of submittedKeys) {
         if (allowedAdminUpdateFields.includes(key)) {
-          filteredUpdates[key] = updates[key]
+          // dashboard_links lands in an href, so it is validated here and not
+          // only in the form. http/https absolute URLs only - a javascript:
+          // or data: URL stored here would run in the viewer's browser.
+          filteredUpdates[key] =
+            key === 'dashboard_links'
+              ? sanitizeDashboardLinks(updates[key])
+              : updates[key]
         } else {
           rejectedKeys.push(key)
         }

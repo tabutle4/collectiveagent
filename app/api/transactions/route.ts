@@ -67,9 +67,19 @@ export async function GET(request: NextRequest) {
     // Checks power the admin funding filter. They are fetched and returned
     // ONLY in the canViewAll branch — an agent's payload must not carry
     // check data, and office_gross is likewise admin-only.
+    //
+    // fundingAgents is the second half of that filter: whether each deal has a
+    // PAID agent row, which is what tells "title paid the agent directly" from
+    // "still waiting on money" (see fundingFilterState). Aggregated to two
+    // booleans per transaction on the server so no commission amount crosses
+    // the wire, and returned in the same canViewAll-only branch.
+    // transaction_internal_agents is past 1,500 rows, so fetchAllRows, not a
+    // bare select that would silently truncate at 1,000.
     let fundingChecks: any[] = []
+    let fundingAgents: Array<{ transaction_id: string; any_paid: boolean; any_basis: boolean }> = []
     if (canViewAll) {
-      ;[transactions, fundingChecks] = await Promise.all([
+      let fundingAgentRows: any[] = []
+      ;[transactions, fundingChecks, fundingAgentRows] = await Promise.all([
         fetchAllRows(
           'transactions',
           `${TRANSACTION_COLUMNS},
@@ -83,7 +93,26 @@ export async function GET(request: NextRequest) {
           {},
           supabase
         ),
+        fetchAllRows(
+          'transaction_internal_agents',
+          'transaction_id, payment_date, agent_basis',
+          {},
+          supabase
+        ),
       ])
+      const agentAgg = new Map<string, { any_paid: boolean; any_basis: boolean }>()
+      for (const r of fundingAgentRows as any[]) {
+        const tid = r?.transaction_id
+        if (!tid) continue
+        const cur = agentAgg.get(tid) || { any_paid: false, any_basis: false }
+        if (r.payment_date) cur.any_paid = true
+        if (parseFloat(String(r.agent_basis ?? 0)) > 0) cur.any_basis = true
+        agentAgg.set(tid, cur)
+      }
+      fundingAgents = Array.from(agentAgg.entries()).map(([transaction_id, v]) => ({
+        transaction_id,
+        ...v,
+      }))
     } else {
       // An agent's deal list is the union of deals they hold a commission row
       // on and deals they submitted. Filtering on submitted_by alone hid every
@@ -158,8 +187,8 @@ export async function GET(request: NextRequest) {
       agents,
       permissions: permissionsObject,
       canViewAll,
-      // Key present ONLY for canViewAll — the agent payload is unchanged.
-      ...(canViewAll ? { checks: fundingChecks } : {}),
+      // Keys present ONLY for canViewAll — the agent payload is unchanged.
+      ...(canViewAll ? { checks: fundingChecks, fundingAgents } : {}),
     })
   } catch (error) {
     return NextResponse.json({ error: 'Server error', details: String(error) }, { status: 500 })

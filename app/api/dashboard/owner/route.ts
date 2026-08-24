@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
-import { deriveComplianceForTransactions } from '@/lib/compliance/derive'
 import { fundingFilterState } from '@/lib/transactions/funding'
+import { needsAttentionCounts } from '@/lib/dashboard/needsAttention'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +14,11 @@ export const dynamic = 'force-dynamic'
 //   CDA queue:      cda_sent_for_approval_at IS NOT NULL AND broker_approved_at IS NULL
 // There is deliberately NO cda_status filter - 'pending_approval' does not
 // exist in the live vocabulary and filtering on it returns zero rows forever.
+//
+// The four shared counts (eligible for payout, CDA needed, compliance
+// requested, broker approval pending) come from lib/dashboard/needsAttention
+// so this view and the ops view cannot report different numbers for the same
+// thing. They used to be computed separately here and always disagreed.
 export async function GET(request: NextRequest) {
   const auth = await requirePermission(request, 'can_view_owner_dashboard')
   if (auth.error) return auth.error
@@ -27,6 +32,8 @@ export async function GET(request: NextRequest) {
       sessions,
       prospectUsers,
       { data: bankIssueUsers },
+      fundingAgentRows,
+      shared,
     ] = await Promise.all([
       supabaseAdmin
         .from('users')
@@ -62,6 +69,11 @@ export async function GET(request: NextRequest) {
         .eq('status', 'active')
         .not('payload_payee_id', 'is', null)
         .or('bank_connected.is.null,bank_connected.eq.false'),
+      // Agent payment rows for the funding predicate: a paid agent means the
+      // deal is funded even when no check ever passed through the office.
+      // Past 1,500 rows, so fetchAllRows.
+      fetchAllRows('transaction_internal_agents', 'transaction_id, payment_date, agent_basis'),
+      needsAttentionCounts(),
     ])
 
     // ── Funding states, one definition (shared with the /transactions chips)
@@ -72,11 +84,25 @@ export async function GET(request: NextRequest) {
       list.push(c)
       checksByTxn.set(c.transaction_id, list)
     }
+    // Two booleans per deal, matching the shape the transactions list gets.
+    const agentSummaryByTxn = new Map<string, { anyPaid: boolean; anyBasis: boolean }>()
+    for (const r of fundingAgentRows as any[]) {
+      if (!r?.transaction_id) continue
+      const cur = agentSummaryByTxn.get(r.transaction_id) || { anyPaid: false, anyBasis: false }
+      if (r.payment_date) cur.anyPaid = true
+      if ((parseFloat(String(r.agent_basis ?? 0)) || 0) > 0) cur.anyBasis = true
+      agentSummaryByTxn.set(r.transaction_id, cur)
+    }
+
     const fundingCounts = { waiting: 0, partial: 0, matched: 0, mismatch: 0 }
     const mismatchDeals: { id: string; property_address: string; diff: number }[] = []
     for (const t of transactions as any[]) {
       const txnChecks = checksByTxn.get(t.id) || []
-      const st = fundingFilterState(t, txnChecks)
+      const st = fundingFilterState(
+        t,
+        txnChecks,
+        agentSummaryByTxn.get(t.id) || { anyPaid: false, anyBasis: false }
+      )
       if (!st) continue
       fundingCounts[st]++
       if (st === 'mismatch') {
@@ -91,32 +117,6 @@ export async function GET(request: NextRequest) {
         })
       }
     }
-
-    // ── Eligible for payout - derived compliance, same rule as the admin
-    // dashboard tile (deals with a check + compliance complete). Chunked
-    // because the helper puts the whole id list in one .in() URL.
-    const checkTxnIds = Array.from(checksByTxn.keys())
-    const complianceByTxn: Record<string, any> = {}
-    for (let i = 0; i < checkTxnIds.length; i += 200) {
-      Object.assign(
-        complianceByTxn,
-        await deriveComplianceForTransactions(checkTxnIds.slice(i, i + 200))
-      )
-    }
-    const eligibleForPayout = (transactions as any[]).filter(
-      t => checksByTxn.has(t.id) && complianceByTxn[t.id]?.status === 'complete'
-    ).length
-
-    // ── CDA needed - same definition the admin dashboard uses.
-    const isLeaseType = (t: any) => /tenant|landlord|lease/i.test(String(t.transaction_type || ''))
-    const isWorking = (t: any) => ['active', 'pending'].includes(String(t.status || '').toLowerCase())
-    const cdaNeeded = (transactions as any[]).filter(
-      t =>
-        isWorking(t) &&
-        !isLeaseType(t) &&
-        complianceByTxn[t.id]?.status === 'complete' &&
-        String(t.cda_status || '') !== 'sent'
-    ).length
 
     // ── Onboarding in flight
     const openSessions = (sessions as any[]) || []
@@ -180,13 +180,17 @@ export async function GET(request: NextRequest) {
         sent_at: t.cda_sent_for_approval_at,
       })),
       tiles: {
-        eligibleForPayout,
+        eligibleForPayout: shared.eligibleForPayout,
         waitingOnFunds: fundingCounts.waiting,
-        cdaNeeded,
+        cdaNeeded: shared.cdaNeeded,
         onboardingInFlight: openSessions.length,
         onboardingAtW9: atW9,
       },
       fundingCounts,
+      sharedCounts: {
+        complianceRequested: shared.complianceRequested,
+        brokerApprovalPending: shared.brokerApprovalPending,
+      },
       needsAttention: {
         mismatchDeals,
         bankIssueCount: (bankIssueUsers || []).length,

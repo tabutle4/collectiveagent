@@ -35,12 +35,10 @@ import {
 import { TransactionStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/transactions/types'
 import { intermediaryBadgeProps, sideLabel } from '@/lib/transactions/sides'
 import { computeCommission } from '@/lib/transactions/math'
-import { fundingStatus, MATH_TOLERANCE } from '@/lib/transactions/funding'
+import { fundingStatus, fundingFilterState, MATH_TOLERANCE } from '@/lib/transactions/funding'
 import { getPipelineStage, allAgentsPaid } from '@/lib/transactions/stage'
-import { getAppRole } from '@/lib/transactions/role'
 import FundingBanner from '@/components/transactions/FundingBanner'
 import PipelineRail from '@/components/transactions/PipelineRail'
-import WhatsNextCard from '@/components/transactions/WhatsNextCard'
 import StatusBadge from '@/components/transactions/StatusBadge'
 import CloseTransactionModal from "@/components/transactions/CloseDialog"
 import PayoutModal from '@/components/transactions/PayoutModal'
@@ -3306,24 +3304,27 @@ export default function AdminTransactionDetailPage() {
     }
   }
 
-  // Bulk form of the per-check "Payment Processed" toggle.
-  const markAllChecksProcessed = async () => {
-    if (!confirm('Mark every check on this deal as processed?')) return
+  // The deal's single "Payment Processed" toggle. There is deliberately no
+  // per-check control any more: processing is a property of the deal's money
+  // as a whole, and two controls writing the same column meant the slim bar
+  // could disagree with the expanded rows. On = every check processed,
+  // off = none.
+  const setAllChecksProcessed = async (processed: boolean) => {
     setMarkingAllChecks(true)
     try {
       const res = await fetch(`/api/admin/transactions/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'set_all_checks_processed' }),
+        body: JSON.stringify({ action: 'set_all_checks_processed', processed }),
       })
       const d = await res.json()
       if (!res.ok) {
-        alert(d.error || 'Failed to mark checks processed')
+        alert(d.error || 'Failed to update the checks')
         return
       }
       await loadData()
     } catch (err: any) {
-      alert(err?.message || 'Failed to mark checks processed')
+      alert(err?.message || 'Failed to update the checks')
     } finally {
       setMarkingAllChecks(false)
     }
@@ -3855,6 +3856,23 @@ export default function AdminTransactionDetailPage() {
   const officeGross = parseFloat(txn?.office_gross || 0)
   const totalAgentNetsRaw = agents.reduce((s: number, a: any) => s + parseFloat(a.agent_net || 0), 0)
   const funding = fundingStatus(checks, officeGross)
+  // The corrected funding verdict, shared with the transactions list chips and
+  // the dashboard tiles so all three agree. Differs from `funding` above in
+  // exactly one case: no check ever reached the office but an agent was paid,
+  // which is what happens when title pays the agent directly.
+  //
+  // NOT used for the payout gate below. That gate has to keep matching the
+  // SERVER's gate (dealFundingStatus -> fundingStatus on checks alone), or the
+  // page would offer a Process Payout button the server rejects.
+  const fundingVerdict = fundingFilterState(
+    { status: txn?.status, office_gross: txn?.office_gross },
+    checks,
+    {
+      anyPaid: agents.some((a: any) => !!a.payment_date),
+      anyBasis: agents.some((a: any) => (parseFloat(String(a.agent_basis ?? 0)) || 0) > 0),
+    }
+  )
+  const fundedWithoutChecks = checks.length === 0 && fundingVerdict === 'matched'
   const commissionMathFlags: string[] = []
   if (txn && clearedChecks.length > 0) {
     const expectedPayout = officeGross
@@ -3880,13 +3898,13 @@ export default function AdminTransactionDetailPage() {
     ? getPipelineStage({
         status: txn.status,
         transaction_type: txn.transaction_type,
-        under_contract_date: txn.acceptance_date || null,
+        acceptance_date: txn.acceptance_date || null,
         compliance_status: txn.compliance_status,
         compliance_complete_date: complianceIsComplete
           ? complianceDerivedFull?.complete_date || txn.closed_date || txn.updated_at
           : null,
         closed_date: txn.closed_date || null,
-        funding_state: funding.state,
+        funding_state: fundingVerdict ?? funding.state,
         all_agents_paid: allAgentsPaid(agents),
       })
     : null
@@ -3939,22 +3957,14 @@ export default function AdminTransactionDetailPage() {
       fix: "Bank connection doesn't match this agent's Payload account - resend Bank Connect from the app",
     },
   ]
+  // On when every check on the deal is processed. Drives the single
+  // Payment Processed toggle; a partially-processed deal reads as off, so one
+  // tap brings the whole deal into line.
+  const allChecksProcessed =
+    checks.length > 0 && checks.every((c: any) => !!c.crc_transferred)
   const payoutRows = agents.filter(
     (a: any) => a.payment_status !== 'paid' && parseFloat(a.agent_net || 0) > 0
   )
-  const payoutReadyRows = payoutRows.filter((a: any) => payoutGatesFor(a).every(g => g.ok))
-  // One short clause for the what's-next strip naming the most common holdup.
-  const payoutBlockedNote = (() => {
-    const blockedRows = payoutRows.filter((a: any) => !payoutGatesFor(a).every(g => g.ok))
-    if (blockedRows.length === 0) return undefined
-    const firstBlocked = blockedRows[0]
-    const firstGate = payoutGatesFor(firstBlocked).find(g => !g.ok)
-    if (firstGate?.key === 'statement') {
-      return `Statement still needed for ${fmtName(firstBlocked.user)}.`
-    }
-    return undefined
-  })()
-
   // Helper functions for multi-check editing
   const getCheckEditData = (checkId: string) => editChecksData[checkId] || {}
   const updateCheckField = (checkId: string, field: string, value: any) => {
@@ -4059,22 +4069,28 @@ export default function AdminTransactionDetailPage() {
               <button
                 onClick={() => setActiveTab('check_payouts')}
                 className={`hidden sm:flex items-center gap-1.5 text-xs px-2 py-1 rounded-full border transition-colors ${
-                  funding.state === 'matched'
+                  fundingVerdict === 'matched'
                     ? 'bg-green-50 border-green-200 text-green-800'
-                    : funding.state === 'mismatch'
+                    : fundingVerdict === 'mismatch'
                       ? 'bg-red-50 border-red-200 text-red-800'
-                      : funding.state === 'partial'
+                      : fundingVerdict === 'partial'
                         ? 'bg-amber-50 border-amber-200 text-amber-800'
                         : 'bg-luxury-gray-5/30 border-luxury-gray-5 text-luxury-gray-2'
                 }`}
                 title="Open Check & Payouts"
               >
-                <span className="font-semibold">
-                  ${funding.received.toLocaleString()} of ${funding.expected.toLocaleString()}
-                </span>
-                <span className="underline">
-                  {funding.checkCount} check{funding.checkCount !== 1 ? 's' : ''}
-                </span>
+                {fundedWithoutChecks ? (
+                  <span className="font-semibold">Paid direct</span>
+                ) : (
+                  <>
+                    <span className="font-semibold">
+                      ${funding.received.toLocaleString()} of ${funding.expected.toLocaleString()}
+                    </span>
+                    <span className="underline">
+                      {funding.checkCount} check{funding.checkCount !== 1 ? 's' : ''}
+                    </span>
+                  </>
+                )}
               </button>
               {txn.status === 'cancelled' && (
                 txn.archived_at ? (
@@ -4209,22 +4225,11 @@ export default function AdminTransactionDetailPage() {
       <div className="flex flex-col md:flex-row min-w-0">
         {/* Main content */}
         <div className="flex-1 p-4 md:p-6 min-w-0">
-          {/* Funding banner + what's-next strip — shown on every tab, all
-              reading the single fundingStatus() computed above. */}
+          {/* Funding banner - shown on every tab, reading the single
+              fundingStatus() computed above. */}
           {txn.status !== 'cancelled' && (
             <div className="space-y-3 mb-4">
-              <FundingBanner funding={funding} />
-              {pipelineStage && (
-                <WhatsNextCard
-                  stage={pipelineStage}
-                  role={getAppRole(user)}
-                  transaction={txn}
-                  payoutReadyCount={payoutReadyRows.length}
-                  payoutTotalCount={payoutRows.length}
-                  payoutBlockedNote={payoutBlockedNote}
-                  onGoToPayouts={() => setActiveTab('check_payouts')}
-                />
-              )}
+              <FundingBanner funding={funding} fundedWithoutChecks={fundedWithoutChecks} />
             </div>
           )}
           {/* ── OVERVIEW TAB ─────────────────────────────────────────────── */}
@@ -5469,24 +5474,6 @@ export default function AdminTransactionDetailPage() {
                               </div>
                             </div>
 
-                            {/* Payment Processed toggle */}
-                            <div className="flex items-center justify-between inner-card mb-3">
-                              <div>
-                                <p className="text-xs font-semibold text-luxury-gray-1">Payment Processed</p>
-                                <p className="text-xs text-luxury-gray-3">
-                                  Moves to Recently Paid until marked paid
-                                </p>
-                              </div>
-                              <button
-                                onClick={() => updateCheck(check.id, { crc_transferred: !check.crc_transferred })}
-                                className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${check.crc_transferred ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
-                              >
-                                <span
-                                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${check.crc_transferred ? 'translate-x-6' : 'translate-x-1'}`}
-                                />
-                              </button>
-                            </div>
-
                             {/* Notes */}
                             <div>
                               <label className="field-label">Notes</label>
@@ -5618,7 +5605,7 @@ export default function AdminTransactionDetailPage() {
                             : 'Commission'
                           return (
                             <div key={a.id} className="inner-card">
-                              <div className="flex items-center gap-3">
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${ready ? 'bg-[#F5EDE2] text-luxury-accent' : 'bg-luxury-gray-5 text-luxury-gray-3'}`}>
                                   {initials}
                                 </div>
@@ -5632,7 +5619,7 @@ export default function AdminTransactionDetailPage() {
                                   </p>
                                 </div>
                                 {a.payment_sent_date ? (
-                                  <div className="flex flex-col items-end gap-1 flex-shrink-0 text-right">
+                                  <div className="flex flex-col items-start sm:items-end gap-1 sm:flex-shrink-0 sm:text-right">
                                     {a.payment_reference ? (
                                       <>
                                         <span className="text-xs text-luxury-gray-3">
@@ -5752,7 +5739,7 @@ export default function AdminTransactionDetailPage() {
                                   its what-to-fix list here since its button
                                   is disabled and cannot open the modal. */}
                               {!a.payment_sent_date && failing.length > 0 ? (
-                                <div className="mt-2 ml-11 p-2.5 bg-amber-50 border border-amber-200 rounded">
+                                <div className="mt-2 sm:ml-11 p-2.5 bg-amber-50 border border-amber-200 rounded">
                                   <p className="text-[11px] font-semibold text-amber-800 flex items-center gap-1.5 mb-1">
                                     <Lock size={11} /> {failing.length} step{failing.length !== 1 ? 's' : ''} before this payout can go
                                   </p>
@@ -5766,20 +5753,32 @@ export default function AdminTransactionDetailPage() {
                             </div>
                           )
                         })}
-                        {/* Slim checks bar + bulk toggle */}
-                        <div className="flex items-center justify-between px-1 py-1.5">
+                        {/* Slim checks bar + the deal's ONE Payment Processed
+                            toggle. Same label and switch treatment the
+                            per-check toggle used to carry, now covering every
+                            check on the deal at once. */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 px-1 py-1.5">
                           <p className="text-[11px] text-luxury-gray-3 flex items-center gap-1.5">
                             <ClipboardList size={12} />
                             {checks.length} check{checks.length !== 1 ? 's' : ''} on this deal · {checks.filter((c: any) => c.crc_transferred).length} marked processed
                           </p>
-                          {checks.length > 0 && checks.some((c: any) => !c.crc_transferred) && (
-                            <button
-                              onClick={markAllChecksProcessed}
-                              disabled={markingAllChecks}
-                              className="btn btn-secondary text-[11px] px-2.5 py-1 disabled:opacity-50"
-                            >
-                              {markingAllChecks ? 'Working...' : 'Mark all checks processed'}
-                            </button>
+                          {checks.length > 0 && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-luxury-gray-1">Payment Processed</span>
+                              <button
+                                onClick={() => setAllChecksProcessed(!allChecksProcessed)}
+                                disabled={markingAllChecks}
+                                role="switch"
+                                aria-checked={allChecksProcessed}
+                                aria-label="Payment Processed for every check on this deal"
+                                title={allChecksProcessed ? 'Clear processed on every check' : 'Mark every check processed'}
+                                className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${allChecksProcessed ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
+                              >
+                                <span
+                                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${allChecksProcessed ? 'translate-x-6' : 'translate-x-1'}`}
+                                />
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -6237,7 +6236,7 @@ export default function AdminTransactionDetailPage() {
               {/* Contact Modal */}
               {contactModal.open && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                  <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+                  <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
                     <div className="flex items-center justify-between p-4 border-b border-luxury-gray-5">
                       <h2 className="text-sm font-semibold text-luxury-gray-1">
                         {contactModal.editing ? 'Edit Contact' : 'Add Contact'}
@@ -6723,7 +6722,7 @@ export default function AdminTransactionDetailPage() {
       {/* ── Email Agent Modal ───────────────────────────────────────────────── */}
       {showEmailModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-md shadow-xl">
+          <div className="bg-white rounded-xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-luxury-gray-5">
               <p className="text-sm font-semibold text-luxury-gray-1">Email Agent</p>
               <button onClick={() => setShowEmailModal(false)}>
@@ -7159,7 +7158,7 @@ export default function AdminTransactionDetailPage() {
           onClick={closeRetainerModal}
         >
           <div
-            className="bg-white rounded-lg max-w-md w-full p-5"
+            className="bg-white rounded-lg max-w-md w-full p-5 max-h-[90vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}
           >
             <h2 className="text-base font-semibold text-luxury-gray-1 mb-1">
@@ -7256,7 +7255,7 @@ export default function AdminTransactionDetailPage() {
         const sideLabel = a.side === 'seller' || a.side === 'landlord' ? 'listing' : 'buying'
         return (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={closeAdditionalCompModal}>
-            <div className="bg-white rounded-lg max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
+            <div className="bg-white rounded-lg max-w-md w-full p-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
               <h2 className="text-base font-semibold text-luxury-gray-1 mb-1">Additional Compensation</h2>
               <p className="text-xs text-luxury-gray-3 mb-4">For {name}. Updates the primary row and creates a new unpaid payout row.</p>
               <div className="space-y-3">

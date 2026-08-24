@@ -9,11 +9,27 @@
  * Data comes from /api/dashboard/owner, which is gated on
  * can_view_owner_dashboard. The ops/admin views stay on the existing
  * dashboard content in app/admin/dashboard/page.tsx.
+ *
+ * Parity with the ops view is deliberate and partial. Added here: the
+ * production charts (the same ProductionCharts component the ops view renders,
+ * so the two cannot disagree about a quarter), a Compliance requested tile,
+ * and a personal links section. Deliberately NOT added, because they would be
+ * duplicates or lookalikes of something already on this page: ops' "Eligible
+ * for Payout", "Approved - CDA Needed" and "Broker Approval Pending" (the
+ * first two are tiles here already, the third is the CDA queue card at the top
+ * of this page).
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { CheckCircle, AlertCircle } from 'lucide-react'
+import { CheckCircle, AlertCircle, Plus, Trash2, ArrowUp, ArrowDown, ExternalLink } from 'lucide-react'
+import ProductionCharts from '@/components/dashboard/ProductionCharts'
+import {
+  sanitizeDashboardLinks,
+  isValidLinkUrl,
+  DASHBOARD_LINK_MAX,
+  type DashboardLink,
+} from '@/lib/dashboard/links'
 
 const fmt$ = (n: any) => {
   const v = parseFloat(String(n ?? 0)) || 0
@@ -34,14 +50,32 @@ const timeAgo = (iso: string | null | undefined) => {
 export default function OwnerDashboard({
   firstName,
   viewPill,
+  userId,
+  canViewFinancials = false,
 }: {
   firstName: string
   /** The view-toggle pill rendered by the page-level resolver. */
   viewPill: React.ReactNode
+  /** Courtney's own user id - dashboard_links is stored on her users row. */
+  userId?: string
+  /** Gates the two financial donuts, exactly as on the ops view. */
+  canViewFinancials?: boolean
 }) {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Chart data. Same endpoint the ops view uses, so there is one query and one
+  // set of numbers behind both views' charts.
+  const [chartData, setChartData] = useState<{
+    transactions: any[]
+    agentRows: any[]
+    leaseTypes: string[]
+  } | null>(null)
+  // Courtney's own links, from users.dashboard_links.
+  const [links, setLinks] = useState<DashboardLink[]>([])
+  const [linkDraft, setLinkDraft] = useState<DashboardLink>({ label: '', url: '' })
+  const [linkError, setLinkError] = useState<string | null>(null)
+  const [savingLinks, setSavingLinks] = useState(false)
 
   useEffect(() => {
     fetch('/api/dashboard/owner')
@@ -50,6 +84,90 @@ export default function OwnerDashboard({
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    // Charts are additive: a failure here must not take the queues down with
+    // it, so this is a separate fetch that fails quietly to "no charts".
+    fetch('/api/dashboard/transactions')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (!d) return
+        setChartData({
+          transactions: d.transactions || [],
+          agentRows: d.agentRows || [],
+          leaseTypes: (d.processingFeeTypes || [])
+            .filter((t: any) => t.is_lease)
+            .map((t: any) => t.name),
+        })
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (!d?.user) return
+        setLinks(sanitizeDashboardLinks(d.user.dashboard_links))
+      })
+      .catch(() => {})
+  }, [])
+
+  // One writer for the list. Saves through PATCH /api/users/profile, which
+  // re-sanitizes server-side - the validation here is a courtesy to the
+  // person typing, not the thing that protects the href.
+  const saveLinks = useCallback(
+    async (next: DashboardLink[]) => {
+      if (!userId) return
+      setSavingLinks(true)
+      setLinkError(null)
+      const previous = links
+      setLinks(next)
+      try {
+        const res = await fetch('/api/users/profile', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: userId, updates: { dashboard_links: next } }),
+        })
+        if (!res.ok) {
+          const d = await res.json().catch(() => null)
+          setLinks(previous)
+          setLinkError(d?.error || 'Could not save your links')
+        }
+      } catch (e: any) {
+        setLinks(previous)
+        setLinkError(e?.message || 'Could not save your links')
+      } finally {
+        setSavingLinks(false)
+      }
+    },
+    [userId, links]
+  )
+
+  const addLink = () => {
+    const url = linkDraft.url.trim()
+    if (!isValidLinkUrl(url)) {
+      setLinkError('Enter a full web address starting with http:// or https://')
+      return
+    }
+    if (links.length >= DASHBOARD_LINK_MAX) {
+      setLinkError(`That is the maximum of ${DASHBOARD_LINK_MAX} links.`)
+      return
+    }
+    const next = [...links, { label: linkDraft.label.trim() || url, url }]
+    setLinkDraft({ label: '', url: '' })
+    saveLinks(next)
+  }
+
+  const moveLink = (from: number, to: number) => {
+    if (to < 0 || to >= links.length) return
+    const next = [...links]
+    const [item] = next.splice(from, 1)
+    next.splice(to, 0, item)
+    saveLinks(next)
+  }
+
+  const removeLink = (i: number) => saveLinks(links.filter((_, idx) => idx !== i))
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
@@ -116,6 +234,14 @@ export default function OwnerDashboard({
       value: tiles.onboardingInFlight ?? 0,
       href: '/admin/onboarding',
       caption: `${tiles.onboardingAtW9 ?? 0} at W-9 · open tracker`,
+    },
+    // The one ops "Needs Attention" row with no equivalent anywhere on this
+    // page. Same shared count the ops view shows.
+    {
+      label: 'Compliance requested',
+      value: data?.sharedCounts?.complianceRequested ?? 0,
+      href: '/admin/compliance',
+      caption: 'Open compliance',
     },
   ]
 
@@ -209,7 +335,7 @@ export default function OwnerDashboard({
       </div>
 
       {/* Metric tiles - every tile is a link, no dead numbers */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
         {tileDefs.map(tile => (
           <Link key={tile.label} href={tile.href} className="container-card block hover:border-luxury-accent transition-colors">
             <p className="text-xs text-luxury-gray-3 mb-1">{tile.label}</p>
@@ -241,6 +367,101 @@ export default function OwnerDashboard({
           </div>
         )}
       </div>
+
+      {/* My links - Courtney's own shortcuts, stored on her users row. Kept
+          above the charts because it is something she acts on, and charts are
+          something she reads. */}
+      <div className="container-card mb-5">
+        <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+          My links
+        </p>
+        {links.length > 0 && (
+          <div className="space-y-1.5 mb-3">
+            {links.map((l, i) => (
+              <div key={`${l.url}-${i}`} className="flex items-center gap-2">
+                <a
+                  href={l.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-luxury-accent hover:underline flex items-center gap-1 min-w-0 flex-1"
+                >
+                  <span className="truncate">{l.label}</span>
+                  <ExternalLink size={11} className="flex-shrink-0" />
+                </a>
+                <button
+                  onClick={() => moveLink(i, i - 1)}
+                  disabled={i === 0 || savingLinks}
+                  className="p-1.5 text-luxury-gray-3 hover:text-luxury-gray-1 disabled:opacity-30"
+                  aria-label={`Move ${l.label} up`}
+                  title="Move up"
+                >
+                  <ArrowUp size={12} />
+                </button>
+                <button
+                  onClick={() => moveLink(i, i + 1)}
+                  disabled={i === links.length - 1 || savingLinks}
+                  className="p-1.5 text-luxury-gray-3 hover:text-luxury-gray-1 disabled:opacity-30"
+                  aria-label={`Move ${l.label} down`}
+                  title="Move down"
+                >
+                  <ArrowDown size={12} />
+                </button>
+                <button
+                  onClick={() => removeLink(i)}
+                  disabled={savingLinks}
+                  className="p-1.5 text-luxury-gray-3 hover:text-red-600 disabled:opacity-30"
+                  aria-label={`Remove ${l.label}`}
+                  title="Remove"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="text"
+            value={linkDraft.label}
+            onChange={e => setLinkDraft(d => ({ ...d, label: e.target.value }))}
+            placeholder="Name"
+            className="input-luxury text-xs sm:w-40"
+          />
+          <input
+            type="url"
+            value={linkDraft.url}
+            onChange={e => setLinkDraft(d => ({ ...d, url: e.target.value }))}
+            placeholder="https://"
+            className="input-luxury text-xs flex-1"
+          />
+          <button
+            onClick={addLink}
+            disabled={savingLinks || !linkDraft.url.trim()}
+            className="btn btn-secondary text-xs px-3 py-2 flex items-center justify-center gap-1 disabled:opacity-50"
+          >
+            <Plus size={12} /> Add
+          </button>
+        </div>
+        {linkError && <p className="text-xs text-red-700 mt-2">{linkError}</p>}
+        {links.length === 0 && !linkError && (
+          <p className="text-xs text-luxury-gray-3 mt-2">
+            Add the pages you open every day and they will live here.
+          </p>
+        )}
+      </div>
+
+      {/* Production charts, at the bottom. Same component the ops view renders
+          from the same endpoint, so a quarter reads the same on both. */}
+      {chartData && (
+        <div className="mb-5">
+          <ProductionCharts
+            transactions={chartData.transactions}
+            agentRows={chartData.agentRows}
+            leaseTypes={chartData.leaseTypes}
+            canViewFinancials={canViewFinancials}
+          />
+        </div>
+      )}
 
       {/* Go to */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">

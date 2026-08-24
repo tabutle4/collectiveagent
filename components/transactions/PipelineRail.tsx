@@ -7,6 +7,12 @@
  *
  * Cancelled transactions should NOT render this component — the caller
  * checks for the cancelled state and renders a text badge instead.
+ *
+ * MOBILE: eight labelled dots cannot fit 375px - at that width the labels
+ * either overlap or force the page to scroll sideways. Below `md` this renders
+ * a compact indicator instead: the current stage by name, its position in the
+ * sequence, and one progress bar. The full rail returns at `md` and up. Both
+ * read the same PIPELINE_STAGES order, so they cannot disagree.
  */
 
 import {
@@ -44,9 +50,45 @@ export default function PipelineRail({
 }: {
   currentStage: PipelineStage
 }) {
+  const currentIdx = PIPELINE_STAGES.indexOf(currentStage)
+  const stepNumber = currentIdx + 1
+  const totalSteps = PIPELINE_STAGES.length
+
   return (
     <div className="bg-luxury-light border-y border-luxury-gray-5 px-4 py-3.5">
-      <div className="flex items-start gap-0">
+      {/* Compact indicator, phones only */}
+      <div className="md:hidden">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <span className="text-xs font-medium text-chart-gold-10 truncate">
+            {STAGE_LABELS[currentStage]}
+          </span>
+          <span className="text-[11px] text-luxury-gray-3 flex-shrink-0">
+            Step {stepNumber} of {totalSteps}
+          </span>
+        </div>
+        {/* One segment per stage, filled up to the current one. Same shape the
+            onboarding tracker's step bar uses, and it needs no dynamic width -
+            a computed Tailwind class would not survive the build, and an
+            inline style is not how this app draws layout. */}
+        <div
+          className="flex gap-1"
+          role="progressbar"
+          aria-valuenow={stepNumber}
+          aria-valuemin={1}
+          aria-valuemax={totalSteps}
+          aria-label={`Pipeline stage: ${STAGE_LABELS[currentStage]}, step ${stepNumber} of ${totalSteps}`}
+        >
+          {PIPELINE_STAGES.map((stage, i) => (
+            <div
+              key={stage}
+              className={`h-1.5 flex-1 rounded ${i <= currentIdx ? 'bg-chart-gold-7' : 'bg-chart-gray-3'}`}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Full rail, md and up */}
+      <div className="hidden md:flex items-start gap-0">
         {PIPELINE_STAGES.map((stage, idx) => {
           const state = stageState(stage, currentStage)
           const isLast = idx === PIPELINE_STAGES.length - 1

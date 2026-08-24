@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, AlertCircle, ExternalLink, CreditCard, Loader2 } from 'lucide-react'
+import { CheckCircle2, AlertCircle, ExternalLink, CreditCard, Loader2, Landmark } from 'lucide-react'
 
 declare global {
   interface Window {
@@ -14,6 +14,11 @@ export default function AgentFeesPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  // The bank on file, read live from Payload via /api/agent/bank-account.
+  // Until now this page showed a single Connected boolean and no way to change
+  // the account, so an agent whose bank changed had no self-service path.
+  const [bank, setBank] = useState<any>(null)
+  const [replaceBankOpen, setReplaceBankOpen] = useState(false)
   const [openInvoices, setOpenInvoices] = useState<any[]>([])
   const [receipts, setReceipts] = useState<any[]>([])
   const [debts, setDebts] = useState<any[]>([])
@@ -56,7 +61,8 @@ export default function AgentFeesPage() {
       }
     }
     fetchUser()
-  }, [router])
+    loadBank()
+  }, [router]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!user?.id) return
@@ -190,13 +196,31 @@ export default function AgentFeesPage() {
     }
   }
 
-  const connectBank = async () => {
+  const loadBank = async () => {
+    try {
+      const res = await fetch('/api/agent/bank-account')
+      if (!res.ok) return
+      setBank(await res.json())
+    } catch {
+      // Non-fatal: the card falls back to the connection status we hold.
+    }
+  }
+
+  // replace=true is what lets a connected agent swap the account. The server
+  // refuses without it, so a stray click cannot fire a second activation email.
+  const connectBank = async (replace = false) => {
+    setReplaceBankOpen(false)
     setConnectingBank(true)
     try {
-      const res = await fetch('/api/agent/connect-bank', { method: 'POST' })
+      const res = await fetch('/api/agent/connect-bank', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(replace ? { replace: true } : {}),
+      })
       const result = await res.json()
       if (res.ok && result.success) {
         alert('Bank activation email sent to your email address. Follow the link to connect your bank account.')
+        await loadBank()
       } else if (result.fallback) {
         alert('Please contact office@collectiverealtyco.com to connect your bank account.')
       } else {
@@ -244,26 +268,72 @@ export default function AgentFeesPage() {
         </div>
       </div>
 
-      {/* Bank Account */}
+      {/* Bank Account. Shows WHICH account is on file, not just that one is:
+          bank name, account type and the last four. The full account number
+          and the routing number are never sent to the browser. */}
       <div className="container-card mb-4">
-        <div className="flex items-start justify-between">
-          <div>
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div className="min-w-0">
             <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-1">
               Commission Disbursements
             </p>
-            <p className="text-xs text-luxury-gray-3 mt-1">
-              Connect your bank account to receive commission payouts via ACH
-            </p>
+            {user?.bank_connected ? (
+              <>
+                <p className="text-sm font-semibold text-luxury-gray-1 flex items-center gap-1.5">
+                  <Landmark size={14} className="text-luxury-gray-3 flex-shrink-0" />
+                  {bank?.detailsAvailable
+                    ? bank.bank_name || 'Bank account'
+                    : 'Bank account connected'}
+                  {bank?.detailsAvailable && bank.account_last4 && (
+                    <span className="text-luxury-gray-2 font-normal">
+                      {bank.account_type ? `${bank.account_type} ` : ''}
+                      &bull;&bull;&bull;&bull; {bank.account_last4}
+                    </span>
+                  )}
+                </p>
+                {bank?.detailsAvailable && bank.account_holder && (
+                  <p className="text-xs text-luxury-gray-3 mt-0.5">{bank.account_holder}</p>
+                )}
+                {bank?.missingAtPayload && (
+                  <p className="text-xs text-red-700 mt-1">
+                    We cannot find this account at our payment provider any more. Please reconnect
+                    it.
+                  </p>
+                )}
+                {bank?.detailsAvailable &&
+                  String(bank.status || '').toLowerCase() === 'declining' && (
+                    <p className="text-xs text-amber-800 mt-1">
+                      Your bank is declining transfers to this account. Reconnecting usually fixes
+                      it.
+                    </p>
+                  )}
+                <p className="text-xs text-luxury-gray-3 mt-1">
+                  Commission payouts are sent here by ACH.
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-luxury-gray-3 mt-1">
+                Connect your bank account to receive commission payouts via ACH
+              </p>
+            )}
           </div>
-          <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+          <div className="flex items-center gap-2 flex-shrink-0">
             {user?.bank_connected ? (
               <>
                 <CheckCircle2 size={18} className="text-green-600" />
                 <span className="text-xs font-medium text-green-600">Connected</span>
+                <button
+                  onClick={() => setReplaceBankOpen(true)}
+                  disabled={connectingBank}
+                  className="btn btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {connectingBank ? <Loader2 size={12} className="animate-spin" /> : <CreditCard size={12} />}
+                  {connectingBank ? 'Sending...' : 'Change bank account'}
+                </button>
               </>
             ) : (
               <button
-                onClick={connectBank}
+                onClick={() => connectBank(false)}
                 disabled={connectingBank}
                 className="btn btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 disabled:opacity-50"
               >
@@ -274,6 +344,38 @@ export default function AgentFeesPage() {
           </div>
         </div>
       </div>
+
+      {/* Replacing a bank disconnects the current one and emails a fresh
+          activation link, so it is confirmed first. */}
+      {replaceBankOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-4 border-b border-luxury-gray-5">
+              <h2 className="text-sm font-semibold text-luxury-gray-1">Change your bank account?</h2>
+            </div>
+            <div className="p-4">
+              <p className="text-xs text-luxury-gray-2">
+                We will email you a link to connect a new account. The account on file now is
+                removed straight away, so any payout sent before you finish will be held.
+              </p>
+            </div>
+            <div className="flex gap-2 p-4 border-t border-luxury-gray-5">
+              <button
+                onClick={() => connectBank(true)}
+                className="btn btn-primary text-xs flex-1"
+              >
+                Send me the link
+              </button>
+              <button
+                onClick={() => setReplaceBankOpen(false)}
+                className="btn btn-secondary text-xs"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Monthly Fee */}
       <div className="container-card mb-4">

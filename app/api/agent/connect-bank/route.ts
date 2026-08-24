@@ -16,6 +16,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const agentId = auth.user.id
+    // Only one optional flag is read off the body; the agent still cannot
+    // target anyone but themselves.
+    const body = await request.json().catch(() => ({} as any))
 
     const { data: agent, error: fetchError } = await supabaseAdmin
       .from('users')
@@ -27,8 +30,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
     }
 
-    if (agent.bank_connected) {
-      return NextResponse.json({ error: 'Bank account already connected' }, { status: 400 })
+    // A connected agent may replace the bank on file, but only deliberately:
+    // this sends Payload's activation email, so an accidental second click
+    // must not fire one. The fees page asks for confirmation and then sends
+    // replace: true.
+    const replace = body?.replace === true
+    if (agent.bank_connected && !replace) {
+      return NextResponse.json(
+        {
+          error:
+            'A bank account is already connected. Use Change bank account if you need to replace it.',
+          alreadyConnected: true,
+        },
+        { status: 400 }
+      )
     }
 
     if (!process.env.PAYLOAD_SECRET_KEY) {
@@ -83,10 +98,35 @@ export async function POST(request: NextRequest) {
       activationId = data.id
     }
 
+    // Refuse to persist a null activation id. The webhook matches the agent by
+    // payload_activation_id, so writing null would leave them permanently
+    // unmatchable while this route reported success. The admin twin
+    // (/api/admin/agents/[id]/send-bank-activation) already guards this; the
+    // agent route did not.
+    if (!activationId) {
+      console.error('Payload returned no activation id for agent', agent.id)
+      return NextResponse.json(
+        {
+          error:
+            'The bank connection could not be started. Please contact office@collectiverealtyco.com',
+        },
+        { status: 502 }
+      )
+    }
+
     await supabaseAdmin
       .from('users')
       .update({
         payload_activation_id: activationId,
+        // Replacing a bank: drop the old connection now so nothing pays the
+        // account being replaced while the new activation is outstanding. The
+        // webhook sets these again when the agent completes it.
+        ...(replace
+          ? {
+              bank_connected: false,
+              payload_payment_method_id: null,
+            }
+          : {}),
         updated_at: new Date().toISOString(),
       })
       .eq('id', agent.id)

@@ -136,6 +136,33 @@ export async function POST(request: NextRequest) {
         const activation = activationRes.ok ? await activationRes.json() : null
         const paymentMethodId = activation?.payment_method_id || null
 
+        // Which Payload customer actually holds the new bank. Payload's
+        // activation flow creates a NEW customer as a matter of course, so the
+        // method that just got attached usually belongs to a customer that is
+        // neither payload_payee_id nor whatever payout pointer was there
+        // before. Reading it here, at the moment of connection, is what keeps
+        // payouts aimed at the right customer - until now the only writer of
+        // payload_payout_customer_id was the nightly verify-bank cron, so every
+        // fresh connection was mis-pointed until that ran.
+        let payoutCustomerId: string | null = null
+        if (paymentMethodId) {
+          try {
+            const pmRes = await fetch(
+              `https://api.payload.com/payment_methods/${paymentMethodId}`,
+              { headers: { Authorization: authHeader() } }
+            )
+            if (pmRes.ok) {
+              const pm = await pmRes.json().catch(() => null)
+              const cid = pm?.customer_id || pm?.customer?.id || null
+              payoutCustomerId = cid ? String(cid) : null
+            }
+          } catch (e) {
+            // Non-fatal: the connection itself still lands, and the cron
+            // repairs the pointer on its next run.
+            console.error('Could not read the payment method customer:', e)
+          }
+        }
+
         // Match agent by payload_activation_id
         const { data: agent } = await supabase
           .from('users')
@@ -150,10 +177,20 @@ export async function POST(request: NextRequest) {
               bank_connected: true,
               bank_connected_at: new Date().toISOString(),
               payload_payment_method_id: paymentMethodId,
+              // Only overwrite when Payload actually told us the customer.
+              // Writing null here would strand the payout pointer.
+              ...(payoutCustomerId ? { payload_payout_customer_id: payoutCustomerId } : {}),
               updated_at: new Date().toISOString(),
             })
             .eq('id', agent.id)
-          console.log('Agent bank connected:', agent.email, 'payment_method_id:', paymentMethodId)
+          console.log(
+            'Agent bank connected:',
+            agent.email,
+            'payment_method_id:',
+            paymentMethodId,
+            'payout_customer_id:',
+            payoutCustomerId
+          )
         } else {
           console.log('No agent found for activation:', triggeredOn.id)
         }

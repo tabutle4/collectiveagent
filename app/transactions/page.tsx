@@ -30,6 +30,10 @@ export default function TransactionsPage() {
   // Admin-only: the deal's checks, for the funding filter. Agents never
   // receive this key from the API.
   const [checks, setChecks] = useState<any[]>([])
+  // Admin-only companion to `checks`: two booleans per deal saying whether an
+  // agent on it was paid, and whether it carries payout data at all. This is
+  // what lets a deal title paid directly read as funded instead of "waiting".
+  const [fundingAgents, setFundingAgents] = useState<any[]>([])
   const [fundingFilter, setFundingFilter] = useState<FundingState | 'all'>('all')
   const [canViewAll, setCanViewAll] = useState(false)
   const [showNewModal, setShowNewModal] = useState(false)
@@ -92,6 +96,7 @@ export default function TransactionsPage() {
         setTransactions(data.transactions || [])
         setTia(data.tia || [])
         setChecks(data.checks || [])
+        setFundingAgents(data.fundingAgents || [])
         setAgents(data.agents || [])
         setPermissions(data.permissions || {})
         setCanViewAll(data.canViewAll || false)
@@ -194,15 +199,30 @@ export default function TransactionsPage() {
     return map
   }, [checks])
 
+  const agentSummaryByTxn = useMemo(() => {
+    const map = new Map<string, { anyPaid: boolean; anyBasis: boolean }>()
+    for (const r of fundingAgents) {
+      if (!r?.transaction_id) continue
+      map.set(r.transaction_id, { anyPaid: !!r.any_paid, anyBasis: !!r.any_basis })
+    }
+    return map
+  }, [fundingAgents])
+
   const fundingByTxn = useMemo(() => {
     const map = new Map<string, FundingState>()
     if (!canViewAll) return map
     for (const t of transactions) {
-      const st = fundingFilterState(t, checksByTxn.get(t.id) || [])
+      // A deal with no agent rows at all gets an explicit all-false summary
+      // rather than undefined, so the "no payout data" rule can fire on it.
+      const st = fundingFilterState(
+        t,
+        checksByTxn.get(t.id) || [],
+        agentSummaryByTxn.get(t.id) || { anyPaid: false, anyBasis: false }
+      )
       if (st) map.set(t.id, st)
     }
     return map
-  }, [transactions, checksByTxn, canViewAll])
+  }, [transactions, checksByTxn, agentSummaryByTxn, canViewAll])
 
   const fundingCounts = useMemo(() => {
     const counts: Record<FundingState, number> = { waiting: 0, partial: 0, matched: 0, mismatch: 0 }
