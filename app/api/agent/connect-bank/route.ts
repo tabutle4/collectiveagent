@@ -46,6 +46,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // An activation is already outstanding for this agent, so do not create a
+    // second one. The webhook matches the agent by payload_activation_id, and
+    // creating another activation overwrites it - which orphans the first
+    // email, because completing that older link would then never mark the
+    // agent connected. The admin twin
+    // (/api/admin/agents/[id]/send-bank-activation) has always refused this
+    // for the same reason; the agent route did not, and the Change bank
+    // account flow made it reachable twice in a row.
+    //
+    // Deliberately scoped to agents with no live connection. A connected agent
+    // still carries the activation id from the time they first connected, so
+    // testing that column alone would block every legitimate first replace.
+    //
+    // 409 rather than 200: the fees page treats any non-2xx as a failure and
+    // shows `error`, which is right here because nothing was sent. A 200 would
+    // make it announce an activation email that does not exist.
+    if (agent.payload_activation_id && !agent.bank_connected) {
+      return NextResponse.json(
+        {
+          error:
+            'A bank connection request is already waiting in your email. Follow that link to finish connecting, or contact office@collectiverealtyco.com if you cannot find it.',
+          pendingActivation: true,
+        },
+        { status: 409 }
+      )
+    }
+
     if (!process.env.PAYLOAD_SECRET_KEY) {
       return NextResponse.json({
         error: 'Payment service not configured. Please contact office@collectiverealtyco.com',
