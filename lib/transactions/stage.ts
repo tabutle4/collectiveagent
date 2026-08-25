@@ -175,15 +175,39 @@ export function getPipelineStage(t: StageInputs): PipelineStage | null {
     (!!t.compliance_status &&
       COMPLIANCE_SUBMITTED_STATUSES.has(t.compliance_status.toLowerCase()))
 
+  // Rollback guard for the two terminal gates ONLY.
+  //
+  // Gates 7 and 8 promote a deal on things that moving its status backwards
+  // does not undo: closed_date stays on the row, and paid agent rows stay
+  // paid. So a deal walked back from Closed to Pending kept reading Closed
+  // or Paid Out with no way to correct it.
+  //
+  // Deliberately narrow. It would be easy to cap the whole rail at the
+  // deal's own status, and wrong: 38 pending and 30 active deals have
+  // compliance complete right now, and they SHOULD read Compliance Review,
+  // Awaiting Payment or Funded. Progress before closing is real progress.
+  // Only Closed and Paid Out are claims a non-closed deal cannot make.
+  //
+  // Scoped to the two statuses that mean "walked back": active and pending.
+  // NOT written as `status === 'closed'`, which would also demote the 4
+  // prospect deals that have every agent paid - odd data, but data that
+  // reads Paid Out today and has nothing to do with this bug.
+  //
+  // Live data, 25 Aug 2026: no pending or active deal carries a closed_date
+  // or has all its agents paid, so this demotes nothing today - the stale
+  // Closed reading was in the browser, not the database. It is what keeps
+  // the next rollback honest.
+  const rolledBack = status === 'active' || status === 'pending'
+
   // Gate 8: Paid Out — every agent AND every external brokerage paid.
   // Authoritative, outranks everything, which is exactly why it must not be
   // computed from the internal agent rows alone.
-  if (t.all_agents_paid) return 'paid_out'
+  if (t.all_agents_paid && !rolledBack) return 'paid_out'
 
   // Gate 7: Closed. One-way progression still holds: a closed_date with
   // incomplete compliance cannot skip the compliance gate, so it parks at
   // Compliance Review exactly as before.
-  if (t.closed_date) {
+  if (t.closed_date && !rolledBack) {
     return complianceComplete ? 'closed' : 'compliance_review'
   }
 

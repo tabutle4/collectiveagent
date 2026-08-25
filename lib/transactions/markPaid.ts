@@ -45,6 +45,13 @@ export interface MarkAgentPaidArgs {
    * apply_primary_split.
    */
   countsTowardProgress?: boolean
+  /**
+   * The signed-in user who marked it paid. Written to paid_by. Optional
+   * and left null by the reconciliation cron, which is not a person - a
+   * row with a payment_date and no paid_by is one the cron settled from
+   * Payload's own funding date.
+   */
+  paidBy?: string | null
 }
 
 export interface MarkAgentPaidResult {
@@ -171,6 +178,7 @@ export async function markAgentPaid(args: MarkAgentPaidArgs): Promise<MarkAgentP
     amount_1099_reportable: amount1099,
     debts_deducted: Math.round(totalDebtsDeducted * 100) / 100,
     agent_net: agentNet,
+    paid_by: args.paidBy || null,
     updated_at: new Date().toISOString(),
   }
   // Money paid outside the app (check, wire, Zelle, or a payout sent

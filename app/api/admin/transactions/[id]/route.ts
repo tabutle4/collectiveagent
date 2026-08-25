@@ -637,11 +637,48 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         checklistItems = items || []
       }
 
+      // Resolve the actor ids on this deal to display names in ONE query:
+      // whoever verified each checklist item, plus whoever sent and whoever
+      // marked each payout. The ids were already stored - completed_by has
+      // been populated on 1,161 of 1,181 completion rows, the 20 blanks
+      // being the auto_verified ones - they were simply never resolved for
+      // display, so the page could only ever show a bare date.
+      const actorIds = Array.from(
+        new Set(
+          [
+            ...(completions || []).map((c: any) => c.completed_by),
+            ...(agents || []).map((a: any) => a.payment_sent_by),
+            ...(agents || []).map((a: any) => a.paid_by),
+          ].filter(Boolean)
+        )
+      )
+      const actorNameById = new Map<string, string>()
+      if (actorIds.length > 0) {
+        const { data: actors } = await supabase
+          .from('users')
+          .select('id, first_name, last_name, preferred_first_name, preferred_last_name')
+          .in('id', actorIds)
+        for (const a of actors || []) {
+          const name = `${a.preferred_first_name || a.first_name || ''} ${a.preferred_last_name || a.last_name || ''}`.trim()
+          if (name) actorNameById.set(a.id, name)
+        }
+      }
+
       const completionMap = new Map((completions || []).map((c: any) => [c.checklist_item_id, c]))
-      const checklist = checklistItems.map((item: any) => ({
-        ...item,
-        completion: completionMap.get(item.id) || null,
-      }))
+      const checklist = checklistItems.map((item: any) => {
+        const completion = completionMap.get(item.id) || null
+        return {
+          ...item,
+          completion: completion
+            ? {
+                ...completion,
+                completed_by_name: completion.completed_by
+                  ? actorNameById.get(completion.completed_by) || null
+                  : null,
+              }
+            : null,
+        }
+      })
 
       // Resolve referred-agent UUIDs to display names. The
       // `users.referred_agents` column stores an array of UUIDs (agents
@@ -697,6 +734,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             : []
           return {
             ...a,
+            // Who sent the payout and who marked it paid, resolved for
+            // display. Null on every row that predates these columns and on
+            // rows the reconciliation cron settled, which is not a person.
+            payment_sent_by_name: a.payment_sent_by
+              ? actorNameById.get(a.payment_sent_by) || null
+              : null,
+            paid_by_name: a.paid_by ? actorNameById.get(a.paid_by) || null : null,
             user: { ...u, referred_agents: referredNames, qualifying_transaction_count: qualifyingByAgent[String(u.id)] ?? 0 },
             team_membership: membershipByAgent[a.agent_id] || null,
             billing: billingByAgent[a.agent_id] || null,
@@ -1043,7 +1087,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // ── Toggle checklist item ────────────────────────────────────────────────
     if (action === 'toggle_checklist') {
-      const { checklist_item_id, completed_by, completing } = body
+      const { checklist_item_id, completing } = body
+      // Who verified the item comes from the SESSION, not the request body.
+      // The client still sends completed_by and the server now ignores it:
+      // this value is displayed on the deal page as the person who checked
+      // the box, so accepting a caller-supplied id would let anyone stamp
+      // anyone else's name on a compliance step.
+      const completed_by = auth.user.id
 
       if (completing) {
         const { data: existing } = await supabase
@@ -3169,7 +3219,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       // Bank verification (connection, type, status, and customer ownership)
       // lives inside processPayout, right next to the money.
-      const result = await processPayout({ transactionId: id, internalAgentId: internal_agent_id })
+      const result = await processPayout({
+        transactionId: id,
+        internalAgentId: internal_agent_id,
+        initiatedBy: payoutAuth.user.id,
+      })
       if (!result.ok) {
         return NextResponse.json({ error: result.error, blocks: [result.error] }, { status: 400 })
       }
@@ -3209,6 +3263,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         success: true,
         amount: preview.amount,
         description: preview.description,
+        paying_from: preview.payingFrom,
         customer_name: preview.customerName,
         customer_email: preview.customerEmail,
         account_holder: preview.accountHolder,
@@ -3386,6 +3441,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         debtsToApply: debts_to_apply,
         creditsToApply: credits_to_apply,
         countsTowardProgress: counts_toward_progress,
+        paidBy: auth.user.id,
       })
 
       if (markResult.alreadyPaid) {

@@ -631,12 +631,16 @@ CREATE TABLE public.transaction_internal_agents (
   basis_input_mode text NOT NULL DEFAULT 'amount'::text CHECK (basis_input_mode = ANY (ARRAY['amount'::text, 'percentage'::text])),
   basis_percentage numeric,
   payment_sent_date date,
+  payment_sent_by uuid,
+  paid_by uuid,
   CONSTRAINT transaction_internal_agents_pkey PRIMARY KEY (id),
   CONSTRAINT transaction_internal_agents_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES public.transactions(id),
   CONSTRAINT transaction_internal_agents_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES public.users(id),
   CONSTRAINT transaction_internal_agents_processing_fee_type_id_fkey FOREIGN KEY (processing_fee_type_id) REFERENCES public.processing_fee_types(id),
   CONSTRAINT transaction_internal_agents_source_tia_id_fkey FOREIGN KEY (source_tia_id) REFERENCES public.transaction_internal_agents(id),
-  CONSTRAINT transaction_internal_agents_referred_agent_id_fkey FOREIGN KEY (referred_agent_id) REFERENCES public.users(id)
+  CONSTRAINT transaction_internal_agents_referred_agent_id_fkey FOREIGN KEY (referred_agent_id) REFERENCES public.users(id),
+  CONSTRAINT transaction_internal_agents_payment_sent_by_fkey FOREIGN KEY (payment_sent_by) REFERENCES public.users(id),
+  CONSTRAINT transaction_internal_agents_paid_by_fkey FOREIGN KEY (paid_by) REFERENCES public.users(id)
 );
 CREATE TABLE public.transaction_external_brokerages (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

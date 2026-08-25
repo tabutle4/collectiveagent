@@ -41,6 +41,44 @@ const num = (v: unknown): number => {
 const plAuth = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
 
+/**
+ * Flattens Payload's `details` error object into one readable line.
+ *
+ * Payload returns the offending field names in `error_description` and the
+ * REASONS in `details`, which can nest one level for list attributes:
+ *   {"payment_method_id":"Required",
+ *    "receipts":[{"type":"Invalid value"}]}
+ * becomes
+ *   payment_method_id Required, receipts[0].type Invalid value
+ *
+ * Without this, a rejection surfaces as the bare word "receipts" and says
+ * nothing about what was wrong with it.
+ */
+export function describePayloadDetails(details: any): string {
+  if (!details || typeof details !== 'object') return ''
+  const parts: string[] = []
+  for (const [field, value] of Object.entries(details)) {
+    if (typeof value === 'string') {
+      parts.push(`${field} ${value}`)
+    } else if (Array.isArray(value)) {
+      value.forEach((entry, i) => {
+        if (entry && typeof entry === 'object') {
+          for (const [sub, subValue] of Object.entries(entry)) {
+            parts.push(`${field}[${i}].${sub} ${String(subValue)}`)
+          }
+        } else if (entry) {
+          parts.push(`${field}[${i}] ${String(entry)}`)
+        }
+      })
+    } else if (value && typeof value === 'object') {
+      for (const [sub, subValue] of Object.entries(value as Record<string, any>)) {
+        parts.push(`${field}.${sub} ${String(subValue)}`)
+      }
+    }
+  }
+  return parts.join(', ')
+}
+
 /** Role → payout description prefix, per the office's Payload conventions. */
 /**
  * Whether a Payload payment method may RECEIVE a commission payout, and the
@@ -205,9 +243,17 @@ async function payoutNetForRow(
 export async function processPayout({
   transactionId,
   internalAgentId,
+  initiatedBy,
 }: {
   transactionId: string
   internalAgentId: string
+  /**
+   * The signed-in user who pressed Confirm. Written to
+   * payment_sent_by on the claim so the row records WHO sent the money,
+   * not only that it was sent. Optional so a non-interactive caller (a
+   * cron, a script) can leave it null rather than inventing an actor.
+   */
+  initiatedBy?: string | null
 }): Promise<ProcessPayoutResult> {
   // ── The row being paid ────────────────────────────────────────────────
   const { data: tia, error: tiaError } = await supabaseAdmin
@@ -341,7 +387,11 @@ export async function processPayout({
   const sentDate = new Date().toISOString().split('T')[0]
   const { data: claimed, error: claimError } = await supabaseAdmin
     .from('transaction_internal_agents')
-    .update({ payment_sent_date: sentDate, updated_at: new Date().toISOString() })
+    .update({
+      payment_sent_date: sentDate,
+      payment_sent_by: initiatedBy || null,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', internalAgentId)
     .is('payment_sent_date', null)
     .select('id')
@@ -368,11 +418,28 @@ export async function processPayout({
     // type=credit (docs.payload.com/apis/payouts/). The old /payouts/ path
     // exists nowhere in Payload's API docs.
     //
-    // `receipts` names who gets Payload's receipt: the documented optional
-    // array of {name, email}, "The email that will receive the receipt"
-    // (docs.payload.com/apis/payouts/). Nested list-of-objects form encoding
-    // is the documented syntax, list[0][attr]
-    // (docs.payload.com/apis/api-design/).
+    // `receipts` names who gets Payload's receipt.
+    //
+    // Each entry is a NOTIFICATION object, and `type` is required. The
+    // payouts doc's example (docs.payload.com/apis/payouts/) shows only
+    // {name, email} and omits it, which is why every payout this app ever
+    // attempted was rejected with
+    //   {"details":{"receipts":[{"type":"Invalid value"}]},
+    //    "error_description":"receipts","error_type":"InvalidAttributes"}
+    // and no credit was ever created. The required value was read off a real
+    // receipt Payload had already produced, via
+    // GET /transactions/{id}/receipts, which returns objects shaped
+    //   {"object":"notification","type":"email_receipt","name":...,"email":...}
+    // Confirmed 25 Aug 2026 against the live API: with type=email_receipt the
+    // only remaining validation complaint is the deliberately omitted
+    // payment_method_id.
+    //
+    // The form encoding itself was never the problem. Payload parsed
+    // receipts[0][attr] and an equivalent JSON body identically; both were
+    // rejected on the same missing field. An earlier comment here cited
+    // docs.payload.com/apis/api-design/ as documenting list[0][attr] for
+    // request bodies - that page documents it for query-string filtering, so
+    // the citation was wrong even though the encoding works.
     //
     // Sent deliberately, and NOT because the app has no email of its own to
     // send. The agent still gets exactly two things - their commission
@@ -410,6 +477,7 @@ export async function processPayout({
       description,
     }
     if (receiptEmail) {
+      payoutBody['receipts[0][type]'] = 'email_receipt'
       payoutBody['receipts[0][email]'] = receiptEmail
       if (receiptName) payoutBody['receipts[0][name]'] = receiptName
     }
@@ -425,10 +493,19 @@ export async function processPayout({
     if (!payoutRes.ok) {
       // Payload's error body carries error_description (documented shape),
       // not message; keep message as a defensive fallback.
+      //
+      // error_description alone names the FIELD and nothing else: a real
+      // rejection read simply "receipts", which took three rounds of live API
+      // probing to turn into a cause. `details` carries the per-field reason
+      // ({"receipts":[{"type":"Invalid value"}]}) and is what actually
+      // identifies the problem, so it is appended here rather than discarded.
+      const detailText = describePayloadDetails(payoutData?.details)
       payoutFailed =
-        payoutData?.error_description ||
-        payoutData?.message ||
-        `Payload payout failed (${payoutRes.status})`
+        payoutData?.error_description || payoutData?.message
+          ? [payoutData?.error_description || payoutData?.message, detailText]
+              .filter(Boolean)
+              .join(': ')
+          : `Payload payout failed (${payoutRes.status})`
     }
   } catch (e: any) {
     // No answer: the POST may have reached Payload and created the payout.
@@ -449,7 +526,11 @@ export async function processPayout({
     // so the office can fix the problem and retry.
     await supabaseAdmin
       .from('transaction_internal_agents')
-      .update({ payment_sent_date: null, updated_at: new Date().toISOString() })
+      .update({
+        payment_sent_date: null,
+        payment_sent_by: null,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', internalAgentId)
     return { ok: false, error: payoutFailed }
   }
@@ -488,6 +569,15 @@ export interface PreviewPayoutResult {
   error?: string
   amount?: number
   description?: string
+  /**
+   * Which CRC entity the money is debited FROM - 'Collective Realty Co.' or
+   * 'Referral Collective'. Shown next to the bank details because
+   * Payload's account_holder is not the recipient's name and reads as
+   * though it were: on a personal checking account it can carry our own
+   * business name. Naming the paying side explicitly is what makes the
+   * account_holder line unambiguous.
+   */
+  payingFrom?: string | null
   /** Payload's own record for the payout customer, live. */
   customerName?: string | null
   customerEmail?: string | null
@@ -547,7 +637,7 @@ export async function previewPayout({
   const { data: agentUser } = await supabaseAdmin
     .from('users')
     .select(
-      'id, bank_connected, payload_payment_method_id, payload_payout_customer_id, payload_payee_id'
+      'id, mls_choice, bank_connected, payload_payment_method_id, payload_payout_customer_id, payload_payee_id'
     )
     .eq('id', tia.agent_id)
     .single()
@@ -641,6 +731,13 @@ export async function previewPayout({
     ok: true,
     amount: payoutAmount,
     description: payoutDescription(tia, txn.property_address || 'transaction'),
+    // Which of our two entities the money leaves. Same discriminator the
+    // send uses to pick the processing account, so the modal cannot claim
+    // one entity while the send debits the other.
+    payingFrom:
+      agentUser.mls_choice === 'Referral Collective (No MLS)'
+        ? 'Referral Collective'
+        : 'Collective Realty Co.',
     customerName: customer?.name ?? null,
     customerEmail: customer?.email ?? null,
     accountHolder: pm?.account_holder ?? null,

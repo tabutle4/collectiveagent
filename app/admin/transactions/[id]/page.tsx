@@ -2374,6 +2374,10 @@ export default function AdminTransactionDetailPage() {
   }>({ open: false, agent: null, loading: false, error: null, data: null })
   // Per-TIA payout status lookups (Check status / Check Payload now).
   const [payoutStatusById, setPayoutStatusById] = useState<Record<string, any>>({})
+  // Why the last send attempt on a row failed. Rendered on the row itself
+  // rather than announced in an alert(), which a tab can be configured to
+  // swallow entirely.
+  const [payoutErrorById, setPayoutErrorById] = useState<Record<string, string>>({})
   const [additionalIncome, setAdditionalIncome] = useState<any[]>([])
   const [addingIncome, setAddingIncome] = useState<{ listing: boolean; buying: boolean }>({ listing: false, buying: false })
   const [incomeForm, setIncomeForm] = useState<{ listing: { label: string; amount: string }; buying: { label: string; amount: string } }>({
@@ -2752,6 +2756,12 @@ export default function AdminTransactionDetailPage() {
         'gross_commission', 'office_gross',
         'transaction_type', 'is_intermediary',
         'compliance_status',
+        // Walking a deal back from Closed to Pending clears server-side
+        // state the client cannot derive - and the pipeline rail reads
+        // closed_date, which this component still held from before the
+        // change. Without a refetch the rail kept painting Closed until a
+        // manual reload, which read as the tracker refusing to roll back.
+        'status',
       ]
       if (RELOAD_TRIGGERS.some(k => k in updates)) {
         await loadData()
@@ -3221,6 +3231,11 @@ export default function AdminTransactionDetailPage() {
     const name = fmtName(agent.user)
     closePayoutPreview()
     setProcessingPayoutId(agent.id)
+    setPayoutErrorById(prev => {
+      const next = { ...prev }
+      delete next[agent.id]
+      return next
+    })
     try {
       const res = await fetch(`/api/admin/transactions/${id}`, {
         method: 'POST',
@@ -3232,7 +3247,17 @@ export default function AdminTransactionDetailPage() {
       })
       const d = await res.json()
       if (!res.ok) {
-        alert(d.error || 'Payout failed')
+        // A rejected payout used to be reported by alert() alone. When the
+        // browser suppresses dialogs on a tab - one tick of "prevent this
+        // page from creating additional dialogs" and it sticks - the modal
+        // closed, nothing changed, and a real Payload rejection was
+        // indistinguishable from a click that never registered. The reason
+        // now lands on the row and stays there until the next attempt.
+        setPayoutErrorById(prev => ({
+          ...prev,
+          [agent.id]: d.error || 'Payout failed',
+        }))
+        await loadData()
         return
       }
       // Report what the app actually did, not what the vendor is assumed to
@@ -3248,7 +3273,11 @@ export default function AdminTransactionDetailPage() {
       )
       await loadData()
     } catch (err: any) {
-      alert(err?.message || 'Payout failed')
+      setPayoutErrorById(prev => ({
+        ...prev,
+        [agent.id]: err?.message || 'Payout failed',
+      }))
+      await loadData()
     } finally {
       setProcessingPayoutId(null)
     }
@@ -3538,7 +3567,15 @@ export default function AdminTransactionDetailPage() {
             ? {
                 ...item,
                 completion: !currentlyComplete
-                  ? { completed_by: user?.id, completed_at: new Date().toISOString() }
+                  ? {
+                      completed_by: user?.id,
+                      // The server takes the verifier from the session, so
+                      // this optimistic copy names the same person the
+                      // refetch will confirm rather than leaving the line
+                      // blank until the next load.
+                      completed_by_name: fmtName(user),
+                      completed_at: new Date().toISOString(),
+                    }
                   : null,
               }
             : item
@@ -5645,6 +5682,7 @@ export default function AdminTransactionDetailPage() {
                                       <>
                                         <span className="text-xs text-luxury-gray-3">
                                           Sent {fmtDate(a.payment_sent_date)}
+                                          {a.payment_sent_by_name ? ` by ${a.payment_sent_by_name}` : ''}
                                           {payoutStatusById[a.id]?.mode === 'reference' && !payoutStatusById[a.id]?.not_found && payoutStatusById[a.id]?.status
                                             ? ` · ${payoutStatusById[a.id].status}${payoutStatusById[a.id].funding_status ? ` (funding ${payoutStatusById[a.id].funding_status})` : ''}`
                                             : ''}
@@ -5770,6 +5808,19 @@ export default function AdminTransactionDetailPage() {
                                   payout preview modal; a blocked row keeps
                                   its what-to-fix list here since its button
                                   is disabled and cannot open the modal. */}
+                              {/* Why the last send attempt was refused. Sits
+                                  above the gate list because a row can pass
+                                  every gate here and still be rejected by
+                                  Payload - which is exactly the case that
+                                  used to fail silently. */}
+                              {payoutErrorById[a.id] && (
+                                <div className="mt-2 sm:ml-11 p-2.5 bg-red-50 border border-red-200 rounded">
+                                  <p className="text-[11px] font-semibold text-red-700 mb-0.5">
+                                    Payout was not sent
+                                  </p>
+                                  <p className="text-[11px] text-red-700">{payoutErrorById[a.id]}</p>
+                                </div>
+                              )}
                               {!a.payment_sent_date && failing.length > 0 ? (
                                 <div className="mt-2 sm:ml-11 p-2.5 bg-amber-50 border border-amber-200 rounded">
                                   <p className="text-[11px] font-semibold text-amber-800 flex items-center gap-1.5 mb-1">
@@ -6134,9 +6185,18 @@ export default function AdminTransactionDetailPage() {
                                 )}
                               </div>
                               {item.completion && (
-                                <p className="text-xs text-luxury-gray-3 shrink-0">
-                                  {fmtDate(item.completion.completed_at)}
-                                </p>
+                                <div className="shrink-0 text-right">
+                                  <p className="text-xs text-luxury-gray-3">
+                                    {fmtDate(item.completion.completed_at)}
+                                  </p>
+                                  <p className="text-xs text-luxury-gray-4">
+                                    {item.completion.completed_by_name
+                                      ? item.completion.completed_by_name
+                                      : item.completion.auto_verified
+                                        ? 'Verified automatically'
+                                        : ''}
+                                  </p>
+                                </div>
                               )}
                             </div>
                           ))}
@@ -7059,11 +7119,21 @@ export default function AdminTransactionDetailPage() {
                   </div>
 
                   <div className="inner-card">
-                    <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Bank Account</p>
+                    <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Bank Account Receiving This Payout</p>
                     <div className="space-y-1 text-xs">
                       <div className="flex justify-between">
-                        <span className="text-luxury-gray-3">Name on account</span>
-                        <span>{payoutPreview.data.account_holder || 'not on file'}</span>
+                        <span className="text-luxury-gray-3">Paying from</span>
+                        <span>{payoutPreview.data.paying_from || 'Collective Realty Co.'}</span>
+                      </div>
+                      {/* Payload's account_holder, labelled for what it is.
+                          It is NOT the recipient's name: on these accounts it
+                          can carry our own business name even though the bank
+                          account is the agent's personal checking. Labelling
+                          it "Name on account" read as though the money were
+                          landing at Collective Realty Co. */}
+                      <div className="flex justify-between">
+                        <span className="text-luxury-gray-3">Account holder on file at Payload</span>
+                        <span className="text-right">{payoutPreview.data.account_holder || 'not on file'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-luxury-gray-3">Bank</span>
