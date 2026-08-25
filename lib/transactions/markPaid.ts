@@ -207,6 +207,38 @@ export async function markAgentPaid(args: MarkAgentPaidArgs): Promise<MarkAgentP
     .eq('id', internal_agent_id)
   if (updateTiaError) throw updateTiaError
 
+  // Paying an agent means the deal's money reached Collective Realty Co., so
+  // the deal's checks are marked processed at the same moment. Per Tara, the
+  // flip fires as soon as ANY agent on the deal is paid, not only when the
+  // last one is: on a multi-agent deal every check reads processed while other
+  // agents are still owed. Deliberate, because the office reads "processed" as
+  // "the check cleared into our account", which is true from the first payout
+  // onward, and because both payouts-report buckets already exclude a deal
+  // once its agents are paid.
+  //
+  // Written HERE rather than in the mark_agent_paid route so the
+  // reconciliation cron gets the same behaviour. A payout sent with Process
+  // Payout is marked paid by the cron and never by the button, so hooking only
+  // the button would have left every app-sent payout with its checks
+  // unflipped - which is the main flow from now on.
+  //
+  // Same table, column and shape as the set_all_checks_processed action, which
+  // stays the only way to turn crc_transferred back OFF. Placed after the TIA
+  // write so an already-paid row returns at the alreadyPaid guard above and
+  // never reaches this.
+  //
+  // A failure here is logged, not thrown. The money is already recorded as
+  // paid by the update above; throwing would surface a successful payment as a
+  // failed one, and this flag is bookkeeping the office can still flip by
+  // hand.
+  const { error: checksError } = await supabase
+    .from('checks_received')
+    .update({ crc_transferred: true, updated_at: new Date().toISOString() })
+    .eq('transaction_id', id)
+  if (checksError) {
+    console.error('markAgentPaid: crc_transferred update failed', id, checksError)
+  }
+
   // Apply debts
   if (debts_to_apply && debts_to_apply.length > 0) {
     for (const debtApp of debts_to_apply) {

@@ -373,6 +373,70 @@ export async function computeCommissionBreakdown(args: {
  *
  * Idempotent and safe to call repeatedly. Failures are logged but never throw.
  */
+/**
+ * Mirror the deal's brokerage net onto the FIRST check's brokerage_amount and
+ * clear it on every later check.
+ *
+ * checks_received.brokerage_amount is a BALANCING figure only. The deal page
+ * sums it across the deal's checks into totalBrokerageAmount and subtracts that
+ * in the Payouts balance below the checks. It is NOT a claim about how much of
+ * any individual check was CRC's, so the value is allowed to exceed the check
+ * it sits on. That is not an error and must not be capped: on a deal where
+ * title pays the agents directly, CRC only ever receives its own check, and the
+ * agents' money never arrives as a check at all.
+ *
+ * All of it lands on check 1 rather than being spread across checks, so there
+ * is exactly one field to read and the sum cannot drift. Later checks are
+ * zeroed rather than left alone, because the balance uses the SUM: a leftover
+ * hand-entered figure on check 2 would double-count. Ten deals carry a
+ * hand-split figure across checks today and six later-checks carry an amount.
+ *
+ * "First" is created_at ascending, matching the order the deal page loads
+ * checks in (the GET in app/api/admin/transactions/[id]/route.ts orders
+ * checks_received by created_at), so the figure lands on the check shown first.
+ *
+ * Writes only what actually differs. recomputeOfficeNet runs on every money
+ * mutation, so rewriting identical values would churn updated_at on the checks
+ * table on every save for no reason.
+ *
+ * The payouts report is unaffected: it reads office_net directly for any deal
+ * with commission math and only falls back to brokerage_amount for a check with
+ * no linked transaction (app/api/admin/payouts-report/route.ts).
+ */
+async function syncCheckBrokerageAmount(
+  transactionId: string,
+  officeNet: number
+): Promise<void> {
+  const { data: checks, error } = await supabase
+    .from('checks_received')
+    .select('id, brokerage_amount')
+    .eq('transaction_id', transactionId)
+    .order('created_at', { ascending: true })
+  if (error || !checks || checks.length === 0) return
+
+  const [first, ...rest] = checks as any[]
+  const cents = (v: any) => Math.round(Number(v) * 100)
+  // A null brokerage_amount always gets written: 85 first-checks are null
+  // today, which is exactly the case where the Payouts balance does not
+  // reconcile because nothing accounts for the brokerage's cut.
+  if (first.brokerage_amount == null || cents(first.brokerage_amount) !== cents(officeNet)) {
+    await supabase
+      .from('checks_received')
+      .update({ brokerage_amount: officeNet, updated_at: new Date().toISOString() })
+      .eq('id', first.id)
+  }
+
+  const staleIds = rest
+    .filter((c: any) => c.brokerage_amount != null && cents(c.brokerage_amount) !== 0)
+    .map((c: any) => c.id)
+  if (staleIds.length > 0) {
+    await supabase
+      .from('checks_received')
+      .update({ brokerage_amount: 0, updated_at: new Date().toISOString() })
+      .in('id', staleIds)
+  }
+}
+
 export async function recomputeOfficeNet(transactionId: string): Promise<void> {
   // office_gross + gross_commission are inputs that must be current before
   // office_net is derived. Every caller of recomputeOfficeNet is a mutation
@@ -523,6 +587,12 @@ export async function recomputeOfficeNet(transactionId: string): Promise<void> {
       .from('transactions')
       .update({ office_net: officeNet, updated_at: new Date().toISOString() })
       .eq('id', transactionId)
+
+    // Keep the checks' balancing figure in step with the number just written.
+    // Inside the same try, so a failure here is logged with everything else and
+    // never throws - this function's contract is "logged, never throws", and
+    // office_net itself is already saved by the time this runs.
+    await syncCheckBrokerageAmount(transactionId, officeNet)
   } catch (err) {
     console.error('recomputeOfficeNet failed for', transactionId, err)
   }

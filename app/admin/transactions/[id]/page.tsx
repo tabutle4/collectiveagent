@@ -48,7 +48,7 @@ import LowCommissionFlagPanel from '@/components/transactions/LowCommissionFlagP
 import AddAgentModal from '@/components/transactions/AddAgentModal'
 import AgentBillingPanel from '@/components/transactions/AgentBillingPanel'
 import AgentCardFinancials, { OverridableField } from '@/components/transactions/AgentCardFinancials'
-import { AGENT_ROLE_OPTIONS, SIDE_OPTIONS } from '@/lib/transactions/constants'
+import { AGENT_ROLE_OPTIONS, SIDE_OPTIONS, PAYMENT_METHOD_OPTIONS } from '@/lib/transactions/constants'
 import { getTransactionTypeLabel } from '@/lib/transactions/transactionTypes'
 import { FIELD_GROUPS, hasValue } from '@/lib/compliance/fieldGroups'
 
@@ -111,6 +111,17 @@ const fmtName = (u: any) =>
   u
     ? `${u.preferred_first_name || u.first_name || ''} ${u.preferred_last_name || u.last_name || ''}`.trim()
     : ''
+
+// Payment method label, from the one list the check and brokerage forms
+// already use. The stored column has mixed casing in live data - 264 rows
+// read "ACH" and 7 read "ach", 11 read "Zelle" - so the lookup is
+// case-insensitive, and anything the list does not cover falls back to the
+// stored value rather than rendering blank.
+const paymentMethodLabel = (m: string | null | undefined) => {
+  if (!m) return ''
+  const hit = PAYMENT_METHOD_OPTIONS.find(o => o.value === String(m).toLowerCase())
+  return hit ? hit.label : m
+}
 
 const CONTACT_TYPES = [
   { value: 'buyer', label: 'Buyer' },
@@ -4020,9 +4031,16 @@ export default function AdminTransactionDetailPage() {
   // tap brings the whole deal into line.
   const allChecksProcessed =
     checks.length > 0 && checks.every((c: any) => !!c.crc_transferred)
-  const payoutRows = agents.filter(
-    (a: any) => a.payment_status !== 'paid' && parseFloat(a.agent_net || 0) > 0
-  )
+  // Every agent row carrying money, paid or not. Paid rows used to be
+  // filtered out here, so a row left this card the instant it was marked
+  // paid - taking "Sent {date} by {name}" with it. That left nowhere in the
+  // app showing who sent a payout or who marked it paid: payment_sent_by
+  // rendered only on this card, and paid_by rendered nowhere at all. Paid
+  // rows stay now and render a read-only Paid state instead.
+  //
+  // The agent_net > 0 filter is unchanged, so the 106 paid rows carrying no
+  // money stay hidden exactly as they were.
+  const payoutRows = agents.filter((a: any) => parseFloat(a.agent_net || 0) > 0)
   // Helper functions for multi-check editing
   const getCheckEditData = (checkId: string) => editChecksData[checkId] || {}
   const updateCheckField = (checkId: string, field: string, value: any) => {
@@ -5645,16 +5663,28 @@ export default function AdminTransactionDetailPage() {
                       </div>
                     )}
 
-                    {/* ── Process Payout rows — one per unpaid agent, gates
-                        visible whether they pass or block. The server
-                        re-checks every gate; these chips are the rendering
-                        copy so the office sees exactly what to fix. ── */}
+                    {/* ── One row per agent on the deal. An unpaid row offers
+                        Process Payout with its gates visible whether they pass
+                        or block; the server re-checks every gate, so these
+                        chips are the rendering copy so the office sees exactly
+                        what to fix. A paid row stays here read-only and carries
+                        the whole payment story: who sent it, who marked it
+                        paid, the Payload reference, and Check status. ── */}
                     {payoutRows.length > 0 && (
                       <div className="mb-3 space-y-2">
                         {payoutRows.map((a: any) => {
                           const gates = payoutGatesFor(a)
                           const failing = gates.filter(g => !g.ok)
                           const ready = failing.length === 0
+                          const isPaid = a.payment_status === 'paid'
+                          // A Payload send and a manual Mark Paid both stamp
+                          // payment_sent_date, so the send line is only worth
+                          // showing when it says something the Paid line does
+                          // not: a real Payload reference, or a send that
+                          // happened on a different day than the payment.
+                          const showSentLine =
+                            !!a.payment_sent_date &&
+                            (!!a.payment_reference || a.payment_sent_date !== a.payment_date)
                           const initials = `${(a.user?.preferred_first_name || a.user?.first_name || '?')[0] || ''}${(a.user?.preferred_last_name || a.user?.last_name || '')[0] || ''}`.toUpperCase()
                           const roleLabel =
                             a.agent_role === 'team_lead' ? 'Team Lead Split'
@@ -5676,7 +5706,66 @@ export default function AdminTransactionDetailPage() {
                                     Net to agent {fmt$(a.agent_net)} · {roleLabel} - {txn.property_address || 'this deal'}
                                   </p>
                                 </div>
-                                {a.payment_sent_date ? (
+                                {/* Paid is checked FIRST. A manual Mark Paid
+                                    fills payment_sent_date from the payment
+                                    date and leaves payment_reference null, so
+                                    without this branch all 1,248 paid rows
+                                    with no reference would fall through to the
+                                    "Payload didn't respond" warning below and
+                                    read as broken sends. */}
+                                {isPaid ? (
+                                  <div className="flex flex-col items-start sm:items-end gap-1 sm:flex-shrink-0 sm:text-right">
+                                    <span className="badge badge-success">Paid</span>
+                                    <span className="text-xs text-luxury-gray-3">
+                                      {a.payment_date ? `Paid ${fmtDate(a.payment_date)}` : 'Paid'}
+                                      {a.paid_by_name ? ` by ${a.paid_by_name}` : ''}
+                                      {a.payment_method ? ` · ${paymentMethodLabel(a.payment_method)}` : ''}
+                                    </span>
+                                    {showSentLine && (
+                                      <span className="text-xs text-luxury-gray-3">
+                                        Sent {fmtDate(a.payment_sent_date)}
+                                        {a.payment_sent_by_name ? ` by ${a.payment_sent_by_name}` : ''}
+                                      </span>
+                                    )}
+                                    {a.payment_reference && (
+                                      <span className="text-[11px] text-luxury-gray-3 break-all">
+                                        Reference {a.payment_reference}
+                                      </span>
+                                    )}
+                                    {payoutStatusById[a.id]?.mode === 'reference' &&
+                                      !payoutStatusById[a.id]?.not_found &&
+                                      payoutStatusById[a.id]?.status && (
+                                        <span className="text-[11px] text-luxury-gray-3">
+                                          Payload {payoutStatusById[a.id].status}
+                                          {payoutStatusById[a.id].funding_status
+                                            ? ` (funding ${payoutStatusById[a.id].funding_status})`
+                                            : ''}
+                                        </span>
+                                      )}
+                                    {payoutStatusById[a.id]?.mode === 'reference' &&
+                                      payoutStatusById[a.id]?.not_found && (
+                                        <span className="text-[11px] text-amber-800">
+                                          Not found in Payload
+                                        </span>
+                                      )}
+                                    {payoutStatusById[a.id]?.error && (
+                                      <span className="text-[11px] text-red-600">{payoutStatusById[a.id].error}</span>
+                                    )}
+                                    {/* Only a row with a Payload reference has
+                                        anything to check. A row paid by check,
+                                        wire or Zelle has no Payload record, so
+                                        the button would always come back empty. */}
+                                    {a.payment_reference && userPermissions.includes('can_process_payouts') && (
+                                      <button
+                                        onClick={() => checkPayoutStatus(a)}
+                                        disabled={payoutStatusById[a.id]?.loading}
+                                        className="btn btn-secondary text-[11px] px-2 py-0.5 disabled:opacity-50"
+                                      >
+                                        {payoutStatusById[a.id]?.loading ? 'Checking...' : 'Check status'}
+                                      </button>
+                                    )}
+                                  </div>
+                                ) : a.payment_sent_date ? (
                                   <div className="flex flex-col items-start sm:items-end gap-1 sm:flex-shrink-0 sm:text-right">
                                     {a.payment_reference ? (
                                       <>
@@ -5813,7 +5902,14 @@ export default function AdminTransactionDetailPage() {
                                   every gate here and still be rejected by
                                   Payload - which is exactly the case that
                                   used to fail silently. */}
-                              {payoutErrorById[a.id] && (
+                              {/* Both blocks below are about work still to do,
+                                  so neither belongs on a paid row. Without the
+                                  isPaid guard a failed send followed by Mark
+                                  Paid would show "Payout was not sent" beside
+                                  "Paid", and a paid row whose gates never
+                                  passed would list steps before a payout that
+                                  has already happened. */}
+                              {!isPaid && payoutErrorById[a.id] && (
                                 <div className="mt-2 sm:ml-11 p-2.5 bg-red-50 border border-red-200 rounded">
                                   <p className="text-[11px] font-semibold text-red-700 mb-0.5">
                                     Payout was not sent
@@ -5821,7 +5917,7 @@ export default function AdminTransactionDetailPage() {
                                   <p className="text-[11px] text-red-700">{payoutErrorById[a.id]}</p>
                                 </div>
                               )}
-                              {!a.payment_sent_date && failing.length > 0 ? (
+                              {!isPaid && !a.payment_sent_date && failing.length > 0 ? (
                                 <div className="mt-2 sm:ml-11 p-2.5 bg-amber-50 border border-amber-200 rounded">
                                   <p className="text-[11px] font-semibold text-amber-800 flex items-center gap-1.5 mb-1">
                                     <Lock size={11} /> {failing.length} step{failing.length !== 1 ? 's' : ''} before this payout can go
