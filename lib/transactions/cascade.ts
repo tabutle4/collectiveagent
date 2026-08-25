@@ -374,6 +374,53 @@ export async function computeCommissionBreakdown(args: {
  * Idempotent and safe to call repeatedly. Failures are logged but never throw.
  */
 /**
+ * Mark every check on a deal as processed (crc_transferred), because an agent
+ * on that deal has been paid.
+ *
+ * Called from BOTH money paths, which is the entire point of it living here:
+ *
+ *   - processPayout, the moment Payload confirms the credit was created. This
+ *     is the flow the office actually uses, and the row it pays keeps
+ *     payment_status='pending' until the reconciliation cron settles it the
+ *     NEXT MORNING. Hanging the flip off "paid" alone left the toggle off for
+ *     up to a day after the money had already gone, which is exactly what
+ *     happened on 4201 Oats St when Veronica Merritt was paid on 25 Aug 2026.
+ *
+ *   - markAgentPaid, for money recorded by hand with Mark Paid, and for the
+ *     cron's own settlement of a payout sent earlier.
+ *
+ * Fires on the FIRST agent paid on the deal, not the last: on a multi-agent
+ * deal every check reads processed while other agents are still owed. Per
+ * Tara, deliberate - the office reads "processed" as "the check cleared into
+ * our account", which is true from the first payout onward, and both
+ * payouts-report buckets already exclude a deal once its agents are paid.
+ *
+ * set_all_checks_processed stays the only way to turn crc_transferred back OFF.
+ *
+ * Writes every check on the deal unconditionally rather than filtering to the
+ * unprocessed ones. Nothing in the app reads or orders checks_received by
+ * updated_at, so re-stamping an already-true row costs nothing, and a plain
+ * eq filter cannot silently fail the way a cleverer predicate could - this
+ * function existing at all is the fix for a flip that did not happen.
+ *
+ * Never throws. Every caller reaches this AFTER the money is already recorded,
+ * so a failure here must not turn a successful payment into a failed one.
+ */
+export async function markDealChecksProcessed(transactionId: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('checks_received')
+      .update({ crc_transferred: true, updated_at: new Date().toISOString() })
+      .eq('transaction_id', transactionId)
+    if (error) {
+      console.error('markDealChecksProcessed failed for', transactionId, error)
+    }
+  } catch (err) {
+    console.error('markDealChecksProcessed failed for', transactionId, err)
+  }
+}
+
+/**
  * Mirror the deal's brokerage net onto the FIRST check's brokerage_amount and
  * clear it on every later check.
  *

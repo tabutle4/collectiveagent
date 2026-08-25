@@ -171,6 +171,36 @@ export default function TransactionsPage() {
     })
   }, [transactions, canViewAll])
 
+  // Which deals an agent may expand.
+  //
+  // The expanded panel is where the money lives - commission rows, my net,
+  // payment status - so it opens only once those figures are settled: the deal
+  // is CLOSED, or the agent has already been SENT their statement for it.
+  // Either way the numbers they read are numbers they were given, rather than
+  // in-progress math that can still move.
+  //
+  // agent_statement_sent sits on the commission row, not the deal, and an
+  // agent's `tia` holds only their own rows (the API filters on agent_id), so
+  // "my statement went out on this deal" is exactly "any of my rows here
+  // carries the flag". That is what covers the not-closed-but-already-sent
+  // case: 3 rows today. 241 rows are neither closed nor sent and stay shut.
+  //
+  // Returns null for canViewAll, meaning no restriction - admins, brokers and
+  // staff expand everything exactly as before. Only the agent view narrows.
+  const expandableIds = useMemo(() => {
+    if (canViewAll) return null
+    const ids = new Set<string>()
+    for (const t of transactions) {
+      if (String(t.status || '').toLowerCase() === 'closed') ids.add(t.id)
+    }
+    for (const r of tia) {
+      if (r.agent_statement_sent) ids.add(r.transaction_id)
+    }
+    return ids
+  }, [transactions, tia, canViewAll])
+
+  const canExpand = (t: any) => !expandableIds || expandableIds.has(t.id)
+
   // Quarter options generated from the years actually present in the data.
   const quarterOptions = useMemo(() => {
     const years = new Set<string>()
@@ -667,10 +697,19 @@ export default function TransactionsPage() {
                 <tbody>
                   {filtered.map(t => (
                     <Fragment key={t.id}>
+                    {/* A row an agent may not expand drops to .tr-luxury,
+                        which is the same row without cursor-pointer, and loses
+                        its handler. The cursor is the only cue that a row
+                        opens, so leaving it on a dead row would read as the
+                        page being broken. */}
                     <tr
                       id={`txn-${t.id}`}
-                      className="tr-luxury-clickable"
-                      onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
+                      className={canExpand(t) ? 'tr-luxury-clickable' : 'tr-luxury'}
+                      onClick={
+                        canExpand(t)
+                          ? () => setExpandedId(expandedId === t.id ? null : t.id)
+                          : undefined
+                      }
                     >
                       <td className="py-3 px-4">
                         <p className="text-sm font-semibold text-luxury-gray-1">
@@ -742,7 +781,10 @@ export default function TransactionsPage() {
                         {formatDate(t.move_in_date)}
                       </td>
                     </tr>
-                    {expandedId === t.id && (
+                    {/* canExpand is re-checked at render, not just on the
+                        handler, so the /transactions?open=<id> deep link cannot
+                        open a panel the agent is not allowed to see. */}
+                    {expandedId === t.id && canExpand(t) && (
                       <tr>
                         <td colSpan={canViewAll ? (fundingFilter !== 'all' ? 11 : 9) : 7} className="px-4 pb-3">
                           {renderExpanded(t)}
@@ -760,8 +802,12 @@ export default function TransactionsPage() {
                 <div
                   key={t.id}
                   id={`txn-m-${t.id}`}
-                  className="inner-card cursor-pointer"
-                  onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
+                  className={canExpand(t) ? 'inner-card cursor-pointer' : 'inner-card'}
+                  onClick={
+                    canExpand(t)
+                      ? () => setExpandedId(expandedId === t.id ? null : t.id)
+                      : undefined
+                  }
                 >
                   <div className="flex items-start justify-between mb-1">
                     <p className="text-sm font-semibold text-luxury-gray-1 flex-1">
@@ -788,7 +834,9 @@ export default function TransactionsPage() {
                         <p>{t.compliance_status.replace(/_/g, ' ')}</p>
                       )}
                   </div>
-                  {expandedId === t.id && <div className="mt-3">{renderExpanded(t)}</div>}
+                  {expandedId === t.id && canExpand(t) && (
+                    <div className="mt-3">{renderExpanded(t)}</div>
+                  )}
                 </div>
               ))}
             </div>

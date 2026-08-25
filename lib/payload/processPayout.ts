@@ -32,6 +32,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase'
 import { computeCommission } from '@/lib/transactions/math'
+import { markDealChecksProcessed } from '@/lib/transactions/cascade'
 
 const num = (v: unknown): number => {
   const n = parseFloat(String(v ?? 0))
@@ -545,6 +546,19 @@ export async function processPayout({
       updated_at: new Date().toISOString(),
     })
     .eq('id', internalAgentId)
+
+  // The money has left, so the deal's checks are processed. This row keeps
+  // payment_status='pending' until the reconciliation cron settles it against
+  // Payload's funding date the next morning, so hanging the flip off 'paid'
+  // alone left the Payment Processed toggle off for up to a day after a real
+  // payout - the gap hit on 4201 Oats St when Veronica Merritt was paid on
+  // 25 Aug 2026.
+  //
+  // Placed after the payment_reference write, so it only runs on a payout
+  // Payload actually confirmed. A rejected send releases the claim and returns
+  // earlier; a no-answer send returns earlier still and deliberately keeps the
+  // claim. Neither reaches this line.
+  await markDealChecksProcessed(transactionId)
 
   return {
     ok: true,

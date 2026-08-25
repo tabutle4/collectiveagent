@@ -38,7 +38,12 @@ export async function GET(request: NextRequest) {
     }
     const tia = await fetchAllRows(
       'transaction_internal_agents',
-      'id, transaction_id, agent_id, agent_role, side, sales_volume, units, agent_basis, agent_gross, brokerage_split, processing_fee, coaching_fee, other_fees, btsa_amount, rebate_amount, agent_net, amount_1099_reportable, payment_status, payment_date',
+      // agent_statement_sent is read by the list page to decide whether an
+      // agent may expand a deal's row: the expanded panel shows the money, so
+      // it opens only on a closed deal or one where the statement has already
+      // gone out. Selected for every caller, not just agents - it is one
+      // boolean and the canViewAll branch below already sends far more.
+      'id, transaction_id, agent_id, agent_role, side, sales_volume, units, agent_basis, agent_gross, brokerage_split, processing_fee, coaching_fee, other_fees, btsa_amount, rebate_amount, agent_net, amount_1099_reportable, payment_status, payment_date, agent_statement_sent',
       { filters: tiaFilters },
       supabase
     )
