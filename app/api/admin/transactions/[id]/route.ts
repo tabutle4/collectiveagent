@@ -36,6 +36,7 @@ const LOCKED_TIA_FIELDS = new Set([
   'coaching_fee',
   'other_fees',
   'other_fees_description',
+  'other_fees_lines',
   'rebate_amount',
   'rebate_type',
   'btsa_amount',
@@ -1436,6 +1437,35 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // For 'amount' mode (or when mode is absent), behavior is unchanged -
       // the FE's agent_basis flows through as-is.
       const cleanUpdates: any = { ...(updates || {}) }
+
+      // ── Multiple other-fee lines ─────────────────────────────────────────
+      // The FE can save an array of { amount, description } fee lines. The
+      // server is authoritative for the summed other_fees (which the 1099
+      // formula, CDA, and referral cascade all read) and for the combined
+      // other_fees_description (legacy single-string field). Each line's own
+      // description is preserved in other_fees_lines for the commission
+      // statement. Setting cleanUpdates.other_fees below makes the existing
+      // FORMULA_INPUTS resync recompute amount_1099_reportable + agent_net.
+      if ('other_fees_lines' in cleanUpdates) {
+        const rawLines = Array.isArray(cleanUpdates.other_fees_lines)
+          ? cleanUpdates.other_fees_lines
+          : []
+        const cleanLines = rawLines
+          .map((l: any) => ({
+            amount: Math.round(num(l?.amount) * 100) / 100,
+            description: String(l?.description ?? '').trim(),
+          }))
+          .filter((l: any) => l.amount !== 0 || l.description.length > 0)
+        cleanUpdates.other_fees_lines = cleanLines
+        cleanUpdates.other_fees = Math.round(
+          cleanLines.reduce((t: number, l: any) => t + num(l.amount), 0) * 100
+        ) / 100
+        cleanUpdates.other_fees_description = cleanLines
+          .map((l: any) => l.description)
+          .filter((d: string) => d.length > 0)
+          .join('; ')
+      }
+
       if (
         current?.agent_role === 'referral_agent' &&
         cleanUpdates.basis_input_mode === 'percentage' &&

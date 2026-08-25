@@ -5173,6 +5173,9 @@ export default function AdminTransactionDetailPage() {
                                 onSaveTextField={(field, value) =>
                                   updateInternalAgent(a.id, { [field]: value })
                                 }
+                                onSaveOtherFeesLines={(lines) =>
+                                  updateInternalAgent(a.id, { other_fees_lines: lines })
+                                }
                                 onSaveBasisMode={(mode, basisPercentage) =>
                                   updateInternalAgent(a.id, {
                                     basis_input_mode: mode,

@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { Plus, X } from 'lucide-react'
 import { computeCommission } from '@/lib/transactions/math'
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -468,6 +469,122 @@ function BasisModeToggle({
   )
 }
 
+// A single other-fee entry. The server sums these into other_fees and joins
+// the descriptions into other_fees_description; the per-line breakdown is kept
+// in other_fees_lines for the commission statement.
+export type OtherFeeLine = { amount: number; description: string }
+
+// Editor for one-or-many other fees. Each line has its own amount and
+// description. Saves the whole array on blur / add / remove; the server is
+// authoritative for the summed other_fees.
+function OtherFeesEditor({
+  a,
+  editable,
+  onSaveLines,
+}: {
+  a: any
+  editable: boolean
+  onSaveLines?: (lines: OtherFeeLine[]) => Promise<void>
+}) {
+  type Draft = { amountStr: string; description: string }
+
+  const normalize = (row: any): Draft[] => {
+    const raw = Array.isArray(row?.other_fees_lines) ? row.other_fees_lines : []
+    const lines: Draft[] = raw.map((l: any) => ({
+      amountStr: num(l?.amount) === 0 ? '' : String(num(l?.amount)),
+      description: String(l?.description ?? ''),
+    }))
+    // Legacy rows saved before multi-line: show the single fee as one line so
+    // old deals stay viewable and editable. The sum is unchanged either way.
+    if (lines.length === 0 && num(row?.other_fees) !== 0) {
+      return [{ amountStr: String(num(row.other_fees)), description: row?.other_fees_description || '' }]
+    }
+    return lines
+  }
+
+  const [lines, setLines] = useState<Draft[]>(() => normalize(a))
+  const linesRef = useRef<Draft[]>(lines)
+  useEffect(() => { linesRef.current = lines }, [lines])
+  // Re-seed from the row after a save/reload lands.
+  useEffect(() => {
+    const next = normalize(a)
+    setLines(next)
+    linesRef.current = next
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [a.id, a.other_fees, a.other_fees_description, JSON.stringify(a.other_fees_lines)])
+
+  const canEdit = editable && !!onSaveLines
+  const total = lines.reduce((t, l) => t + (l.amountStr === '' ? 0 : (parseFloat(l.amountStr) || 0)), 0)
+
+  const toLines = (drafts: Draft[]): OtherFeeLine[] =>
+    drafts.map(d => ({
+      amount: d.amountStr === '' ? 0 : (parseFloat(d.amountStr) || 0),
+      description: d.description,
+    }))
+
+  const persist = (explicit?: Draft[]) => {
+    if (onSaveLines) onSaveLines(toLines(explicit ?? linesRef.current)).catch(() => {})
+  }
+
+  if (!canEdit && lines.length === 0) return null
+
+  return (
+    <div className="py-1">
+      <div className="flex justify-between items-center text-xs">
+        <span className="text-luxury-gray-3">Other Fees</span>
+        <span className="text-red-600 font-mono">-{fmt$(total)}</span>
+      </div>
+      {lines.map((line, i) => (
+        <div key={i} className="flex items-center gap-1.5 mt-1 pl-3">
+          <input
+            type="text"
+            value={line.description}
+            placeholder="What is this fee for?"
+            disabled={!canEdit}
+            onChange={e => setLines(prev => prev.map((l, idx) => idx === i ? { ...l, description: e.target.value } : l))}
+            onBlur={() => persist()}
+            className="flex-1 text-xs bg-white border border-luxury-gray-5 rounded px-1.5 py-0.5"
+          />
+          <input
+            type="number"
+            step="0.01"
+            value={line.amountStr}
+            placeholder="0.00"
+            disabled={!canEdit}
+            onChange={e => setLines(prev => prev.map((l, idx) => idx === i ? { ...l, amountStr: e.target.value } : l))}
+            onBlur={() => persist()}
+            className="w-20 text-xs font-mono text-right bg-white border border-luxury-gray-5 rounded px-1.5 py-0.5"
+          />
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => {
+                const next = lines.filter((_, idx) => idx !== i)
+                setLines(next)
+                linesRef.current = next
+                persist(next)
+              }}
+              title="Remove fee"
+              className="text-luxury-gray-3 hover:text-red-600"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      ))}
+      {canEdit && (
+        <button
+          type="button"
+          onClick={() => setLines(prev => [...prev, { amountStr: '', description: '' }])}
+          className="text-[11px] text-luxury-accent hover:underline mt-1 pl-3 inline-flex items-center gap-1"
+        >
+          <Plus size={11} /> Add fee
+        </button>
+      )}
+    </div>
+  )
+}
+
 interface AgentCardFinancialsProps {
   agent: any              // TIA row
   txn: any                // transaction
@@ -484,6 +601,10 @@ interface AgentCardFinancialsProps {
   // Save handler for text fields on the row (e.g. other_fees_description).
   // Optional - only the Other Fees description input uses it today.
   onSaveTextField?: (field: 'other_fees_description', value: string | null) => Promise<void>
+  // Save handler for the multiple other-fee lines editor. The server sums the
+  // lines into other_fees and joins their descriptions into
+  // other_fees_description, and recomputes amount_1099 / agent_net.
+  onSaveOtherFeesLines?: (lines: OtherFeeLine[]) => Promise<void>
   // Save handler for referral-only basis-mode toggle. When mode='percentage',
   // basisPercentage is the % value (e.g., 30 for 30% of side commission); when
   // mode='amount', basisPercentage is ignored (stored as null server-side).
@@ -502,6 +623,7 @@ export default function AgentCardFinancials({
   onSaveField,
   onClearOverride,
   onSaveTextField,
+  onSaveOtherFeesLines,
   onSaveBasisMode,
 }: AgentCardFinancialsProps) {
   // We don't track per-field overrides - the manual_overrides column was
@@ -875,25 +997,7 @@ export default function AgentCardFinancials({
         />
       )}
       {(otherFees > 0 || editable) && (
-        <>
-          <OverridableMoneyRow
-            label="Other Fees"
-            value={otherFees}
-            isDeduction
-            isEditable={editable}
-            isOverridden={!!overrides.other_fees}
-            onSave={v => handleSave('other_fees', v)}
-            onClearOverride={() => handleClear('other_fees')}
-            showZero
-          />
-          <InlineTextRow
-            label="Description"
-            value={a.other_fees_description || ''}
-            placeholder="What is this fee for?"
-            isEditable={editable}
-            onSave={v => onSaveTextField?.('other_fees_description', v)}
-          />
-        </>
+        <OtherFeesEditor a={a} editable={editable} onSaveLines={onSaveOtherFeesLines} />
       )}
       {!isLinkedRow && (rebate > 0 || editable) && (
         <OverridableMoneyRow
