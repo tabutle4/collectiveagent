@@ -5868,6 +5868,11 @@ export default function AdminTransactionDetailPage() {
                                   </div>
                                 ) : (
                                   <div className="flex items-center gap-2 flex-shrink-0">
+                                    {/* Firm status next to the payout action so an
+                                        off-roster agent is caught before sending. */}
+                                    <span className={`text-xs font-medium ${a.user?.is_active === true ? 'text-green-600' : 'text-red-600'}`}>
+                                      {a.user?.is_active === true ? 'With firm' : 'Not with firm'}
+                                    </span>
                                     {/* Money that moved outside the app - check, wire,
                                         Zelle, or a payout sent straight from Payload -
                                         still has to be recordable. Mark Paid is not
