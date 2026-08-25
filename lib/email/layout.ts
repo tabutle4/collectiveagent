@@ -32,7 +32,13 @@ export function getEmailLayout(
   ${preheader ? `<span style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${preheader}</span>` : ''}
   <style>
     /* Reset */
-    body, p, h1, h2, h3, h4 { margin: 0; padding: 0; }
+    body, h1, h2, h3, h4 { margin: 0; padding: 0; }
+    /* Paragraphs keep a bottom margin. They used to be in the reset above, so
+       every <p> written without an inline margin rendered flush against the
+       next one. The 160-odd paragraphs that DO carry an inline margin still
+       win over this rule, so deliberate spacing is unchanged. */
+    p { margin: 0 0 14px 0; }
+    p:last-child { margin-bottom: 0; }
     
     /* Base */
     body {

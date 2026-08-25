@@ -7,6 +7,7 @@ import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 import { qualifyingCountsForAgents } from '@/lib/transactions/qualifyingCount'
 import { resolveGoverningTeamAgreement, resolveGoverningTeamLeads } from '@/lib/transactions/teamAgreement'
 import { computeCommission } from '@/lib/transactions/math'
+import { markAgentPaid } from '@/lib/transactions/markPaid'
 import { isLeaseType, num, computeCommissionBreakdown, recomputeOfficeNet, recomputeGrossAndOffice, cascadePrimarySplit, autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { deriveComplianceForTransactions } from '@/lib/compliance/derive'
 import { parseCustomPlanSplit } from '@/lib/transactions/customPlanParser'
@@ -3362,7 +3363,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (action === 'mark_paid') {
       const {
         internal_agent_id,
-        transaction_type,
         payment_date,
         payment_method,
         payment_reference,
@@ -3372,210 +3372,32 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         counts_toward_progress,
       } = body
 
-      const { data: tia, error: tiaError } = await supabase
-        .from('transaction_internal_agents')
-        .select('*')
-        .eq('id', internal_agent_id)
-        .single()
-      if (tiaError || !tia) throw new Error('Agent record not found')
+      // The whole body of this action now lives in lib/transactions/markPaid.ts
+      // so the reconciliation cron marks payouts paid through the SAME code -
+      // same staged-debt folding, same canonical formula, same office-net
+      // recompute. No money math is duplicated anywhere else.
+      const markResult = await markAgentPaid({
+        transactionId: id,
+        internalAgentId: internal_agent_id,
+        paymentDate: payment_date,
+        paymentMethod: payment_method,
+        paymentReference: payment_reference,
+        fundingSource: funding_source,
+        debtsToApply: debts_to_apply,
+        creditsToApply: credits_to_apply,
+        countsTowardProgress: counts_toward_progress,
+      })
 
-      if (tia.payment_status === 'paid') {
+      if (markResult.alreadyPaid) {
         return NextResponse.json(
           { error: 'Row is already marked paid. Unmark first to re-mark.' },
           { status: 409 }
         )
       }
 
-      const { data: agentUser, error: userError } = await supabase
-        .from('users')
-        .select('id, commission_plan, qualifying_transaction_count, qualifying_transaction_target')
-        .eq('id', tia.agent_id)
-        .single()
-      if (userError) throw userError
-
-      // Sum debts to apply
-      let totalDebtsDeducted = 0
-      if (debts_to_apply && debts_to_apply.length > 0) {
-        for (const debtApp of debts_to_apply) {
-          totalDebtsDeducted += num(debtApp.amount)
-        }
-      }
-
-      // Sum credits to apply
-      let totalCreditsApplied = 0
-      if (credits_to_apply && credits_to_apply.length > 0) {
-        for (const creditApp of credits_to_apply) {
-          totalCreditsApplied += num(creditApp.amount)
-        }
-      }
-
-      // Also fold in any debts/credits that were previously STAGED on this
-      // txn/tia (status='paid' with offset_* matching). Their agent_debts row
-      // was already updated at stage time; we just need their amount in the
-      // TIA totals so agent_net / debts_deducted reflect them.
-      const { data: stagedRecords } = await supabase
-        .from('agent_debts')
-        .select('id, record_type, amount_owed, amount_paid, amount_remaining')
-        .eq('offset_transaction_id', id)
-        .eq('offset_transaction_agent_id', internal_agent_id)
-        .eq('status', 'paid')
-      const debtAppliedIds = new Set(
-        (debts_to_apply || []).map((d: any) => d.debt_id).filter(Boolean)
-      )
-      const creditAppliedIds = new Set(
-        (credits_to_apply || []).map((c: any) => c.credit_id).filter(Boolean)
-      )
-      for (const sr of stagedRecords || []) {
-        // Skip records that are also in *_to_apply (avoid double counting).
-        if (debtAppliedIds.has(sr.id) || creditAppliedIds.has(sr.id)) continue
-        // Amount that was actually applied at stage time =
-        //   amount_owed - amount_remaining (mirrors reverse_mark_paid math).
-        const owed = num(sr.amount_owed)
-        const remaining = num(sr.amount_remaining ?? 0)
-        const appliedAtStage = Math.max(0, owed - remaining)
-        if (sr.record_type === 'credit') {
-          totalCreditsApplied += appliedAtStage
-        } else {
-          totalDebtsDeducted += appliedAtStage
-        }
-      }
-
-      // Use the CANONICAL commission formula from lib/transactions/math.ts.
-      // Locked 2026-05-04 (Phase 2.6).
-      //   amount_1099 = agent_gross + btsa − processing − coaching − other_fees − rebate + credits
-      //   agent_net   = amount_1099 − debts
-      //
-      // team_lead_commission on primary TIA is informational only - it was
-      // carved out of agent_gross at apply_primary_split time. Do NOT pass
-      // it as a deduction here.
-      //
-      // RETAINER rows: the formula above also works for retainer rows because
-      // we map agent_basis -> agent_gross (the income before any fee), and
-      // processing_fee carries the office's retainer fee. All other fields
-      // are 0 on a retainer row by construction, so the formula reduces to:
-      //   amount_1099 = basis − retainer_fee + credits
-      //   agent_net   = amount_1099 − debts
-      const isRetainer = tia.installment_kind === 'retainer'
-      const grossForFormula = isRetainer ? tia.agent_basis : tia.agent_gross
-
-      const { amount_1099: amount1099, agent_net: agentNet } = computeCommission({
-        agent_gross: grossForFormula,
-        btsa_amount: tia.btsa_amount,
-        processing_fee: tia.processing_fee,
-        coaching_fee: tia.coaching_fee,
-        other_fees: tia.other_fees,
-        rebate_amount: tia.rebate_amount,
-        credits_applied: totalCreditsApplied,
-        debts_deducted: totalDebtsDeducted,
-      })
-
-      const tiaUpdate: any = {
-        payment_status: 'paid',
-        payment_date,
-        payment_method: payment_method || null,
-        payment_reference: payment_reference || null,
-        funding_source: funding_source || 'crc',
-        amount_1099_reportable: amount1099,
-        debts_deducted: Math.round(totalDebtsDeducted * 100) / 100,
-        agent_net: agentNet,
-        updated_at: new Date().toISOString(),
-      }
-      // Money paid outside the app (check, wire, Zelle, or a payout sent
-      // straight from the Payload dashboard) never passes through
-      // process_payout, so nothing stamps payment_sent_date and the row would
-      // read as paid with no record of when it went out. Fill it from the date
-      // the office entered - which also restores backdating, since that field
-      // is operator-supplied. Only written when empty: a real Payload
-      // initiation date is never overwritten.
-      if (!tia.payment_sent_date && payment_date) {
-        tiaUpdate.payment_sent_date = payment_date
-      }
-      // Persist the office's "counts toward progress" decision. It used to
-      // arrive in the body, feed the counter increment, and then be discarded,
-      // so the decision lived nowhere durable. The New Agent Plan count is
-      // derived from this column now, so it has to be written. Only write when
-      // the client actually sends a boolean: an absent key must not overwrite
-      // an existing false set by add_internal_agent or apply_primary_split.
-      if (typeof counts_toward_progress === 'boolean') {
-        tiaUpdate.counts_toward_progress = counts_toward_progress
-      }
-
-      const { error: updateTiaError } = await supabase
-        .from('transaction_internal_agents')
-        .update(tiaUpdate)
-        .eq('id', internal_agent_id)
-      if (updateTiaError) throw updateTiaError
-
-      // Apply debts
-      if (debts_to_apply && debts_to_apply.length > 0) {
-        for (const debtApp of debts_to_apply) {
-          const { data: debt } = await supabase
-            .from('agent_debts')
-            .select('*')
-            .eq('id', debtApp.debt_id)
-            .single()
-
-          if (debt) {
-            const amountRemaining = num(debt.amount_remaining ?? debt.amount_owed)
-            const amountApplied = num(debtApp.amount)
-            const newRemaining = amountRemaining - amountApplied
-
-            const debtUpdate: any = {
-              amount_paid: num(debt.amount_paid) + amountApplied,
-              offset_transaction_id: id,
-              offset_transaction_agent_id: internal_agent_id,
-              updated_at: new Date().toISOString(),
-            }
-            if (newRemaining <= 0) {
-              debtUpdate.status = 'paid'
-              debtUpdate.date_resolved = payment_date
-            }
-            await supabase.from('agent_debts').update(debtUpdate).eq('id', debtApp.debt_id)
-            // Two-way billing sync: a debt collected at Mark Paid time must
-            // also close its Payload invoice copy (negative Commission Offset
-            // line item, same as stage_debt). Before this, only debts staged
-            // through the Billing panel settled in Payload; debts applied in
-            // the Mark Paid modal left their Payload invoices open.
-            await settlePayloadInvoiceForDebt(debtApp.debt_id)
-          }
-        }
-      }
-
-      // Apply credits - same agent_debts table, record_type='credit'.
-      // Mark the credit row as paid (consumed) and link to this transaction.
-      if (credits_to_apply && credits_to_apply.length > 0) {
-        for (const creditApp of credits_to_apply) {
-          const { data: credit } = await supabase
-            .from('agent_debts')
-            .select('*')
-            .eq('id', creditApp.credit_id)
-            .single()
-
-          if (credit) {
-            const amountRemaining = num(credit.amount_remaining ?? credit.amount_owed)
-            const amountApplied = num(creditApp.amount)
-            const newRemaining = amountRemaining - amountApplied
-
-            const creditUpdate: any = {
-              amount_paid: num(credit.amount_paid) + amountApplied,
-              offset_transaction_id: id,
-              offset_transaction_agent_id: internal_agent_id,
-              updated_at: new Date().toISOString(),
-            }
-            if (newRemaining <= 0) {
-              creditUpdate.status = 'paid'
-              creditUpdate.date_resolved = payment_date
-            }
-            await supabase.from('agent_debts').update(creditUpdate).eq('id', creditApp.credit_id)
-          }
-        }
-      }
-
-      await recomputeOfficeNet(id)
-
       return NextResponse.json({
         success: true,
-        updates: { ...tiaUpdate, debts_applied: debts_to_apply?.length || 0 },
+        updates: markResult.updates,
       })
     }
 

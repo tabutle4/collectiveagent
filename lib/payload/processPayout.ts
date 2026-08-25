@@ -77,19 +77,52 @@ const plAuth = () =>
  * blocking every payout on an unverified flag is worse than the problem. It
  * is surfaced in the preview and reported by the cron instead.
  */
-export function payoutTargetProblem(agentUser: {
-  payload_payout_customer_id?: string | null
-  payload_payee_id?: string | null
-}): string | null {
+export function payoutTargetProblem(
+  agentUser: {
+    payload_payout_customer_id?: string | null
+    payload_payee_id?: string | null
+  },
+  pm?: any
+): string | null {
   const payoutCustomer = String(agentUser.payload_payout_customer_id || '')
   const billingCustomer = String(agentUser.payload_payee_id || '')
   if (!payoutCustomer) {
     return 'No payout customer is on file for this agent, only a billing customer. Send Bank Activation so they set up a payout bank account in Payload.'
   }
   if (billingCustomer && payoutCustomer === billingCustomer) {
-    return 'This agent\'s payout customer is the same Payload customer used to bill their monthly fee, so the account on file may be their billing bank rather than a payout bank. Confirm the payout account in Payload and re-link it from their profile before paying.'
+    // One Payload CUSTOMER can legitimately serve both purposes, because a
+    // customer holds several methods and Payload records what each one is for.
+    // One agent is set up exactly that way: a receive-only bank for payouts and
+    // a send-only card that bills the monthly fee, both on one customer,
+    // created months before the cron incident.
+    //
+    // So the equality itself is not the defect. The defect was paying a BILLING
+    // bank, and Payload marks those send-only with default_credit_method false.
+    // When the method in hand is one Payload says can receive a credit, the
+    // dangerous case is excluded on the evidence and there is nothing to refuse.
+    // Measured across all 225 methods on this account, 24 August 2026: the 51
+    // receive-only methods are exactly the 51 credit-capable ones, and no
+    // billing account is among them.
+    //
+    // Called without a method (or with one Payload does not mark credit
+    // capable), this still refuses - so the check is unchanged everywhere the
+    // method is unknown.
+    if (!payoutMethodCanReceiveCredit(pm)) {
+      return 'This agent\'s payout customer is the same Payload customer used to bill their monthly fee, and the account on file is not marked as one that can receive credits, so it may be their billing bank. Confirm the payout account in Payload and re-link it from their profile before paying.'
+    }
   }
   return null
+}
+
+/**
+ * Payload's own marking for "this account may receive a credit".
+ * A commission payout is a credit, so a billing account never satisfies this:
+ * every send-only method on this account has default_credit_method false.
+ */
+export function payoutMethodCanReceiveCredit(pm: any): boolean {
+  if (!pm) return false
+  if (String(pm.transfer_type || '').toLowerCase() === 'send-only') return false
+  return !!pm.default_credit_method
 }
 
 export function payoutMethodProblem(pm: any): string | null {
@@ -264,7 +297,7 @@ export async function processPayout({
   // ownership comparison, because the comparison cannot catch a payout
   // customer that was copied from the billing customer - it would just be
   // agreeing with itself.
-  const targetProblem = payoutTargetProblem(agentUser)
+  const targetProblem = payoutTargetProblem(agentUser, pm)
   if (targetProblem) {
     return { ok: false, error: targetProblem }
   }
@@ -534,11 +567,11 @@ export async function previewPayout({
       error: 'Agent has no verified bank connection - resend Bank Connect from the app.',
     }
   }
-  // Same rules as the send below, or the modal would show a green preview for
-  // a payout processPayout is about to refuse.
-  const previewTargetProblem = payoutTargetProblem(agentUser)
-  if (previewTargetProblem) {
-    return { ok: false, error: previewTargetProblem }
+  // The half of the target check that needs no method: no payout customer at
+  // all. The equality check now depends on what Payload says the method is for,
+  // so it runs below, once the method has been fetched.
+  if (!agentUser.payload_payout_customer_id) {
+    return { ok: false, error: payoutTargetProblem(agentUser) as string }
   }
   const expectedCustomer = String(agentUser.payload_payout_customer_id || '')
   if (!expectedCustomer) {
@@ -586,6 +619,13 @@ export async function previewPayout({
       ok: false,
       error: 'Bank account is inactive in Payload - resend Bank Connect from the app.',
     }
+  }
+  // Same rules as the send, with the same inputs, or the modal would show a
+  // green preview for a payout processPayout is about to refuse - or refuse one
+  // the send would allow.
+  const previewTargetProblem = payoutTargetProblem(agentUser, pm)
+  if (previewTargetProblem) {
+    return { ok: false, error: previewTargetProblem }
   }
   const previewMethodProblem = payoutMethodProblem(pm)
   if (previewMethodProblem) {

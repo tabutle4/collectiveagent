@@ -5651,6 +5651,17 @@ export default function AdminTransactionDetailPage() {
                                           {payoutStatusById[a.id]?.mode === 'reference' && payoutStatusById[a.id]?.not_found
                                             ? ' · not found in Payload'
                                             : ''}
+                                          {/* A pending payout has not left the operating
+                                              account yet. Payload's processed_date is the day
+                                              it is expected to, which is what the reconcile
+                                              cron waits for - so the row reads honestly
+                                              before it clears instead of just saying "sent". */}
+                                          {payoutStatusById[a.id]?.mode === 'reference' &&
+                                          !payoutStatusById[a.id]?.not_found &&
+                                          String(payoutStatusById[a.id]?.funding_status || '').toLowerCase() === 'pending' &&
+                                          payoutStatusById[a.id]?.processed_date
+                                            ? ` · expected to clear ${fmtDate(payoutStatusById[a.id].processed_date)}`
+                                            : ''}
                                         </span>
                                         {payoutStatusById[a.id]?.error && (
                                           <span className="text-[11px] text-red-600">{payoutStatusById[a.id].error}</span>
