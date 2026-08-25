@@ -6623,9 +6623,21 @@ export default function AdminTransactionDetailPage() {
                         {u ? fmtName(u) : 'Unknown Agent'}
                       </p>
                     )}
-                    <p className="text-xs text-luxury-gray-3 mb-2">
+                                        <p className="text-xs text-luxury-gray-3 mb-2">
                       {u?.office_email || u?.email || ''}
                     </p>
+                    {u && (
+                      <div className="mt-2 p-2 bg-luxury-light rounded">
+                        <p className="text-xs font-semibold text-luxury-gray-2 mb-1 flex items-center gap-1.5">
+                          <User size={11} /> Firm Status
+                        </p>
+                        {u.is_active === true ? (
+                          <p className="text-xs font-medium text-green-600">With firm</p>
+                        ) : (
+                          <p className="text-xs font-medium text-red-600">Not with firm</p>
+                        )}
+                      </div>
+                    )}
                     {u && (
                       <div className="space-y-0">
                         <FieldRow label="Office" value={u.office} />

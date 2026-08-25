@@ -27,7 +27,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             user:users!transaction_internal_agents_agent_id_fkey(
               id, first_name, last_name, preferred_first_name, preferred_last_name,
               office_email, email, phone, office, commission_plan, license_number,
-              license_expiration, nrds_id, mls_id, association, join_date,
+                            license_expiration, nrds_id, mls_id, association, join_date, is_active,
               division, revenue_share, revenue_share_percentage, referring_agent,
               referring_agent_id, referred_agents,
               qualifying_transaction_count, qualifying_transaction_target,
