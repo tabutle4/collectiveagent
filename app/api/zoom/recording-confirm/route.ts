@@ -5,7 +5,7 @@ import { getGraphToken } from '@/lib/microsoft-graph'
 import { Resend } from 'resend'
 import { getEmailLayout, emailButton, emailSignature } from '@/lib/email/layout'
 
-export const maxDuration = 300
+export const maxDuration = 800
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const ONEDRIVE_USER = process.env.MICROSOFT_ONEDRIVE_USER!
