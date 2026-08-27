@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { X, AlertTriangle, CheckCircle, Lock, XCircle } from 'lucide-react'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
-import { fundingStatus, btsaTotalFromAgentRows, fundingExpectedLabel, MATH_TOLERANCE } from '@/lib/transactions/funding'
+import { fundingStatus, btsaTotalFromAgentRows, fundingExpectedLabel, effectiveAgentNetTotal, MATH_TOLERANCE } from '@/lib/transactions/funding'
 
 const fmt$ = (n: number | null | undefined) => {
   if (n == null || (typeof n === 'number' && isNaN(n))) return '--'
@@ -80,7 +80,12 @@ export default function CloseDialog({
   // agent_net already carries BTSA, so the payee side has to be compared
   // against office gross + BTSA or every BTSA deal reads as over-allocated.
   const allocOfficeGross = num(transaction?.office_gross) + btsaTotal
-  const allocAgentNets = (agents || []).reduce((s: number, a: any) => s + num(a.agent_net), 0)
+  // Staged debts and credits have to come off the payee side here, because
+  // recomputeOfficeNet already folded them into office_net. On an unpaid row
+  // debts_deducted is still 0 (it is stamped at Mark Paid), so raw agent_net
+  // is the pre-withholding figure and reconciling it against that office_net
+  // reports the deal as over-allocated by exactly the staged total.
+  const allocAgentNets = effectiveAgentNetTotal(agents || [])
   const allocExternal = brokerages.reduce((s: number, b: any) => s + num(b.commission_amount), 0)
   const allocActual = allocAgentNets + allocExternal + num(transaction?.office_net)
   const allocGap = allocOfficeGross - allocActual

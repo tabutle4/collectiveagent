@@ -255,3 +255,78 @@ export const FUNDING_FILTER_LABELS: Record<FundingState, string> = {
   matched: 'Verified',
   mismatch: 'Mismatch',
 }
+
+/**
+ * A staged debt or credit sitting against a deal: an agent_debts row with
+ * status='paid' and offset_transaction_id set to this deal.
+ */
+export interface StagedRecordInput {
+  /** The TIA row the record was staged against. */
+  offset_transaction_agent_id?: string | null
+  /** 'credit' pays the agent more; anything else withholds from them. */
+  record_type?: string | null
+  amount_owed?: number | string | null
+  amount_remaining?: number | string | null
+}
+
+/** The fields of a transaction_internal_agents row this file needs. */
+export interface AgentNetRowInput {
+  id?: string | null
+  agent_net?: number | string | null
+  payment_status?: string | null
+}
+
+/**
+ * What one agent row will actually be paid, with staged debts and credits
+ * folded in. ONE definition, so the close dialog, the server's close gate and
+ * the deal page cannot disagree about what a payee is owed.
+ *
+ * Why this is not just agent_net: transaction_internal_agents.debts_deducted
+ * is stamped at Mark Paid and nowhere else, so an UNPAID row reads
+ * debts_deducted = 0 and its stored agent_net is the figure BEFORE any
+ * withholding. recomputeOfficeNet, by contrast, folds staged debts into
+ * office_net the moment they are staged. Reconciling raw agent_net against
+ * that office_net therefore reports the deal as over-allocated by exactly the
+ * staged total, on a deal where nothing is wrong. Measured 27 August 2026:
+ * every open deal carrying a staged debt on an unpaid row was off by exactly
+ * the staged amount, and every deal whose rows were already paid reconciled
+ * to zero.
+ *
+ * A PAID row is returned as-is. Its agent_net already carries debts_deducted
+ * from Mark Paid, and subtracting the staged records again would double-count.
+ * Same rule the deal page's payout preview uses.
+ *
+ * `staged` may be the whole deal's staged pool; records are matched to this
+ * row by offset_transaction_agent_id, so passing extra rows is safe and
+ * passing the same pool for every agent cannot double-count.
+ */
+export function effectiveAgentNet(
+  row: AgentNetRowInput | null | undefined,
+  staged: StagedRecordInput[] | null | undefined
+): number {
+  const baseNet = num(row?.agent_net)
+  if (String(row?.payment_status || '') === 'paid') {
+    return Math.round(baseNet * 100) / 100
+  }
+  let debts = 0
+  let credits = 0
+  for (const r of staged || []) {
+    if (!r || r.offset_transaction_agent_id !== row?.id) continue
+    const applied = Math.max(0, num(r.amount_owed) - num(r.amount_remaining))
+    if (String(r.record_type || '') === 'credit') credits += applied
+    else debts += applied
+  }
+  return Math.round((baseNet - debts + credits) * 100) / 100
+}
+
+/** Sum of effectiveAgentNet across a deal's agent rows. */
+export function effectiveAgentNetTotal(
+  rows: Array<AgentNetRowInput & { billing?: { staged?: StagedRecordInput[] | null } | null }> | null | undefined,
+  staged?: StagedRecordInput[] | null
+): number {
+  const total = (rows || []).reduce(
+    (s, r) => s + effectiveAgentNet(r, staged ?? r?.billing?.staged),
+    0
+  )
+  return Math.round(total * 100) / 100
+}

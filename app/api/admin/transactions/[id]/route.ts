@@ -14,7 +14,7 @@ import { parseCustomPlanSplit } from '@/lib/transactions/customPlanParser'
 import { settlePayloadInvoiceForDebt } from '@/lib/payload/settleInvoiceForDebt'
 import { buildStatementEmail, buildCdaEmail } from '@/lib/email/buildTransactionEmails'
 import { getEmailLayout } from '@/lib/email/layout'
-import { fundingStatus, btsaTotalFromAgentRows, fundingExpectedLabel, MATH_TOLERANCE } from '@/lib/transactions/funding'
+import { fundingStatus, btsaTotalFromAgentRows, fundingExpectedLabel, effectiveAgentNetTotal, MATH_TOLERANCE } from '@/lib/transactions/funding'
 import { processPayout, previewPayout, payoutStatus, recentPayoutCredits } from '@/lib/payload/processPayout'
 
 export const dynamic = 'force-dynamic'
@@ -3659,7 +3659,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Hard gates, no override (Tara: no exceptions on close-transaction
       // gating). Referred-out deals get NO exemption — checks come in for
       // referred-out deals too, so their money must reconcile the same way.
-      const [funding, { data: closeTxn }, { data: closeAgents }, { data: closeTebs }] =
+      const [funding, { data: closeTxn }, { data: closeAgents }, { data: closeTebs }, { data: closeStaged }] =
         await Promise.all([
           dealFundingStatus(id),
           supabase
@@ -3669,12 +3669,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             .single(),
           supabase
             .from('transaction_internal_agents')
-            .select('agent_net')
+            .select('id, agent_net, payment_status')
             .eq('transaction_id', id),
           supabase
             .from('transaction_external_brokerages')
             .select('commission_amount')
             .eq('transaction_id', id),
+          // Staged debts and credits against this deal. recomputeOfficeNet
+          // already folded these into office_net, so the payee side has to
+          // account for them too or the reconciliation below is comparing two
+          // different points in time.
+          supabase
+            .from('agent_debts')
+            .select('offset_transaction_agent_id, record_type, amount_owed, amount_remaining')
+            .eq('offset_transaction_id', id)
+            .eq('status', 'paid'),
         ])
 
       const closeBlocks: string[] = []
@@ -3695,10 +3704,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // gross PLUS BTSA. funding.btsa is the same sum dealFundingStatus used,
       // so this gate and the funding gate above cannot disagree.
       const closeOfficeGross = num(closeTxn?.office_gross) + funding.btsa
-      const closeAgentNets = (closeAgents || []).reduce(
-        (s: number, a: any) => s + num(a.agent_net),
-        0
-      )
+      // Same helper the close dialog uses, so the button and the route cannot
+      // disagree. Unpaid rows have staged debts/credits applied; paid rows are
+      // taken as-is because Mark Paid already stamped debts_deducted into
+      // their agent_net.
+      const closeAgentNets = effectiveAgentNetTotal(closeAgents || [], closeStaged || [])
       const closeExternal = (closeTebs || []).reduce(
         (s: number, b: any) => s + num(b.commission_amount),
         0
