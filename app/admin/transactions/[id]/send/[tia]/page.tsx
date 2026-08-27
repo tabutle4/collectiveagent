@@ -223,8 +223,19 @@ function SendDocumentInner() {
           // show, plus agent standing, so Courtney can approve from one screen.
           const n = (v: any) => parseFloat(String(v ?? 0)) || 0
           const f$ = (v: any) => `$${n(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-          const staged = agent.billing?.staged || []
-          const stagedTotal = staged.reduce((s: number, d: any) => s + n(d.amount_paid), 0)
+          // Staged records for THIS card only. billing.staged is scoped to the
+          // agent's USER, so on a deal where one agent holds two rows an
+          // unscoped sum deducts the same debt from both. A credit is money
+          // owed TO the agent, so it adds rather than subtracts, matching
+          // recomputeOfficeNet and the CDA.
+          const staged = (agent.billing?.staged || []).filter(
+            (d: any) => d.offset_transaction_agent_id === agent.id
+          )
+          const stagedDebts = staged.filter((d: any) => d.record_type !== 'credit')
+          const stagedCredits = staged.filter((d: any) => d.record_type === 'credit')
+          const stagedTotal =
+            stagedDebts.reduce((s: number, d: any) => s + n(d.amount_paid), 0) -
+            stagedCredits.reduce((s: number, d: any) => s + n(d.amount_paid), 0)
           const netToAgent = Math.round((n(agent.amount_1099_reportable) - stagedTotal) * 100) / 100
           const outstanding = (agent.billing?.debts || []).filter((d: any) => !staged.some((s: any) => s.id === d.id))
           const outstandingTotal = outstanding.reduce((s: number, d: any) => s + n(d.amount_remaining ?? d.amount_owed), 0)
@@ -283,7 +294,8 @@ function SendDocumentInner() {
                   {n(agent.other_fees) > 0 && line(`- Other fees${agent.other_fees_description ? ` (${agent.other_fees_description})` : ''}`, `-${f$(agent.other_fees)}`)}
                   {n(agent.rebate_amount) > 0 && line('- Rebate', `-${f$(agent.rebate_amount)}`)}
                   {line('1099 amount', f$(agent.amount_1099_reportable), 'font-semibold')}
-                  {staged.map((d: any) => line(`- ${d.description || d.debt_type || 'Debt'}`, `-${f$(d.amount_paid)}`, 'text-amber-700'))}
+                  {stagedDebts.map((d: any) => line(`- ${d.description || d.debt_type || 'Debt'}`, `-${f$(d.amount_paid)}`, 'text-amber-700'))}
+                  {stagedCredits.map((d: any) => line(`+ ${d.description || d.debt_type || 'Credit'}`, `+${f$(d.amount_paid)}`, 'text-green-700'))}
                   {line('Net to agent', f$(netToAgent), 'font-semibold')}
                   {line('Office net (deal)', f$(txn.office_net))}
                   {ecNotice && (

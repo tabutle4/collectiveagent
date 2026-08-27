@@ -35,7 +35,7 @@ import {
 import { TransactionStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/transactions/types'
 import { intermediaryBadgeProps, sideLabel } from '@/lib/transactions/sides'
 import { computeCommission } from '@/lib/transactions/math'
-import { fundingStatus, fundingFilterState, btsaTotalFromAgentRows, fundingExpectedLabel, MATH_TOLERANCE } from '@/lib/transactions/funding'
+import { fundingStatus, fundingFilterState, btsaTotalFromAgentRows, fundingExpectedLabel, effectiveAgentNet, effectiveAgentNetTotal, MATH_TOLERANCE } from '@/lib/transactions/funding'
 import { getPipelineStage, allAgentsPaid } from '@/lib/transactions/stage'
 import FundingBanner from '@/components/transactions/FundingBanner'
 import PipelineRail from '@/components/transactions/PipelineRail'
@@ -3912,7 +3912,12 @@ export default function AdminTransactionDetailPage() {
   // the figure the app already calls gross_commission. Summed from the agent
   // rows, which is the same column recomputeGrossAndOffice sums.
   const btsaTotal = btsaTotalFromAgentRows(agents)
-  const totalAgentNetsRaw = agents.reduce((s: number, a: any) => s + parseFloat(a.agent_net || 0), 0)
+  // Staged debts and credits are already inside office_net (recomputeOfficeNet
+  // folds them in the moment they are staged), but debts_deducted is only
+  // stamped on the TIA at Mark Paid. Comparing raw agent_net against that
+  // office_net flags every deal carrying a staged debt on an unpaid row as
+  // broken, by exactly the staged amount. Same helper the close gate uses.
+  const totalAgentNetsForMath = effectiveAgentNetTotal(agents)
   const funding = fundingStatus(checks, officeGross, btsaTotal)
   // The corrected funding verdict, shared with the transactions list chips and
   // the dashboard tiles so all three agree. Differs from `funding` above in
@@ -3939,7 +3944,7 @@ export default function AdminTransactionDetailPage() {
     // alone reported every BTSA deal as broken. On 5725 Adamite Way that was a
     // $5,000 phantom; with BTSA included the two sides agree to a cent.
     const expectedPayout = officeGross + btsaTotal
-    const actualPayout = totalAgentNetsRaw + totalExternalCommissions + parseFloat(txn?.office_net || 0)
+    const actualPayout = totalAgentNetsForMath + totalExternalCommissions + parseFloat(txn?.office_net || 0)
     if (Math.abs(expectedPayout - actualPayout) > MATH_TOLERANCE) {
       commissionMathFlags.push(
         btsaTotal > 0
@@ -5706,7 +5711,14 @@ export default function AdminTransactionDetailPage() {
                                     <span className="font-normal text-luxury-gray-3"> · {String(a.agent_role || '').replace(/_/g, ' ')}</span>
                                   </p>
                                   <p className="text-[11px] text-luxury-gray-3 truncate">
-                                    Net to agent {fmt$(a.agent_net)} · {roleLabel} - {txn.property_address || 'this deal'}
+                                    {/* The figure Process payout will actually
+                                        send. payoutNetForRow folds in staged
+                                        debts and credits, but the TIA's
+                                        debts_deducted is not stamped until
+                                        Mark Paid, so a.agent_net printed the
+                                        pre-withholding amount right above a
+                                        button that sends the lower one. */}
+                                    Net to agent {fmt$(effectiveAgentNet(a, a.billing?.staged))} · {roleLabel} - {txn.property_address || 'this deal'}
                                   </p>
                                 </div>
                                 {/* Paid is checked FIRST. A manual Mark Paid

@@ -5,6 +5,7 @@ import {
   getTransactionTypeLabel,
   isLeaseTransactionType,
 } from '@/lib/transactions/transactionTypes'
+import { effectiveAgentNet } from '@/lib/transactions/funding'
 
 export const dynamic = 'force-dynamic'
 
@@ -154,6 +155,29 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Staged debts and credits, keyed by TIA. An unpaid row's agent_net is the
+    // pre-withholding figure (debts_deducted is stamped at Mark Paid and
+    // nowhere else), so without this the report overstates every pending
+    // payout that has something staged against it. Paid rows already carry the
+    // deduction and are left alone by effectiveAgentNet.
+    //
+    // Fetched whole rather than filtered to the pending TIA ids: 99 staged
+    // rows exist in total, so an `in` list of every pending TIA would be a far
+    // larger request than the table itself.
+    const stagedRecords = await fetchAllRows<any>(
+      'agent_debts',
+      'offset_transaction_agent_id, record_type, amount_owed, amount_remaining',
+      { filters: [{ type: 'eq', column: 'status', value: 'paid' }] }
+    )
+    const stagedByTia = new Map<string, any[]>()
+    for (const r of stagedRecords) {
+      const key = r.offset_transaction_agent_id
+      if (!key) continue
+      const list = stagedByTia.get(key)
+      if (list) list.push(r)
+      else stagedByTia.set(key, [r])
+    }
+
     // Build unified rows
     const internalRows: PayoutRow[] = internalAgents.map(a => {
       const txn = a.transactions as any
@@ -167,7 +191,7 @@ export async function GET(request: NextRequest) {
         payee_type:       a.agent_role || 'agent',
         address:          txn?.property_address || '',
         transaction_type: friendlyType(txnType),
-        amount:           a.agent_net || 0,
+        amount:           effectiveAgentNet(a, stagedByTia.get(a.id) || []),
         payment_status:   a.payment_status || 'pending',
         payment_date:     a.payment_date || closedDate,
         payment_method:   a.payment_method || (lease ? 'ach' : 'wire'),
