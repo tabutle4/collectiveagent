@@ -5,6 +5,11 @@ import { Resend } from 'resend'
 import { getEmailLayout, emailButton, emailSignature } from '@/lib/email/layout'
 import { getGraphToken } from '@/lib/microsoft-graph'
 
+// Large recordings stream Zoom -> OneDrive inside this handler. At the 300s
+// default a file over roughly 600 MB is killed mid-upload, which leaves the job
+// with no OneDrive copy and only the 24 hour Zoom download token to fall back on.
+export const maxDuration = 800
+
 const resend = new Resend(process.env.RESEND_API_KEY)
 const ONEDRIVE_USER = process.env.MICROSOFT_ONEDRIVE_USER!
 const ONEDRIVE_FOLDER = 'Zoom Recordings/Pending'
