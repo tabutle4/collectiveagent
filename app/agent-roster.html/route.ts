@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { buildRosterHtml, buildTableRows } from '@/lib/rosterGenerator'
+import { applyRosterFilters } from '@/lib/roster'
 
 // Helper functions (same as in rosterGenerator.ts)
 const getUniqueSorted = (values: (string | null)[]) => {
@@ -30,15 +31,16 @@ export async function GET() {
   try {
     console.log('🔄 Generating roster HTML dynamically...')
 
-    // Fetch active licensed agents
-    const { data: agents, error: fetchError } = await supabaseAdmin
-      .from('users')
-      .select(
-        'id, preferred_first_name, preferred_last_name, first_name, last_name, email, personal_phone, business_phone, birth_month, date_of_birth, office, division, role, roles, job_title, additional_roles, instagram_handle, tiktok_handle, threads_handle, youtube_url, linkedin_url, facebook_url, headshot_url, headshot_crop'
-      )
-      .eq('is_active', true)
-      .eq('is_licensed_agent', true)
-      .neq('mls_choice', 'Referral Collective (No MLS)')
+    // Fetch active licensed agents. The three conditions live in
+    // applyRosterFilters so the deal page's firm status label can test the
+    // same rule without restating it - see lib/roster.ts.
+    const { data: agents, error: fetchError } = await applyRosterFilters(
+      supabaseAdmin
+        .from('users')
+        .select(
+          'id, preferred_first_name, preferred_last_name, first_name, last_name, email, personal_phone, business_phone, birth_month, date_of_birth, office, division, role, roles, job_title, additional_roles, instagram_handle, tiktok_handle, threads_handle, youtube_url, linkedin_url, facebook_url, headshot_url, headshot_crop'
+        )
+    )
 
     if (fetchError) {
       console.error('❌ Error fetching users for roster:', fetchError)

@@ -382,6 +382,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         { data: externalBrokeragesFull },
       ] = await Promise.all([
           supabase.from('transactions').select('*').eq('id', id).single(),
+          // is_active, is_licensed_agent and mls_choice are the three roster
+          // conditions behind the "With firm" label on the payout row and in
+          // the agent sidebar. firmStatus() tests them with a strict === true,
+          // so a column left out of this select arrives undefined and every
+          // agent reads as Not with firm - which is exactly what happened
+          // while is_active was missing here.
           supabase.from('transaction_internal_agents').select(`
             *,
             user:users!transaction_internal_agents_agent_id_fkey(
@@ -395,7 +401,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
               half_seller_processing_fees, waive_seller_processing_fees, waive_coaching_fee,
               cap_amount_override, post_cap_split_override,
               special_commission_notes, headshot_url,
-              monthly_fee_paid_through, bank_connected
+              monthly_fee_paid_through, bank_connected,
+              is_active, is_licensed_agent, mls_choice
             )
           `).eq('transaction_id', id),
           supabase

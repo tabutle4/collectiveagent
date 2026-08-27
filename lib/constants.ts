@@ -109,6 +109,14 @@ export type OfficeName = (typeof OFFICES)[number]
 export const MLS_TYPES = ['HAR', 'NTREIS', 'MetroTex', 'Other'] as const
 export type MLSType = (typeof MLS_TYPES)[number]
 
+// The users.mls_choice value that marks someone as a Referral Collective
+// agent rather than a Collective Realty Co. one. It is the entity
+// discriminator on the shared users table, so it decides who the CRC roster
+// lists, who gets billed monthly rather than annually, and which brand an
+// email signature carries. Spelled out in ~20 places across the app; new code
+// should import it from here.
+export const REFERRAL_COLLECTIVE_MLS_CHOICE = 'Referral Collective (No MLS)'
+
 // ═══════════════════════════════════════════════════════════════════════════
 // PAGINATION & LIMITS
 // ═══════════════════════════════════════════════════════════════════════════

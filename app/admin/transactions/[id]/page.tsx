@@ -36,6 +36,7 @@ import { TransactionStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/transacti
 import { intermediaryBadgeProps, sideLabel } from '@/lib/transactions/sides'
 import { computeCommission } from '@/lib/transactions/math'
 import { fundingStatus, fundingFilterState, btsaTotalFromAgentRows, fundingExpectedLabel, effectiveAgentNet, effectiveAgentNetTotal, MATH_TOLERANCE } from '@/lib/transactions/funding'
+import { firmStatus, FIRM_STATUS_LABELS, FIRM_STATUS_CLASSES } from '@/lib/roster'
 import { getPipelineStage, allAgentsPaid } from '@/lib/transactions/stage'
 import FundingBanner from '@/components/transactions/FundingBanner'
 import PipelineRail from '@/components/transactions/PipelineRail'
@@ -5685,6 +5686,10 @@ export default function AdminTransactionDetailPage() {
                           const failing = gates.filter(g => !g.ok)
                           const ready = failing.length === 0
                           const isPaid = a.payment_status === 'paid'
+                          // Same rule the roster page runs, so this label and
+                          // /admin/agent-roster can never disagree about who
+                          // is still with the firm.
+                          const firm = firmStatus(a.user)
                           // A Payload send and a manual Mark Paid both stamp
                           // payment_sent_date, so the send line is only worth
                           // showing when it says something the Paid line does
@@ -5882,8 +5887,8 @@ export default function AdminTransactionDetailPage() {
                                   <div className="flex items-center gap-2 flex-shrink-0">
                                     {/* Firm status next to the payout action so an
                                         off-roster agent is caught before sending. */}
-                                    <span className={`text-xs font-medium ${a.user?.is_active === true ? 'text-green-600' : 'text-red-600'}`}>
-                                      {a.user?.is_active === true ? 'With firm' : 'Not with firm'}
+                                    <span className={`text-xs font-medium ${FIRM_STATUS_CLASSES[firm]}`}>
+                                      {FIRM_STATUS_LABELS[firm]}
                                     </span>
                                     {/* Money that moved outside the app - check, wire,
                                         Zelle, or a payout sent straight from Payload -
@@ -6651,11 +6656,9 @@ export default function AdminTransactionDetailPage() {
                         <p className="text-xs font-semibold text-luxury-gray-2 mb-1 flex items-center gap-1.5">
                           <User size={11} /> Firm Status
                         </p>
-                        {u.is_active === true ? (
-                          <p className="text-xs font-medium text-green-600">With firm</p>
-                        ) : (
-                          <p className="text-xs font-medium text-red-600">Not with firm</p>
-                        )}
+                        <p className={`text-xs font-medium ${FIRM_STATUS_CLASSES[firmStatus(u)]}`}>
+                          {FIRM_STATUS_LABELS[firmStatus(u)]}
+                        </p>
                       </div>
                     )}
                     {u && (
