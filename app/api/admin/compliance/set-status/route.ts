@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
     if (sub.transaction_id) {
       const { data: allSideRows } = await supabaseAdmin
         .from('agent_form_submissions')
-        .select('id, status, reviewed_at, data')
+        .select('id, agent_id, submitted_at, status, reviewed_at, data')
         .eq('transaction_id', sub.transaction_id)
         .filter('data->>submission_mode', 'in', SIDE_MODES_FILTER)
       // On a retainer-only deal the retainer is the side; once a real

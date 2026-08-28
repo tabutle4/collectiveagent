@@ -34,8 +34,24 @@ export const SIDE_MODES_FILTER = '("compliance","retainer")'
  * old retainer must stop contributing or a still-submitted retainer would pin a
  * fully reviewed deal at in_review forever.
  *
+ * Only the NEWEST submission per agent per side counts. An agent who files a
+ * second full compliance form on a side they already filed does not create a
+ * second side; they replace their own answer. Without this the stale row stays
+ * in the ladder forever: on 3006 Brooks Ct the 8/25 submission was approved,
+ * the agent filed again on 8/26 and 8/27, and the deal reads in_review no
+ * matter which row Leah completes, because one of the other two is always
+ * still open. The compliance tracker collapses these to one row on exactly
+ * this key, so before this the tracker and the derivation disagreed about how
+ * many sides the deal had.
+ *
+ * Two agents co-listing ONE side keep both rows - they are different agents,
+ * and sidesCovered already counts distinct `representing` rather than rows, so
+ * both still have to be approved.
+ *
  * Callers holding submissions for several transactions must group by
- * transaction_id first and call this per transaction.
+ * transaction_id first and call this per transaction, and must SELECT
+ * `agent_id` and `submitted_at` - the dedupe key and the recency test are read
+ * off them.
  */
 /**
  * How many sides of the deal the submissions on hand actually cover, and how
@@ -90,10 +106,31 @@ export function deriveSideStatus(
   return statuses.every((s: string) => s === 'complete') ? 'complete' : null
 }
 
-export function pickSideSubmissions<T extends { data?: any }>(subs: T[]): T[] {
+export function pickSideSubmissions<
+  T extends { data?: any; agent_id?: string | null; submitted_at?: string | null; id?: string }
+>(subs: T[]): T[] {
   const compliance = subs.filter(s => (s.data?.submission_mode || '') === 'compliance')
-  if (compliance.length > 0) return compliance
-  return subs.filter(s => (s.data?.submission_mode || '') === 'retainer')
+  const pool = compliance.length > 0
+    ? compliance
+    : subs.filter(s => (s.data?.submission_mode || '') === 'retainer')
+
+  // Newest wins per agent per side. Ties break on id so the result is stable
+  // across calls rather than depending on the order the rows came back.
+  const newestByKey = new Map<string, T>()
+  for (const s of pool) {
+    const key = `${s.agent_id || ''}:${String(s.data?.representing || '').toLowerCase().trim()}`
+    const held = newestByKey.get(key)
+    if (!held) { newestByKey.set(key, s); continue }
+    const a = String(s.submitted_at || '')
+    const b = String(held.submitted_at || '')
+    if (a > b || (a === b && String(s.id || '') > String(held.id || ''))) {
+      newestByKey.set(key, s)
+    }
+  }
+  // Input order preserved: three routes render these as a side list and one
+  // reads picked[0] to decide compliance vs retainer mode.
+  const keep = new Set(Array.from(newestByKey.values()))
+  return pool.filter(s => keep.has(s))
 }
 
 export type DerivedCompliance = {
@@ -200,7 +237,7 @@ export async function deriveComplianceForTransactions(
 
   const { data: subs } = await supabaseAdmin
     .from('agent_form_submissions')
-    .select('transaction_id, status, reviewed_at, data')
+    .select('transaction_id, agent_id, submitted_at, status, reviewed_at, data')
     .in('transaction_id', ids)
     .filter('data->>submission_mode', 'in', SIDE_MODES_FILTER)
 

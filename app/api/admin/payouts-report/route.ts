@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
     if (txnIds.length) {
       const { data: sideSubs } = await supabaseAdmin
         .from('agent_form_submissions')
-        .select('transaction_id, agent_id, status, data')
+        .select('transaction_id, agent_id, submitted_at, status, data')
         .in('transaction_id', txnIds)
         .filter('data->>submission_mode', 'in', SIDE_MODES_FILTER)
       // Group by deal first so pickSideSubmissions can decide per transaction

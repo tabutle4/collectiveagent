@@ -28,7 +28,7 @@ export async function syncCheckComplianceDate(
 
   const { data: sideRows } = await supabaseAdmin
     .from('agent_form_submissions')
-    .select('id, status, reviewed_at, data')
+    .select('id, agent_id, submitted_at, status, reviewed_at, data')
     .eq('transaction_id', transactionId)
     .filter('data->>submission_mode', 'in', SIDE_MODES_FILTER)
 

@@ -160,7 +160,7 @@ export async function POST(
     // sign-off to the transaction and the checks.
     const { data: allSideRows } = await supabase
       .from('agent_form_submissions')
-      .select('id, status, data')
+      .select('id, agent_id, submitted_at, status, data')
       .eq('transaction_id', id)
       .filter('data->>submission_mode', 'in', SIDE_MODES_FILTER)
     const allSides = pickSideSubmissions(allSideRows || [])
