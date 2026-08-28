@@ -11,7 +11,7 @@ import { createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
 import { ensurePrimaryTia, autoCascadeTransaction, recomputeOfficeNet } from '@/lib/transactions/cascade'
 import { syncEcommissionRecords } from '@/lib/transactions/ecommissionSync'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
-import { findDuplicateTransactions } from '@/lib/transactions/dedupe'
+import { findDuplicateTransactions, findPartialAddressMatches } from '@/lib/transactions/dedupe'
 
 // Convert compliance-form commission inputs into a gross commission dollar
 // amount. commission_basis_price is the PRICE the commission is computed on
@@ -91,9 +91,26 @@ const FROM_EMAIL = 'Collective Realty Co. <transactions@coachingbrokeragetools.c
  *
  * Now it uses the one canonical matcher, brokerage-wide. The agent's own deals
  * are preferred when several match, so the common case is unchanged.
+ *
+ * allowPartial is for the search box only. The canonical matcher compares two
+ * whole addresses for equality, so an agent who types "3006 Brooks Ct" against
+ * a deal stored as "3006 Brooks Ct, Pearland, TX 77584" is told no deal exists
+ * and files a second compliance form for a property that already has one. When
+ * nothing matches outright, the search falls back to a subset match.
+ *
+ * The submit path deliberately does NOT pass it. A subset carries less
+ * information than the stored address, and attaching a commission to a deal
+ * resolved that loosely is a worse failure than not finding it.
  */
-async function findTransactionByAddress(agentId: string, propertyAddress: string) {
-  const matches = await findDuplicateTransactions(propertyAddress)
+async function findTransactionByAddress(
+  agentId: string,
+  propertyAddress: string,
+  options: { allowPartial?: boolean } = {}
+) {
+  let matches = await findDuplicateTransactions(propertyAddress)
+  if (!matches.length && options.allowPartial) {
+    matches = await findPartialAddressMatches(propertyAddress)
+  }
   if (!matches.length) return null
 
   const { data: tiaRows } = await supabaseAdmin
@@ -168,7 +185,7 @@ export async function GET(request: NextRequest) {
       // previews is always the deal the submission attaches to. These two
       // disagreeing is what let an agent see "no existing deal" and file a
       // duplicate.
-      const resolved = await findTransactionByAddress(lookupAgentId, address)
+      const resolved = await findTransactionByAddress(lookupAgentId, address, { allowPartial: true })
       if (resolved) {
         const { data } = await supabaseAdmin.from('transactions')
           .select('id, property_address, is_locked, compliance_status, transaction_type, representing, status, tenant_transaction_type, lease_term, closing_date, move_in_date, mls_link, client_name, client_email, lead_source, loan_type, sales_price, monthly_rent, gross_commission, bonus_amount, btsa_amount, rebate_amount, internal_referral, internal_referral_fee, external_referral, external_referral_fee, brokerage_referral, brokerage_referral_fee, title_officer_name, title_company, title_company_email, flyer_division, client_phone, title_officer_phone, unit, bedrooms, bathrooms, garage, building_sqft, acceptance_date')

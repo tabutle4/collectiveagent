@@ -19,6 +19,18 @@ interface TrackerRow {
   post_closing_notes: string | null
   missing_notes: string | null
   completed_at: string | null
+  // Earlier full compliance submissions by the same agent on the same side of
+  // the same deal. They used to each get their own row in this tracker.
+  superseded?: {
+    id: string
+    submitted_at: string
+    compliance_status: string
+    missing_notes: string | null
+    completed_at: string | null
+  }[]
+  // Review notes from an earlier submission, when the newest one has none.
+  prior_notes?: string | null
+  prior_notes_at?: string | null
   paid: boolean
   // Every agent AND every outside brokerage on the deal is marked paid.
   all_payees_paid: boolean
@@ -453,6 +465,9 @@ export default function AdminCompliancePage() {
     setEditDate(r.completed_at ? r.completed_at.slice(0, 10) : new Date().toISOString().slice(0, 10))
     setEditNotes(
       r.missing_notes ||
+      // The agent resubmitted, so the newest submission carries no notes. Bring
+      // forward what was asked for on the earlier one rather than opening blank.
+      r.prior_notes ||
       r.missing_items.map(m => `${m.name}${m.notes ? `: ${m.notes}` : ''}`).join('\n')
     )
     setPcStatus(r.post_closing_status || 'not_started')
@@ -897,6 +912,29 @@ export default function AdminCompliancePage() {
                               </span>
                             )}
                           </div>
+
+                          {(r.superseded?.length || 0) > 0 && (
+                            <div className="text-xs p-3 bg-luxury-gray-5/20 rounded space-y-1">
+                              <p className="font-medium text-luxury-gray-1">
+                                This agent filed compliance on this side {(r.superseded?.length || 0) + 1} times. The newest is shown above.
+                              </p>
+                              {(r.superseded || []).map(s => (
+                                <div key={s.id} className="text-luxury-gray-2">
+                                  {fmtDate(s.submitted_at)} - {STATUS_OPTIONS.find(o => o.value === s.compliance_status)?.label || s.compliance_status}
+                                  {s.missing_notes ? `: ${s.missing_notes}` : ''}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {r.prior_notes && (
+                            <div className="text-xs">
+                              <span className="font-medium text-luxury-gray-1">
+                                Previously flagged{r.prior_notes_at ? ` ${fmtDate(r.prior_notes_at)}` : ''}:{' '}
+                              </span>
+                              <span className="text-luxury-gray-2">{r.prior_notes}</span>
+                            </div>
+                          )}
 
                           {r.recheck_requested && r.recheck_changed_fields && r.recheck_changed_fields.length > 0 && (
                             <div className="text-xs">
@@ -1441,6 +1479,14 @@ export default function AdminCompliancePage() {
                           <span className="inline-flex items-center gap-1 text-xs text-amber-700">
                             <RefreshCw size={10} /> Recheck
                           </span>
+                        )}
+                        {(r.superseded?.length || 0) > 0 && (
+                          <span className="text-xs text-luxury-gray-3">
+                            {(r.superseded?.length || 0) + 1} submissions
+                          </span>
+                        )}
+                        {r.prior_notes && r.compliance_status !== 'complete' && (
+                          <span className="text-xs text-amber-700">Previously flagged</span>
                         )}
                         {r.cda_sent && (
                           <span className="text-xs text-luxury-gray-3">

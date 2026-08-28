@@ -242,7 +242,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const result = rows.map((r: any) => {
+    const result: any[] = rows.map((r: any) => {
       const txn = txnMap[r.transaction_id] || null
       const flyer = flyerMap[r.transaction_id] || null
       const d = r.data || {}
@@ -320,6 +320,66 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    // One deal, one agent, one side is ONE row. That is the rule this tracker
+    // was built on, and recheck submissions already follow it. A second FULL
+    // compliance submission did not: it produced a second row for the same
+    // side, so the same deal appeared twice with no indication the two were
+    // related. Twelve deals were double-listed that way.
+    //
+    // Collapsed here rather than at the query, because the older submissions
+    // still hold Leah's review notes and rejected documents and those have to
+    // survive onto the surviving row. Nothing is dropped or deleted; the older
+    // submissions ride along under `superseded`.
+    //
+    // Rows are ordered submitted_at DESC, so the first of each group is the
+    // newest and becomes the row. Unlinked submissions (no transaction) and
+    // retainers are never grouped: without a deal, agent + side does not
+    // identify anything.
+    const collapsed: any[] = []
+    const headByKey: Record<string, any> = {}
+    for (const row of result) {
+      if (!row.transaction_id || row.submission_mode !== 'compliance') {
+        row.superseded = []
+        collapsed.push(row)
+        continue
+      }
+      const key = `${row.transaction_id}:${row.agent_id || ''}:${row.side || ''}`
+      const head = headByKey[key]
+      if (!head) {
+        row.superseded = []
+        headByKey[key] = row
+        collapsed.push(row)
+        continue
+      }
+      head.superseded.push({
+        id: row.id,
+        submitted_at: row.submitted_at,
+        compliance_status: row.compliance_status,
+        missing_notes: row.missing_notes,
+        completed_at: row.completed_at,
+      })
+      // Documents Leah rejected against the older submission are still missing
+      // on the deal. Merged by name so a document flagged on both submissions
+      // is listed once.
+      for (const item of row.missing_items || []) {
+        if (!head.missing_items.some((m: any) => m.name === item.name)) {
+          head.missing_items.push(item)
+        }
+      }
+    }
+
+    // Leah's notes live on the submission she reviewed. When an agent files
+    // again, the new submission arrives with no notes on it, so the surviving
+    // row would show nothing and she would lose the list of what she asked for.
+    // Surfaced separately from missing_notes so the page can label it as coming
+    // from the earlier submission instead of pretending she wrote it about
+    // this one.
+    for (const row of collapsed) {
+      const priorWithNotes = (row.superseded || []).find((s: any) => s.missing_notes)
+      row.prior_notes = row.missing_notes ? null : priorWithNotes?.missing_notes || null
+      row.prior_notes_at = row.missing_notes ? null : priorWithNotes?.submitted_at || null
+    }
+
     // How many days before closing a deal counts as "send the CDA now" on the
     // Needs CDA tab. Configurable in Settings -> Terms; 7 if unset.
     const { data: cdaSettings } = await supabaseAdmin
@@ -329,7 +389,7 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
     const cdaDueSoonDays = Number(cdaSettings?.cda_due_soon_days ?? 7) || 7
 
-    return NextResponse.json({ submissions: result, cda_due_soon_days: cdaDueSoonDays })
+    return NextResponse.json({ submissions: collapsed, cda_due_soon_days: cdaDueSoonDays })
   } catch (err: any) {
     console.error('admin compliance GET error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })

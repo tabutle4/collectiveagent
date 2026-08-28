@@ -132,6 +132,76 @@ export async function findDuplicateTransactions(
 }
 
 /**
+ * Deals whose address CONTAINS everything the caller typed.
+ *
+ * findDuplicateTransactions compares two whole addresses for equality, which is
+ * right when both sides came out of the database. It is wrong for a search box,
+ * where one side is a person typing from memory. "3006 Brooks Ct" and the
+ * stored "3006 Brooks Ct, Pearland, TX 77584" build different token sets, so
+ * equality reports no match and the agent is told their deal does not exist.
+ *
+ * Here every token of the typed address must appear in the stored one, so a
+ * short address finds the long one and a wrong extra word still finds nothing.
+ * The same house-number and two-token floors as the canonical matcher apply, so
+ * a bare number or a client name never matches half the brokerage.
+ *
+ * Suggestions only. Never use this to decide what a create attaches to - a
+ * subset match is by definition less information than the stored row, and
+ * "1303 Gardenia" matching a deal at "1303 Gardenia Drive" is fine for a search
+ * result and not fine for silently attaching a commission to it.
+ */
+export async function findPartialAddressMatches(
+  address: string | null | undefined,
+  options: { excludeId?: string } = {}
+): Promise<DuplicateMatch[]> {
+  const { strict } = buildAddressKeys(address)
+  if (!strict) return []
+  const typedTokens = strict.split(' ').filter(Boolean)
+  if (!typedTokens.length) return []
+
+  const rows = await fetchAllRows(
+    'transactions',
+    DUPLICATE_COLUMNS,
+    { filters: [{ type: 'not', column: 'property_address', value: null }] }
+  )
+
+  const matches: DuplicateMatch[] = []
+  for (const row of rows as any[]) {
+    if (!row?.id) continue
+    if (options.excludeId && row.id === options.excludeId) continue
+    if (!isVisibleToAgent(row)) continue
+
+    const keys = buildAddressKeys(row.property_address)
+    if (!keys.strict) continue
+
+    const rowTokens = new Set(keys.strict.split(' ').filter(Boolean))
+    if (!typedTokens.every(t => rowTokens.has(t))) continue
+
+    matches.push({
+      id: row.id,
+      client_name: row.client_name || row.property_address || 'Untitled deal',
+      property_address: row.property_address || null,
+      status: row.status || null,
+      transaction_type: row.transaction_type || null,
+      created_at: row.created_at,
+      // A subset match is never reported as exact, whatever the caller does
+      // with it. findDuplicateTransactions owns the word "exact".
+      confidence: 'similar',
+      is_prospect: row.status === 'prospect',
+    })
+  }
+
+  // Fewest extra tokens first: the closest address to what was typed wins,
+  // then newest.
+  return matches.sort((a, b) => {
+    const aExtra = buildAddressKeys(a.property_address).strict.split(' ').length
+    const bExtra = buildAddressKeys(b.property_address).strict.split(' ').length
+    if (aExtra !== bExtra) return aExtra - bExtra
+    return (b.created_at || '').localeCompare(a.created_at || '')
+  })
+}
+
+/**
  * The one deal at this exact address, for unattended callers with nobody to ask.
  *
  * Strict tier only: a loose match is a guess, and a webhook attaching a payment
