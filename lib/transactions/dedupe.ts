@@ -145,10 +145,17 @@ export async function findDuplicateTransactions(
  * The same house-number and two-token floors as the canonical matcher apply, so
  * a bare number or a client name never matches half the brokerage.
  *
- * Suggestions only. Never use this to decide what a create attaches to - a
- * subset match is by definition less information than the stored row, and
- * "1303 Gardenia" matching a deal at "1303 Gardenia Drive" is fine for a search
- * result and not fine for silently attaching a commission to it.
+ * Ranked suggestions, not an answer. A subset match is by definition less
+ * information than the stored row, and a typed address with no unit on it is a
+ * subset of every unit in the building - the one collapse buildAddressKeys
+ * keeps unit and zip tokens to prevent. So the ordering below is a convenience
+ * for display and nothing more.
+ *
+ * A caller that attaches anything to the result - a commission, a submission,
+ * an update - must narrow it to a single unambiguous deal the caller is
+ * entitled to first, and treat "more than one" as no match rather than picking
+ * the top one. findTransactionByAddress in the compliance route is the worked
+ * example.
  */
 export async function findPartialAddressMatches(
   address: string | null | undefined,

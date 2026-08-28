@@ -92,26 +92,25 @@ const FROM_EMAIL = 'Collective Realty Co. <transactions@coachingbrokeragetools.c
  * Now it uses the one canonical matcher, brokerage-wide. The agent's own deals
  * are preferred when several match, so the common case is unchanged.
  *
- * allowPartial is for the search box only. The canonical matcher compares two
- * whole addresses for equality, so an agent who types "3006 Brooks Ct" against
- * a deal stored as "3006 Brooks Ct, Pearland, TX 77584" is told no deal exists
- * and files a second compliance form for a property that already has one. When
+ * allowPartial is for the search box. The canonical matcher compares two whole
+ * addresses for equality, so an agent who types "3006 Brooks Ct" against a deal
+ * stored as "3006 Brooks Ct, Pearland, TX 77584" is told no deal exists and
+ * files a second compliance form for a property that already has one. When
  * nothing matches outright, the search falls back to a subset match.
  *
- * The submit path deliberately does NOT pass it. A subset carries less
- * information than the stored address, and attaching a commission to a deal
- * resolved that loosely is a worse failure than not finding it.
+ * The POST does not pass allowPartial, but that on its own does not keep a
+ * partial match out of the write path: the form posts whatever this preview
+ * returned back as transaction_id, and the POST attaches to that id without
+ * re-checking the address. The guard that actually holds is inside the
+ * function - a partial match resolves only to a single deal the agent is
+ * already on, or to nothing.
  */
 async function findTransactionByAddress(
   agentId: string,
   propertyAddress: string,
   options: { allowPartial?: boolean } = {}
 ) {
-  let matches = await findDuplicateTransactions(propertyAddress)
-  if (!matches.length && options.allowPartial) {
-    matches = await findPartialAddressMatches(propertyAddress)
-  }
-  if (!matches.length) return null
+  const matches = await findDuplicateTransactions(propertyAddress)
 
   const { data: tiaRows } = await supabaseAdmin
     .from('transaction_internal_agents')
@@ -119,13 +118,42 @@ async function findTransactionByAddress(
     .eq('agent_id', agentId)
   const ownIds = new Set((tiaRows || []).map((r: any) => r.transaction_id).filter(Boolean))
 
+  // The partial fallback resolves to ONE of the agent's OWN deals or to
+  // nothing at all.
+  //
+  // What this preview returns is not advice. The form posts it straight back
+  // as transaction_id, the POST trusts that id without re-checking the
+  // address, and the compliance branch then overwrites that deal's price,
+  // gross commission, client and dates. So a partial match that picks the
+  // wrong deal is a write to the wrong deal.
+  //
+  // A typed address with no unit on it is a subset of EVERY unit in the
+  // building, which is exactly the collapse buildAddressKeys keeps unit and
+  // zip tokens to prevent. On live data 96 of 1,150 deals resolve to more
+  // than one candidate on a street-line search, several of them a different
+  // unit at the same address and several belonging to another agent. Ranking
+  // them and taking the first silently picks one.
+  //
+  // Restricting to the agent's own deals and requiring exactly one still
+  // fixes the case this fallback was added for - an agent looking for a deal
+  // they are on, typing it short - and leaves every ambiguous or
+  // someone-else's-deal case reporting no match, which is the outcome the
+  // agent already knows how to handle.
+  let partial: typeof matches = []
+  if (!matches.length && options.allowPartial) {
+    partial = (await findPartialAddressMatches(propertyAddress)).filter(m => ownIds.has(m.id))
+    if (partial.length !== 1) return null
+  }
+  const pool = matches.length ? matches : partial
+  if (!pool.length) return null
+
   // Exact beats similar (findDuplicateTransactions already sorted that way);
   // among equals, the agent's own deal wins over a colleague's.
   const chosen =
-    matches.find(m => m.confidence === 'exact' && ownIds.has(m.id)) ||
-    matches.find(m => m.confidence === 'exact') ||
-    matches.find(m => ownIds.has(m.id)) ||
-    matches[0]
+    pool.find(m => m.confidence === 'exact' && ownIds.has(m.id)) ||
+    pool.find(m => m.confidence === 'exact') ||
+    pool.find(m => ownIds.has(m.id)) ||
+    pool[0]
 
   const { data } = await supabaseAdmin
     .from('transactions')
