@@ -8,7 +8,7 @@ import { qualifyingCountsForAgents } from '@/lib/transactions/qualifyingCount'
 import { resolveGoverningTeamAgreement, resolveGoverningTeamLeads } from '@/lib/transactions/teamAgreement'
 import { computeCommission } from '@/lib/transactions/math'
 import { markAgentPaid } from '@/lib/transactions/markPaid'
-import { isLeaseType, num, computeCommissionBreakdown, recomputeOfficeNet, recomputeGrossAndOffice, cascadePrimarySplit, autoCascadeTransaction } from '@/lib/transactions/cascade'
+import { isLeaseType, num, computeCommissionBreakdown, recomputeOfficeNet, recomputeGrossAndOffice, cascadePrimarySplit, autoCascadeTransaction, rebalanceThreeWaySplit } from '@/lib/transactions/cascade'
 import { deriveComplianceForTransactions } from '@/lib/compliance/derive'
 import { parseCustomPlanSplit } from '@/lib/transactions/customPlanParser'
 import { settlePayloadInvoiceForDebt } from '@/lib/payload/settleInvoiceForDebt'
@@ -22,6 +22,28 @@ export const dynamic = 'force-dynamic'
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 // ─── Commission field lock set ──────────────────────────────────────────────
+/**
+ * What the team leads linked to this primary row are actually owed.
+ *
+ * Read off the linked rows rather than the primary's team_lead_commission,
+ * which is informational and drifts: on 4219 Stonehenge it said $2,628 while
+ * the lead's own row said $1,971, and the firm's share had been derived from
+ * neither.
+ */
+async function sumLinkedTeamLead(
+  supabase: any,
+  transactionId: string,
+  primaryTiaId: string
+): Promise<number> {
+  const { data } = await supabase
+    .from('transaction_internal_agents')
+    .select('agent_gross')
+    .eq('transaction_id', transactionId)
+    .eq('agent_role', 'team_lead')
+    .eq('source_tia_id', primaryTiaId)
+  return (data || []).reduce((t: number, r: any) => t + num(r.agent_gross), 0)
+}
+
 // When a TIA row is marked paid, these fields become uneditable.
 // Unmark Paid must be used to reopen them.
 const LOCKED_TIA_FIELDS = new Set([
@@ -49,6 +71,7 @@ const LOCKED_TIA_FIELDS = new Set([
   'counts_toward_progress',
   'pre_split_deductions',
   'pre_split_deductions_description',
+  'manual_split',
 ])
 
 const LOCKED_TEB_FIELDS = new Set([
@@ -1417,7 +1440,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Check current row + payment status
       const { data: current } = await supabase
         .from('transaction_internal_agents')
-        .select('payment_status, agent_role, agent_basis, lead_source, referred_agent_id, side, split_percentage, installment_kind')
+        .select('payment_status, agent_role, agent_basis, lead_source, referred_agent_id, side, split_percentage, installment_kind, agent_gross, brokerage_split, team_lead_commission, manual_split')
         .eq('id', internal_agent_id)
         .single()
 
@@ -1444,6 +1467,130 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // For 'amount' mode (or when mode is absent), behavior is unchanged -
       // the FE's agent_basis flows through as-is.
       const cleanUpdates: any = { ...(updates || {}) }
+
+      // ── Negotiated three-way split ───────────────────────────────────────
+      // A team can agree a different cut with its lead for one particular
+      // lead, and the office needs to enter it. Before this, typing any one of
+      // the three shares recomputed the firm as basis - agent and left the
+      // lead's own row untouched, so the deal allocated more than it earned
+      // and nothing said so.
+      //
+      // Firm is the anchor: CRC keeps what its agreement says and the agent
+      // absorbs the negotiation, because a team's private arrangement is not
+      // the brokerage's concern. Typing the firm share is the one case that
+      // moves the anchor, and the agent absorbs there too.
+      //
+      // Marking the row manual_split is what makes the number survive. Any
+      // later recalculation - a compliance resubmission, a commission edit -
+      // would otherwise put the agreement's percentages back, usually after
+      // someone had already been told what they were getting.
+      const SPLIT_FIELDS: Record<string, 'agent' | 'team_lead' | 'firm'> = {
+        agent_gross: 'agent',
+        split_percentage: 'agent',
+        team_lead_commission: 'team_lead',
+        brokerage_split: 'firm',
+      }
+      // A basis edit is NOT a split edit, even though it arrives carrying
+      // agent_gross and brokerage_split.
+      //
+      // The client derives those two from the existing percentage whenever the
+      // basis changes, so the payload looks identical to someone typing the
+      // agent's share. Treating it as typed rebalances against the OLD basis
+      // while the new one is being written, which silently re-cuts the team
+      // lead: on a 50/30/20 deal, changing the basis from $6,570 to $8,000
+      // moved the lead from 30% to 15.7% and stamped the row manual_split, so
+      // no later recalculation could put it back. Changing the commission is
+      // the most ordinary edit there is, so this has to be excluded by name
+      // rather than left to the shape of the payload.
+      //
+      // Falling through is correct: agent_basis is a DRIVER_FIELD, so the
+      // auto-cascade below re-derives all three shares - from the agreement,
+      // or from the negotiated percentages when manual_split is set.
+      const typedSplitField = 'agent_basis' in cleanUpdates
+        ? undefined
+        : Object.keys(cleanUpdates).find(k => k in SPLIT_FIELDS)
+      const cascadeRolesForSplit = ['primary_agent', 'listing_agent', 'co_agent']
+      if (
+        typedSplitField &&
+        current &&
+        cascadeRolesForSplit.includes(current.agent_role) &&
+        current.payment_status !== 'paid'
+      ) {
+        const { data: existingLeadRows } = await supabase
+          .from('transaction_internal_agents')
+          .select('id')
+          .eq('transaction_id', id)
+          .eq('agent_role', 'team_lead')
+          .eq('source_tia_id', internal_agent_id)
+        const heldTeamLead = await sumLinkedTeamLead(supabase, id, internal_agent_id)
+        const typedIsTeamLead = SPLIT_FIELDS[typedSplitField] === 'team_lead'
+        // A linked lead row must exist, or there is nobody to give a share to
+        // and the rebalance would take it off the agent for no one.
+        //
+        // When that row sits at $0 the deal is arithmetically a two-way one,
+        // so an agent or firm edit is left to the existing two-way path, which
+        // is correct there. Typing the LEAD's share is the exception: that is
+        // the edit that fixes a $0 row, and it has to be allowed through or
+        // the number lands only on the informational column and the lead is
+        // still owed nothing.
+        if ((existingLeadRows || []).length > 0 && (heldTeamLead > 0 || typedIsTeamLead)) {
+          const basis = num(current.agent_basis)
+          const typed = SPLIT_FIELDS[typedSplitField]
+          // split_percentage arrives as a percentage; the helper works in
+          // dollars so the three shares can be summed against the basis.
+          const typedAmount =
+            typedSplitField === 'split_percentage'
+              ? Math.round(basis * num(cleanUpdates.split_percentage)) / 100
+              : num(cleanUpdates[typedSplitField])
+
+          const rebalanced = rebalanceThreeWaySplit({
+            basis,
+            currentBrokerage: num(current.brokerage_split),
+            currentTeamLead: heldTeamLead,
+            currentAgentGross: num(current.agent_gross),
+            typed,
+            typedAmount,
+          })
+          if ('error' in rebalanced) {
+            return NextResponse.json({ error: rebalanced.error }, { status: 400 })
+          }
+
+          cleanUpdates.agent_gross = rebalanced.agentGross
+          cleanUpdates.brokerage_split = rebalanced.brokerage
+          cleanUpdates.team_lead_commission = rebalanced.teamLead
+          cleanUpdates.split_percentage =
+            basis > 0 ? Math.round((rebalanced.agentGross / basis) * 10000) / 100 : 0
+          cleanUpdates.manual_split = true
+
+          // The lead's own row is what gets paid, so it has to move with the
+          // number. Split evenly across co-leads, the same rule the agreement
+          // path uses. A paid row is never rewritten.
+          const { data: leadRows } = await supabase
+            .from('transaction_internal_agents')
+            .select('id, payment_status')
+            .eq('transaction_id', id)
+            .eq('agent_role', 'team_lead')
+            .eq('source_tia_id', internal_agent_id)
+          const payableLeads = (leadRows || []).filter((r: any) => r.payment_status !== 'paid')
+          if (payableLeads.length > 0) {
+            const per = Math.round((rebalanced.teamLead / payableLeads.length) * 100) / 100
+            const perPct = basis > 0 ? Math.round((per / basis) * 10000) / 100 : 0
+            for (const lead of payableLeads) {
+              await supabase
+                .from('transaction_internal_agents')
+                .update({
+                  agent_gross: per,
+                  agent_net: per,
+                  amount_1099_reportable: per,
+                  split_percentage: perPct,
+                  brokerage_split: 0,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', lead.id)
+            }
+          }
+        }
+      }
 
       // ── Multiple other-fee lines ─────────────────────────────────────────
       // The FE can save an array of { amount, description } fee lines. The
@@ -1503,7 +1650,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 : current.split_percentage
             )
             const newGross = Math.round(newBasis * splitPct) / 100
-            const newBrokerage = Math.round((newBasis - newGross) * 100) / 100
+            // Three-way, not two. On a deal with a team lead the firm's share
+            // is what is left after BOTH the agent and the lead, and deriving
+            // it as basis - agent pays the lead's cut twice: once inside an
+            // inflated agent share and again on the lead's own row.
+            const teamLeadHeld = await sumLinkedTeamLead(supabase, id, internal_agent_id)
+            const newBrokerage = Math.round((newBasis - newGross - teamLeadHeld) * 100) / 100
 
             cleanUpdates.agent_basis = newBasis
             cleanUpdates.agent_gross = newGross
@@ -2247,6 +2399,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // includes existing btsa, other_fees, rebate, debts so manual
       // adjustments are preserved.
       const primaryUpdates: any = {
+        // Recalculate IS the reset. Clicking it says "go back to what the team
+        // agreement says", so it clears any negotiated split rather than
+        // preserving one - otherwise there would be no way out of a manual
+        // number once entered.
+        manual_split: false,
         commission_plan: breakdown.planCode,
         agent_basis: commAmt,
         split_percentage: breakdown.agentSplitPct,

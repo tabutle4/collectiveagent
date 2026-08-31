@@ -705,6 +705,188 @@ export async function recomputeGrossAndOffice(transactionId: string): Promise<vo
   }
 }
 
+/**
+ * Rebalance a negotiated three-way split, with the FIRM anchored.
+ *
+ * A team's private arrangement for one deal is not the brokerage's business:
+ * CRC keeps the percentage its agreement says, and the agent and the team lead
+ * divide what is left. So the firm percentage is read off the row as it stands
+ * and held, and whichever of the other two the user did NOT type absorbs the
+ * change.
+ *
+ * Returns dollar amounts only. The caller writes them; this does no IO so the
+ * edit route and the cascade can share one formula instead of keeping two in
+ * step - which is how the deal at 4219 Stonehenge ended up allocating 130% of
+ * its commission, the agent at 80% and the team lead still on 30%.
+ */
+export function rebalanceThreeWaySplit(args: {
+  basis: number
+  /** Firm dollars as the row currently stands. The anchor. */
+  currentBrokerage: number
+  /** Team lead dollars as the row currently stands. */
+  currentTeamLead: number
+  /** Agent dollars as the row currently stands. */
+  currentAgentGross: number
+  /** Which field the user typed. The other two follow from it. */
+  typed: 'agent' | 'team_lead' | 'firm'
+  /** The typed value, in dollars. */
+  typedAmount: number
+}): { agentGross: number; teamLead: number; brokerage: number } | { error: string } {
+  const { basis, typed, typedAmount } = args
+  if (!(basis > 0)) return { error: 'Set the commission basis before editing the split.' }
+
+  const r2 = (n: number) => Math.round(n * 100) / 100
+  let agentGross = r2(args.currentAgentGross)
+  let teamLead = r2(args.currentTeamLead)
+  let brokerage = r2(args.currentBrokerage)
+
+  if (typed === 'team_lead') {
+    teamLead = r2(typedAmount)
+    agentGross = r2(basis - brokerage - teamLead)
+  } else if (typed === 'agent') {
+    agentGross = r2(typedAmount)
+    teamLead = r2(basis - brokerage - agentGross)
+  } else {
+    // The firm percentage is the anchor, so moving it deliberately is the one
+    // case where the anchor itself changes. The agent absorbs, per the same
+    // rule: the team lead's negotiated cut is not disturbed by a CRC change.
+    brokerage = r2(typedAmount)
+    agentGross = r2(basis - brokerage - teamLead)
+  }
+
+  const pct = (n: number) => `${r2((n / basis) * 100)}%`
+  if (agentGross < 0) {
+    return { error: `That leaves the agent at ${pct(agentGross)}. The firm (${pct(brokerage)}) and the team lead (${pct(teamLead)}) already account for more than the whole commission.` }
+  }
+  if (teamLead < 0) {
+    return { error: `That leaves the team lead at ${pct(teamLead)}. The firm (${pct(brokerage)}) and the agent (${pct(agentGross)}) already account for more than the whole commission.` }
+  }
+  if (brokerage < 0) {
+    return { error: `That leaves the firm at ${pct(brokerage)}. The agent (${pct(agentGross)}) and the team lead (${pct(teamLead)}) already account for more than the whole commission.` }
+  }
+  return { agentGross, teamLead, brokerage }
+}
+
+/**
+ * Recompute a row whose three-way split was negotiated by hand.
+ *
+ * Percentages are the thing being preserved, not dollars: the office agreed a
+ * division, and that division should still hold when the commission basis
+ * moves. So each share's percentage is taken off the row as it stands and
+ * re-applied to the new basis.
+ *
+ * The firm's dollars are the residual of the other two rather than its own
+ * rounded percentage, which is the same rule the agreement path uses and is
+ * what guarantees the three always sum to the basis exactly.
+ */
+async function applyManualSplit(
+  transactionId: string,
+  primaryTia: any,
+  commissionAmount: number
+): Promise<void> {
+  const r2 = (n: number) => Math.round(n * 100) / 100
+
+  const { data: linked } = await supabase
+    .from('transaction_internal_agents')
+    .select('id, payment_status, agent_gross, agent_basis, split_percentage')
+    .eq('transaction_id', transactionId)
+    .eq('agent_role', 'team_lead')
+    .eq('source_tia_id', primaryTia.id)
+
+  const teamLeadRows = linked || []
+
+  // Percentages come off the stored split_percentage columns, NOT from
+  // dollars divided by basis.
+  //
+  // The edit route writes the row before the cascade runs, so by this point
+  // agent_basis is already the NEW commission while agent_gross is still the
+  // old dollars. Inferring a percentage from that pair reads a negotiated 50%
+  // as 41% the moment the commission changes, quietly shrinking the share the
+  // office agreed - the exact drift this function exists to prevent.
+  //
+  // A row that predates split_percentage falls back to its own basis, which is
+  // that row's own record of what it was a percentage OF, rather than the
+  // primary's freshly updated one.
+  const pctFromRow = (row: any) => {
+    const stored = num(row?.split_percentage)
+    if (stored > 0) return stored
+    const ownBasis = num(row?.agent_basis)
+    return ownBasis > 0 ? (num(row?.agent_gross) / ownBasis) * 100 : 0
+  }
+
+  const agentPct = pctFromRow(primaryTia)
+  // Summed across co-leads: each carries its own share of the negotiated
+  // total, and it is the linked rows that actually get paid - the primary's
+  // team_lead_commission is informational and is what drifted on the deal
+  // this was written for.
+  const teamLeadPct = teamLeadRows.reduce((t, r: any) => t + pctFromRow(r), 0)
+
+  const agentGross = r2((commissionAmount * agentPct) / 100)
+  const teamLead = r2((commissionAmount * teamLeadPct) / 100)
+  const brokerage = r2(commissionAmount - agentGross - teamLead)
+
+  // Fees are read off the row, not recomputed from the plan: they are flat
+  // amounts (processing_fee_types, the plan's coaching fee) rather than
+  // percentages of the basis, so a changed commission does not change them,
+  // and any waiver or by-hand adjustment already applied to this row survives.
+  // Net and 1099 still go through the canonical formula. Only the division of
+  // the commission is manual.
+  const { data: fresh } = await supabase
+    .from('transaction_internal_agents')
+    .select('btsa_amount, processing_fee, coaching_fee, other_fees, rebate_amount, debts_deducted')
+    .eq('id', primaryTia.id)
+    .single()
+
+  const { amount_1099, agent_net } = computeCommission({
+    agent_gross: agentGross,
+    btsa_amount: num(fresh?.btsa_amount),
+    processing_fee: num(fresh?.processing_fee),
+    coaching_fee: num(fresh?.coaching_fee),
+    other_fees: num(fresh?.other_fees),
+    rebate_amount: num(fresh?.rebate_amount),
+    credits_applied: 0,
+    debts_deducted: num(fresh?.debts_deducted),
+  })
+
+  await supabase
+    .from('transaction_internal_agents')
+    .update({
+      agent_basis: commissionAmount,
+      split_percentage: r2(commissionAmount > 0 ? (agentGross / commissionAmount) * 100 : 0),
+      agent_gross: agentGross,
+      brokerage_split: brokerage,
+      team_lead_commission: teamLead,
+      agent_net: r2(agent_net),
+      amount_1099_reportable: r2(amount_1099),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', primaryTia.id)
+
+  // Split the negotiated team lead total evenly across the co-leads on the
+  // row, the same way the agreement path does.
+  const payable = teamLeadRows.filter((r: any) => r.payment_status !== 'paid')
+  if (payable.length > 0) {
+    const per = r2(teamLead / payable.length)
+    const perPct = r2(commissionAmount > 0 ? (per / commissionAmount) * 100 : 0)
+    for (const row of payable) {
+      await supabase
+        .from('transaction_internal_agents')
+        .update({
+          agent_basis: commissionAmount,
+          split_percentage: perPct,
+          agent_gross: per,
+          agent_net: per,
+          amount_1099_reportable: per,
+          brokerage_split: 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', row.id)
+    }
+  }
+
+  await recomputeOfficeNet(transactionId)
+}
+
 export async function cascadePrimarySplit(args: {
   transactionId: string
   internalAgentId: string
@@ -722,7 +904,7 @@ export async function cascadePrimarySplit(args: {
 
   const { data: primaryTia } = await supabase
     .from('transaction_internal_agents')
-    .select('id, agent_id, agent_role, payment_status, side, installment_kind')
+    .select('id, agent_id, agent_role, payment_status, side, installment_kind, manual_split, agent_basis, split_percentage, agent_gross, brokerage_split, team_lead_commission')
     .eq('id', internalAgentId)
     .eq('transaction_id', transactionId)
     .single()
@@ -738,6 +920,25 @@ export async function cascadePrimarySplit(args: {
     .eq('id', transactionId)
     .single()
   if (txn?.status === 'closed') return
+
+  // A negotiated split is the office's decision and outranks the agreement.
+  //
+  // Without this the percentages Tara types survive only until the next
+  // recalculation - and a recalculation is not a thing she triggers on
+  // purpose. autoCascadeTransaction runs on a compliance resubmission, a
+  // commission edit, a side-commission change. So a team's negotiated cut for
+  // one lead silently reverted to the standard agreement, usually after
+  // someone had already agreed to it.
+  //
+  // The percentages are held; the DOLLARS are recomputed, so changing the
+  // basis still flows through correctly. Fees, net and 1099 still run through
+  // the canonical formula below - only the three-way division is preserved.
+  // Clearing it is the per-row Recalculate button, which is what
+  // apply_primary_split does.
+  if (primaryTia.manual_split === true) {
+    await applyManualSplit(transactionId, primaryTia, commissionAmount)
+    return
+  }
 
   const breakdown = await computeCommissionBreakdown({
     agentId: primaryTia.agent_id,

@@ -3118,6 +3118,43 @@ export default function AdminTransactionDetailPage() {
     const updates: any = {
       [field]: value,
     }
+
+    // On a deal with a team lead the three shares have to be settled together,
+    // and the server is the only place that can see the lead's row. Send just
+    // the field that was typed and let it rebalance; the page reloads below,
+    // so the answer comes straight back. Deriving dollars here as well would
+    // mean two formulas to keep in step, which is how the firm's share ended
+    // up computed as basis - agent on a deal that also had a lead to pay.
+    const linkedLeadRows = (data?.agents || []).filter(
+      (x: any) => x.agent_role === 'team_lead' && x.source_tia_id === internalAgentId
+    )
+    const linkedLeadTotal = linkedLeadRows.reduce(
+      (t: number, x: any) => t + (parseFloat(x.agent_gross || 0) || 0), 0
+    )
+    // team_lead_percentage is the only lead-facing control on this screen; it
+    // is converted to team_lead_commission dollars just below.
+    const isTeamLeadField = field === 'team_lead_percentage'
+    // Mirror the server's gate exactly. If these two disagree the client stops
+    // deriving dollars while the server declines to settle them, and the row
+    // keeps a percentage that its amounts do not match - a split that reads
+    // 60% and pays 50%.
+    const settleOnServer =
+      linkedLeadRows.length > 0 && (linkedLeadTotal > 0 || isTeamLeadField)
+    const SERVER_SETTLED = ['split_percentage', 'agent_gross', 'brokerage_split', 'team_lead_commission', 'team_lead_percentage', 'brokerage_split_percentage']
+    if (settleOnServer && SERVER_SETTLED.includes(field)) {
+      const basis = parseFloat(agent?.agent_basis || 0)
+      if (field === 'team_lead_percentage' && value != null) {
+        updates.team_lead_commission = round2((basis * value) / 100)
+        delete (updates as any).team_lead_percentage
+      }
+      if (field === 'brokerage_split_percentage' && value != null) {
+        updates.brokerage_split = round2((basis * value) / 100)
+        delete (updates as any).brokerage_split_percentage
+      }
+      await updateInternalAgent(internalAgentId, updates)
+      return
+    }
+
     if (field === 'split_percentage' && value != null) {
       const basis = parseFloat(agent?.agent_basis || 0)
       const newGross = round2((basis * value) / 100)
@@ -3142,8 +3179,15 @@ export default function AdminTransactionDetailPage() {
       const sp = parseFloat(agent?.split_percentage || 0)
       const newGross = round2((value * sp) / 100)
       updates.agent_gross = newGross
-      if (!isLinkedRow) {
+      // Never derive the firm's share here on a deal that pays a team lead:
+      // basis - agent leaves the lead's cut inside it, and the server cannot
+      // tell a derived agent_gross from a typed one. Sending the basis alone
+      // lets the cascade settle all three, which it already does correctly.
+      if (!isLinkedRow && linkedLeadRows.length === 0) {
         updates.brokerage_split = round2(value - newGross)
+      }
+      if (linkedLeadRows.length > 0) {
+        delete (updates as any).agent_gross
       }
     }
     if (field === 'agent_gross' && value != null) {

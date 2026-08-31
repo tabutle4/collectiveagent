@@ -626,6 +626,10 @@ CREATE TABLE public.transaction_internal_agents (
   lead_source text,
   referred_agent_id uuid,
   uses_canonical_math boolean NOT NULL DEFAULT false,
+  -- Set when the office types a negotiated three-way split for this deal.
+  -- cascadePrimarySplit preserves the percentages instead of re-deriving them
+  -- from the team agreement; the per-row Recalculate clears it.
+  manual_split boolean NOT NULL DEFAULT false,
   side text CHECK ((side = ANY (ARRAY['buyer'::text, 'seller'::text, 'tenant'::text, 'landlord'::text])) OR side IS NULL),
   installment_kind text CHECK (installment_kind IS NULL OR (installment_kind = ANY (ARRAY['retainer'::text, 'commission'::text]))),
   basis_input_mode text NOT NULL DEFAULT 'amount'::text CHECK (basis_input_mode = ANY (ARRAY['amount'::text, 'percentage'::text])),
