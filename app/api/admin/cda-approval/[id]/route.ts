@@ -16,7 +16,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params
     const { data: transaction } = await supabaseAdmin
       .from('transactions')
-      .select('id, property_address, transaction_type, sales_price, monthly_rent, office_net, ecommission_amount, closing_date, closed_date, cda_status, broker_approved_at')
+      // cda_notes rides along because it PRINTS on the document being approved.
+      // The broker signing it should be able to read everything that will
+      // appear on it, and this screen is the last point before the signature.
+      .select('id, property_address, transaction_type, sales_price, monthly_rent, office_net, ecommission_amount, closing_date, closed_date, cda_status, broker_approved_at, cda_notes')
       .eq('id', id)
       .single()
     if (!transaction) return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })

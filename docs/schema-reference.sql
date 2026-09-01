@@ -461,6 +461,7 @@ CREATE TABLE public.transactions (
   compliance_notes text,
   cda_status text DEFAULT 'pending_compliance'::text,
   cda_url text,
+  cda_notes text,
   sales_price numeric,
   gross_commission numeric,
   listing_side_commission numeric,

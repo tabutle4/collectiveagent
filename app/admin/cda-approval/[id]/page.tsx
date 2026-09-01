@@ -258,6 +258,21 @@ export default function CdaApprovalPage() {
           </div>
         )}
 
+        {/* The note prints on the document below, so it is already visible in
+            the frame. Surfaced here as well because the frame is 640px and the
+            note sits mid-document: a broker who does not scroll would sign
+            without having read it. Read-only, and read from the same field the
+            document renders, so the two cannot disagree. */}
+        {txn.cda_notes && (
+          <div className="container-card border-l-4 border-luxury-accent">
+            <p className="section-title mb-2">Note printed on this CDA</p>
+            <p className="text-xs text-luxury-gray-2 whitespace-pre-wrap">{txn.cda_notes}</p>
+            <p className="text-[11px] text-luxury-gray-3 mt-2">
+              The title company reads this. It can be changed on the send screen before the CDA goes out.
+            </p>
+          </div>
+        )}
+
         {data.agents.map((a: any) => (
           <div key={a.id} className="container-card">
             <h2 className="section-title mb-3">CDA — {a.name} ({a.role})</h2>

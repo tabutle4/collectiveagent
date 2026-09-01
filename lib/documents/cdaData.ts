@@ -197,7 +197,7 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
       closing_date, closed_date, office_gross,
       listing_side_commission, buying_side_commission,
       listing_base_commission, buying_base_commission,
-      gross_commission, broker_approved_at, cda_status
+      gross_commission, broker_approved_at, cda_status, cda_notes
     `)
     .eq('id', id)
     .single()
@@ -440,8 +440,24 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
     amount: Number(r.rebate_amount || 0),
   }))
 
-  // Notes
-  const notes: string | null = null
+  // Notes printed on the CDA.
+  //
+  // This used to be hardcoded null: the field existed on the model and the web
+  // CDA already had a styled block for it, but nothing ever filled it in, so the
+  // block never rendered. It now comes from the deal.
+  //
+  // One note per DEAL, not per agent row. A deal has one CDA. The [tia_id] in
+  // the CDA route says whose figures the document is built from, not which of
+  // several CDAs it is, and cda_status / cda_url / cda_sent_manual_at all sit on
+  // transactions in the singular.
+  //
+  // This PRINTS on the document title receives. It is not an internal note:
+  // internal commission remarks belong on the commission note thread, which
+  // deliberately appears on no CDA, statement or email.
+  const notes: string | null = (() => {
+    const v = String((txn as any)?.cda_notes ?? '').trim()
+    return v.length > 0 ? v : null
+  })()
 
   // Brokerage address
   const brokerageLines = [

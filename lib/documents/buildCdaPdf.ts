@@ -196,6 +196,37 @@ export async function buildCdaPdf(model: CdaModel): Promise<Uint8Array> {
   }
   gap(6)
 
+  // ── Notes ───────────────────────────────────────────────────────────────────
+  // Placed between the payees and the title block, matching the web CDA exactly,
+  // so the copy title receives reads the same as the one the office reviews.
+  // The PDF had no notes block at all before this: the model carried the field
+  // and the web CDA rendered it, but the emailed document silently dropped it,
+  // which would have meant a note the office could see and title could not.
+  //
+  // Wrapped by hand and paginated through ensureSpace, because a long note is
+  // the one field on this document with no length ceiling.
+  if (model.notes) {
+    ensureSpace(28)
+    sectionTitle('Notes')
+    // enc() BEFORE wrapping, not just at draw time. wrap() measures with
+    // widthOfTextAtSize, which pdf-lib evaluates against the standard font's
+    // WinAnsi glyph set and which throws on a character that set cannot encode.
+    // Every other string reaching wrap() is one this file built; this is the
+    // first that a person types, so it is the first that can carry an emoji or
+    // a curly quote. Encoding first means measuring and drawing see the same
+    // characters, so the wrap is accurate as well as safe.
+    for (const rawLine of enc(model.notes).split(/\r?\n/)) {
+      // A blank line in the typed note stays a blank line on the page.
+      if (!rawLine.trim()) { ensureSpace(12); y -= 12; continue }
+      for (const line of wrap(rawLine, font, 10, CONTENT_W)) {
+        ensureSpace(14)
+        text(line, MARGIN, 10, font, INK)
+        y -= 14
+      }
+    }
+    gap(6)
+  }
+
   // ── Title Company ───────────────────────────────────────────────────────────
   // Same block the web CDA renders, so the copy title receives matches the one
   // the office reviews. Company and Contact come from the shared resolver, so

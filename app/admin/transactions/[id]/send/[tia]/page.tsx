@@ -34,6 +34,14 @@ function SendDocumentInner() {
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
 
+  // The note printed on the CDA itself, as opposed to the email carrying it.
+  // One per deal, because a deal has one CDA. Saved separately from sending so
+  // it survives a cancelled send and shows on the copy Courtney approves.
+  const [cdaNotes, setCdaNotes] = useState('')
+  const [cdaNotesSaved, setCdaNotesSaved] = useState('')
+  const [savingCdaNotes, setSavingCdaNotes] = useState(false)
+  const [cdaNotesMsg, setCdaNotesMsg] = useState('')
+
   async function load() {
     setLoading(true)
     setError('')
@@ -42,6 +50,17 @@ function SendDocumentInner() {
       const txnJson = await txnRes.json()
       if (!txnRes.ok) throw new Error(txnJson.error || 'Failed to load')
       setData(txnJson)
+
+      // Loaded in both modes: the note prints on the CDA, so the approver
+      // needs to see it too, not only whoever sends it.
+      try {
+        const nRes = await fetch(`/api/admin/transactions/${id}/cda-notes`)
+        if (nRes.ok) {
+          const nJson = await nRes.json()
+          setCdaNotes(nJson.cda_notes || '')
+          setCdaNotesSaved(nJson.cda_notes || '')
+        }
+      } catch { /* the note is not worth failing the page over */ }
 
       if (mode === 'title') {
         const tRes = await fetch(`/api/admin/transactions/${id}/cda/${tia}/send-to-title`)
@@ -58,6 +77,26 @@ function SendDocumentInner() {
     }
   }
   useEffect(() => { if (id) load() }, [id, mode])
+
+  async function saveCdaNotes() {
+    setSavingCdaNotes(true)
+    setCdaNotesMsg('')
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}/cda-notes`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cda_notes: cdaNotes }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Could not save the note')
+      setCdaNotesSaved(json.cda_notes || '')
+      setCdaNotesMsg('Saved. It will appear on the CDA.')
+    } catch (e: any) {
+      setCdaNotesMsg(e.message || 'Could not save the note')
+    } finally {
+      setSavingCdaNotes(false)
+    }
+  }
 
   if (loading) return <div className="min-h-screen bg-luxury-cream flex items-center justify-center text-luxury-gray-3">Loading…</div>
   if (error) return <div className="min-h-screen bg-luxury-cream flex items-center justify-center text-red-600">{error}</div>
@@ -190,6 +229,46 @@ function SendDocumentInner() {
               No commission wiring instructions uploaded. Add it in Settings → Brokerage Information before sending to title.
             </p>
           )}
+        </div>
+
+        {/* The note that prints ON the CDA, kept visually apart from the email
+            fields below it. Those two are easy to confuse and the consequence
+            of confusing them is not symmetric: a line meant for the email
+            ending up on the document goes to the title company on a signed
+            disbursement authorization. */}
+        <div className="container-card space-y-3">
+          <div>
+            <label className="field-label">Note on the CDA</label>
+            <textarea
+              value={cdaNotes}
+              onChange={(e) => setCdaNotes(e.target.value)}
+              rows={3}
+              maxLength={4000}
+              className="input-luxury"
+              placeholder="Anything title needs to know. Leave blank for no note."
+            />
+            <p className="text-xs text-luxury-gray-3 mt-1">
+              This prints on the CDA itself, so the title company reads it. Internal remarks about
+              the commission belong on the commission notes instead.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={saveCdaNotes}
+              disabled={savingCdaNotes || cdaNotes === cdaNotesSaved}
+              className="btn btn-secondary text-xs disabled:opacity-50"
+            >
+              {savingCdaNotes ? 'Saving...' : 'Save Note'}
+            </button>
+            {cdaNotes !== cdaNotesSaved && (
+              <span className="text-xs text-amber-700">
+                Not saved yet, so it is not on the CDA.
+              </span>
+            )}
+            {cdaNotesMsg && cdaNotes === cdaNotesSaved && (
+              <span className="text-xs text-luxury-gray-3">{cdaNotesMsg}</span>
+            )}
+          </div>
         </div>
 
         {mode === 'title' && (

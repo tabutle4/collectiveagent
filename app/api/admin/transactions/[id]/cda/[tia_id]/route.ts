@@ -11,6 +11,22 @@ const fmt$ = (n: number | null | undefined): string => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(v)
 }
 
+// The CDA note is free text a person types, and it is interpolated into this
+// HTML. Every other value on this page comes from a controlled source - money
+// formatted by fmt$, names off the database - and none of them are escaped;
+// this one has to be, because a stray < or & from someone's keyboard would
+// otherwise break the document, and anything worse would run in the browser of
+// whoever opens it.
+//
+// Escaping the rest of the page is a bigger change than this patch should carry
+// and is called out in the handoff.
+const escHtml = (v: unknown): string =>
+  String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+
 const fmtDate = (d: string | null | undefined): string => {
   if (!d) return '--'
   try {
@@ -161,7 +177,7 @@ export async function GET(
   ${notes ? `
   <div style="margin-bottom:20px;border-left:3px solid #C5A278;padding:8px 12px">
     <div style="font-weight:600;color:#333;margin-bottom:4px;font-size:11px">Notes</div>
-    <p style="font-size:10px;color:#555">${notes}</p>
+    <p style="font-size:10px;color:#555;white-space:pre-wrap">${escHtml(notes)}</p>
   </div>` : ''}
 
   ${(titleParty.companyName || titleParty.repName) ? `
