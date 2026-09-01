@@ -148,6 +148,9 @@ export default function ComplianceCdaForm() {
     has_ecommission: false, ecommission_amount: '0',
     title_officer_name: '', title_company: '', title_company_email: '', title_phone: '',
     loan_type: '', expedite_acknowledged: false,
+    // Does Collective Realty Co. hold both sides of this deal? Answered here
+    // so the second side is expected from the moment the first one files.
+    crc_both_sides: '' as '' | 'yes' | 'no',
     bedrooms: '', bathrooms: '', garage: '', sqft: '',
     flyer_display_type: 'office' as 'office' | 'team' | 'division',
     flyer_division: '', additional_notes: '',
@@ -263,6 +266,16 @@ export default function ComplianceCdaForm() {
           brokerage_referral: src.brokerage_referral ?? false,
           brokerage_referral_fee: src.brokerage_referral_fee ? String(src.brokerage_referral_fee) : '',
           loan_type: src.loan_type || txn.loan_type || '',
+          // Prefilled like every other field on this form, so an agent fixing a
+          // typo does not re-answer a question about a deal that has not
+          // changed. Older submissions carry no answer: fall back to the deal's
+          // own flag when it is set, and otherwise leave it blank rather than
+          // pre-answering "No". is_intermediary is false on every deal nobody
+          // has flagged, so defaulting to No would wave through exactly the
+          // both-sides deal this question exists to catch.
+          crc_both_sides: src.crc_both_sides === true ? 'yes'
+            : src.crc_both_sides === false ? 'no'
+            : txn.is_intermediary ? 'yes' : '',
           // The rest of the shared field block, prefilled the same way: last
           // submission first, then whatever is on the transaction, so the agent
           // sees their original answers and edits only what changed.
@@ -292,6 +305,29 @@ export default function ComplianceCdaForm() {
       }
     } catch { setSearchDone(true) } finally { setSearching(false) }
   }, [addressSearch, mode, isAdmin, onBehalfAgent])
+
+  // Look the address up while it is being typed, rather than only when the
+  // Search button is pressed.
+  //
+  // The box was labelled "Property address (optional)" and nothing ran unless
+  // the agent clicked it, so the only automatic duplicate check on this form
+  // was the one on client name. That check cannot see the other side of an
+  // intermediary deal, because the two sides have different clients: the
+  // landlord side's client is the landlord, the tenant side's is the tenant.
+  // On 409 S 12th the landlord side filed against a property that already had
+  // a deal, the name lookup found nothing, the address box was never clicked,
+  // and a duplicate transaction was created.
+  //
+  // The button stays for an explicit re-run.
+  useEffect(() => {
+    if (mode !== 'compliance') return
+    const term = addressSearch.trim()
+    // Short enough to be mid-word is not worth a lookup. buildAddressKeys
+    // needs a house number and one more token before it matches anything.
+    if (term.length < 8) return
+    const t = setTimeout(() => { handleSearch() }, 700)
+    return () => clearTimeout(t)
+  }, [addressSearch, mode, handleSearch])
 
   // Check for an existing retainer while the client name is being typed, so
   // the agent finds out on the first field instead of after filling the whole
@@ -557,6 +593,9 @@ export default function ComplianceCdaForm() {
       if (!form.acceptance_date) { setError('Acceptance date is required.'); return }
       if (!form.closing_or_movein_date) { setError('Closing or move-in date is required.'); return }
       if (!form.representing) { setError('Representation is required.'); return }
+      if (form.representing !== 'referred_out' && !form.crc_both_sides) {
+        setError('Please answer whether Collective Realty Co. represents both sides of this deal.'); return
+      }
       if (!form.commission_basis_price) { setError('Commission basis price is required.'); return }
       if (!form.commission_rate) { setError('Commission rate is required.'); return }
       if (!commissionConfirmed) { setError('Review the Commission Summary box and confirm the calculation before submitting.'); return }
@@ -564,13 +603,16 @@ export default function ComplianceCdaForm() {
       if (form.external_referral && !form.external_referral_brokerage_name.trim()) { setError('External referral: enter the receiving brokerage name.'); return }
       if (!form.flyer_display_type) { setError('Please select what to show on your flyer.'); return }
       if (form.flyer_display_type === 'division' && !form.flyer_division) { setError('Please select a division for your flyer.'); return }
-      payload = { ...payload, ...form, transaction_id: foundTransaction.id, last_submission_id: lastSubmission?.id || null, notes: form.additional_notes }
+      payload = { ...payload, ...form, crc_both_sides: form.crc_both_sides === 'yes', transaction_id: foundTransaction.id, last_submission_id: lastSubmission?.id || null, notes: form.additional_notes }
     } else {
       if (!form.expedite_acknowledged) { setError('You must acknowledge the expedite policy.'); return }
       if (!form.client_name) { setError('Client name is required.'); return }
       if (!form.acceptance_date) { setError('Acceptance date is required.'); return }
       if (!form.closing_or_movein_date) { setError('Closing or move-in date is required.'); return }
       if (!form.representing) { setError('Representation is required.'); return }
+      if (form.representing !== 'referred_out' && !form.crc_both_sides) {
+        setError('Please answer whether Collective Realty Co. represents both sides of this deal.'); return
+      }
       if (!form.commission_basis_price) { setError('Commission basis price is required.'); return }
       if (!form.commission_rate) { setError('Commission rate is required.'); return }
       if (!commissionConfirmed) { setError('Review the Commission Summary box and confirm the calculation before submitting.'); return }
@@ -589,6 +631,8 @@ export default function ComplianceCdaForm() {
 
       payload = {
         ...payload, ...form,
+        // The form holds 'yes' / 'no'; the server tests for a real boolean.
+        crc_both_sides: form.crc_both_sides === 'yes',
         property_address: foundTransaction?.property_address || addressSearch,
         // Attaching to a retainer prospect counts as an existing transaction,
         // but the address parts still go along: the prospect has no real
@@ -893,10 +937,28 @@ export default function ComplianceCdaForm() {
                   <div key={m.id} className="inner-card flex items-center justify-between gap-4">
                     <div>
                       <p className="text-sm font-medium text-luxury-gray-1">{m.confidence ? (m.property_address || m.client_name) : m.client_name}</p>
+                      {/* One unit can hold several real deals over time: 409 S
+                          12th St Unit B has four. Status and created date alone
+                          do not tell them apart, so say which one is already
+                          the agent's, on which side, and which sides have
+                          filed. That is the information the choice needs. */}
+                      {m.is_yours && (
+                        <p className="text-xs text-luxury-accent font-medium">
+                          You are already on this deal
+                          {m.your_side ? ` - ${REPRESENTATION_OPTIONS.find(o => o.value === m.your_side)?.label || m.your_side} side` : ''}
+                        </p>
+                      )}
                       <p className="text-xs text-luxury-gray-3">
                         {m.confidence ? `${m.confidence === 'similar' ? 'Similar address' : 'Same address'} - ${m.status} - created ` : 'Created '}
                         {new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </p>
+                      {(m.sides_filed?.length || 0) > 0 && (
+                        <p className="text-xs text-luxury-gray-3">
+                          Compliance filed: {m.sides_filed.map((s: any) => (
+                            `${REPRESENTATION_OPTIONS.find(o => o.value === s.side)?.label || s.side} side by ${s.agent_name}`
+                          )).join(', ')}
+                        </p>
+                      )}
                     </div>
                     <button
                       onClick={() => { setAttachTo({ id: m.id, client_name: m.client_name }); setDuplicateMatches([]) }}
@@ -907,12 +969,20 @@ export default function ComplianceCdaForm() {
                   </div>
                 ))}
               </div>
-              <div className="flex gap-3 pt-2 border-t border-luxury-gray-5/50">
+              {/* Create-new is deliberately a link rather than a button. Every
+                  duplicate we have traced was made by someone clicking past
+                  this prompt when the deal they wanted was on the list. */}
+              <div className="pt-2 border-t border-luxury-gray-5/50 space-y-2">
+                {duplicateMatches.some((m: any) => m.is_yours) && (
+                  <p className="text-xs text-luxury-gray-2">
+                    One of the deals above is already yours. Attach to it unless this is genuinely a different transaction at the same address.
+                  </p>
+                )}
                 <button
                   onClick={() => { setConfirmedNewDeal(true); setDuplicateMatches([]) }}
-                  className="btn btn-secondary text-xs"
+                  className="text-xs text-luxury-gray-3 underline"
                 >
-                  Not the same - create new
+                  None of these - create a new deal
                 </button>
               </div>
             </div>
@@ -1044,6 +1114,31 @@ export default function ComplianceCdaForm() {
                     ))}
                   </div>
                 </div>
+                {form.representing && form.representing !== 'referred_out' && (
+                  <div className="md:col-span-2">
+                    <label className="block text-xs text-luxury-gray-3 mb-1">
+                      Does Collective Realty Co. represent both sides of this deal? <span className="text-red-500">*</span>
+                    </label>
+                    <p className="text-xs text-luxury-gray-3 mb-2">
+                      Answer yes if another Collective Realty Co. agent has the other side. Both sides then have to pass compliance before the deal can be paid.
+                    </p>
+                    <div className="flex gap-3 mt-1">
+                      {[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }].map(o => (
+                        <label key={o.value} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                          <input
+                            type="radio"
+                            name="crc_both_sides"
+                            value={o.value}
+                            checked={form.crc_both_sides === o.value}
+                            onChange={() => setField('crc_both_sides', o.value)}
+                            className="w-3.5 h-3.5"
+                          />
+                          {o.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {(form.representing === 'tenant' || form.representing === 'landlord') && (
                   <>
                     <div>

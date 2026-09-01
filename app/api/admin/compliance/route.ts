@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
+import { pickHeadSubmission } from '@/lib/compliance/derive'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,13 +33,23 @@ export async function GET(request: NextRequest) {
   if (auth.error) return auth.error
 
   try {
-    const { data: allRows, error } = await supabaseAdmin
-      .from('agent_form_submissions')
-      .select('id, agent_id, transaction_id, submitted_at, status, data, admin_notes, reviewed_at, created_at')
-      .order('submitted_at', { ascending: false })
-      .limit(3000)
-
-    if (error) throw error
+    // fetchAllRows, not a bare .limit(). PostgREST caps a response at 1,000
+    // rows whatever the limit says, so `.limit(3000)` against 1,261 submissions
+    // returned the newest 1,000 and silently dropped 261 - 183 of them
+    // completed compliance submissions, everything filed before 2025-06-25.
+    // A truncated read here is not a smaller tracker, it is a wrong one: a side
+    // whose completed submission fell outside the window grouped without its
+    // own head, so the completed-outranks-newer rule could not see the row it
+    // was meant to protect.
+    //
+    // orderBy keeps the submitted_at DESC ordering the grouping and the recheck
+    // lookup below both depend on; fetchAllRows adds a stable id tiebreaker so
+    // paging cannot skip or repeat a row.
+    const allRows = await fetchAllRows<any>(
+      'agent_form_submissions',
+      'id, agent_id, transaction_id, submitted_at, status, data, admin_notes, reviewed_at, created_at',
+      { orderBy: { column: 'submitted_at', ascending: false } }
+    )
 
     // Retainers ride along with compliance submissions. They carry a much
     // smaller answer set and only ever surface on the All and Pending
@@ -335,8 +346,19 @@ export async function GET(request: NextRequest) {
     // newest and becomes the row. Unlinked submissions (no transaction) and
     // retainers are never grouped: without a deal, agent + side does not
     // identify anything.
+    // Which submission survives as the row is pickHeadSubmission's decision,
+    // the same one the status derivation makes, so the office can never
+    // complete the row it is shown and have a different row be the one read.
+    // A COMPLETE submission is the head even when a newer open one exists;
+    // the newer ones ride along under `superseded` and the row is badged.
+    //
+    // Grouped in two passes rather than in place: the head can now be an
+    // OLDER submission than the first one encountered, and swapping heads
+    // after pushing would leave the merged missing_items and notes on the
+    // wrong object.
     const collapsed: any[] = []
-    const headByKey: Record<string, any> = {}
+    const groupOrder: string[] = []
+    const groups: Record<string, any[]> = {}
     for (const row of result) {
       if (!row.transaction_id || row.submission_mode !== 'compliance') {
         row.superseded = []
@@ -344,28 +366,42 @@ export async function GET(request: NextRequest) {
         continue
       }
       const key = `${row.transaction_id}:${row.agent_id || ''}:${row.side || ''}`
-      const head = headByKey[key]
-      if (!head) {
-        row.superseded = []
-        headByKey[key] = row
-        collapsed.push(row)
-        continue
-      }
-      head.superseded.push({
+      if (!groups[key]) { groups[key] = []; groupOrder.push(key) }
+      groups[key].push(row)
+      // Placeholder keeps the group in its first-appearance position, so the
+      // list stays ordered by most recent activity even when the head shown
+      // is an older completed submission.
+      if (groups[key].length === 1) collapsed.push({ __group: key })
+    }
+    for (const key of groupOrder) {
+      const group = groups[key]
+      const { head, rest, resubmittedAfterComplete } = pickHeadSubmission(
+        group,
+        (r: any) => ({ status: r.compliance_status, submitted_at: r.submitted_at, id: r.id })
+      )
+      head.superseded = rest.map((row: any) => ({
         id: row.id,
         submitted_at: row.submitted_at,
         compliance_status: row.compliance_status,
         missing_notes: row.missing_notes,
         completed_at: row.completed_at,
-      })
-      // Documents Leah rejected against the older submission are still missing
-      // on the deal. Merged by name so a document flagged on both submissions
+      }))
+      // A newer submission arrived after this side was signed off. The side
+      // stays complete - only the office moves it - but the office needs to
+      // see that the agent sent something new.
+      head.resubmitted_after_complete = resubmittedAfterComplete
+      // Documents Leah rejected against another submission are still missing
+      // on the deal. Merged by name so a document flagged on two submissions
       // is listed once.
-      for (const item of row.missing_items || []) {
-        if (!head.missing_items.some((m: any) => m.name === item.name)) {
-          head.missing_items.push(item)
+      for (const row of rest) {
+        for (const item of row.missing_items || []) {
+          if (!head.missing_items.some((m: any) => m.name === item.name)) {
+            head.missing_items.push(item)
+          }
         }
       }
+      const slot = collapsed.findIndex((c: any) => c.__group === key)
+      collapsed[slot] = head
     }
 
     // Leah's notes live on the submission she reviewed. When an agent files

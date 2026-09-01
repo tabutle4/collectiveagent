@@ -205,7 +205,7 @@ export async function GET(request: NextRequest) {
     let txn: any = null
     if (transactionId) {
       const { data } = await supabaseAdmin.from('transactions')
-        .select('id, property_address, is_locked, compliance_status, transaction_type, representing, status, tenant_transaction_type, lease_term, closing_date, move_in_date, mls_link, client_name, client_email, lead_source, loan_type, sales_price, monthly_rent, gross_commission, bonus_amount, btsa_amount, rebate_amount, internal_referral, internal_referral_fee, external_referral, external_referral_fee, brokerage_referral, brokerage_referral_fee, title_officer_name, title_company, title_company_email, flyer_division, client_phone, title_officer_phone, unit, bedrooms, bathrooms, garage, building_sqft, acceptance_date')
+        .select('id, property_address, is_locked, compliance_status, transaction_type, representing, status, tenant_transaction_type, lease_term, closing_date, move_in_date, mls_link, client_name, client_email, lead_source, loan_type, sales_price, monthly_rent, gross_commission, bonus_amount, btsa_amount, rebate_amount, internal_referral, internal_referral_fee, external_referral, external_referral_fee, brokerage_referral, brokerage_referral_fee, title_officer_name, title_company, title_company_email, flyer_division, client_phone, title_officer_phone, unit, bedrooms, bathrooms, garage, building_sqft, acceptance_date, is_intermediary')
         .eq('id', transactionId).single()
       txn = data
     } else if (address?.trim()) {
@@ -216,7 +216,7 @@ export async function GET(request: NextRequest) {
       const resolved = await findTransactionByAddress(lookupAgentId, address, { allowPartial: true })
       if (resolved) {
         const { data } = await supabaseAdmin.from('transactions')
-          .select('id, property_address, is_locked, compliance_status, transaction_type, representing, status, tenant_transaction_type, lease_term, closing_date, move_in_date, mls_link, client_name, client_email, lead_source, loan_type, sales_price, monthly_rent, gross_commission, bonus_amount, btsa_amount, rebate_amount, internal_referral, internal_referral_fee, external_referral, external_referral_fee, brokerage_referral, brokerage_referral_fee, title_officer_name, title_company, title_company_email, flyer_division, client_phone, title_officer_phone, unit, bedrooms, bathrooms, garage, building_sqft, acceptance_date')
+          .select('id, property_address, is_locked, compliance_status, transaction_type, representing, status, tenant_transaction_type, lease_term, closing_date, move_in_date, mls_link, client_name, client_email, lead_source, loan_type, sales_price, monthly_rent, gross_commission, bonus_amount, btsa_amount, rebate_amount, internal_referral, internal_referral_fee, external_referral, external_referral_fee, brokerage_referral, brokerage_referral_fee, title_officer_name, title_company, title_company_email, flyer_division, client_phone, title_officer_phone, unit, bedrooms, bathrooms, garage, building_sqft, acceptance_date, is_intermediary')
           .eq('id', resolved.id).maybeSingle()
         txn = data
       }
@@ -528,17 +528,60 @@ export async function POST(request: NextRequest) {
         const { data: prevSub } = await supabaseAdmin.from('agent_form_submissions').select('data').eq('id', last_submission_id).single()
         previousData = prevSub?.data || {}
       }
-      const skipKeys = new Set(['submission_mode', 'property_address', 'transaction_id', 'last_submission_id', 'notes'])
+      // crc_both_sides is deliberately NOT diffed. No submission filed before it
+      // existed carries an answer, so comparing it against the previous
+      // submission reports "changed" on an update where the agent changed
+      // nothing - and changedFields.length is the gate that decides whether the
+      // deal is written to at all. Eight of the last forty-nine updates recorded
+      // zero changed fields and correctly wrote nothing; without this they would
+      // each have stamped compliance_status back to 'submitted', five of them on
+      // a deal the office had already completed. It is also not a field the
+      // office needs listed in the changed-fields email.
+      const skipKeys = new Set(['submission_mode', 'property_address', 'transaction_id', 'last_submission_id', 'notes', 'crc_both_sides'])
       const changedFields: string[] = []
       for (const [key, value] of Object.entries(formFields)) {
         if (skipKeys.has(key)) continue
         if (JSON.stringify(previousData[key]) !== JSON.stringify(value)) changedFields.push(key)
       }
-      const submissionData = { ...formFields, notes: notes || null, changed_fields: changedFields, submission_mode: 'subsequent' }
+      // A side the office has already reviewed is locked here exactly as it is on
+      // the full compliance form: the submission is recorded, the office is told,
+      // and NOTHING on the deal is rewritten.
+      //
+      // This form was the open door. It writes the same money the full form does
+      // - price, gross commission, that side's commission, dates, BTSA, rebate -
+      // and re-runs the cascade, guarded only by transactions.is_locked, a column
+      // nothing has ever set. Thirteen updates have already landed on a side that
+      // was reviewed. With a completed side now outranking a newer open one, an
+      // unlocked update would be worse than before: the deal would keep reading
+      // complete and stay payable on numbers nobody re-reviewed.
+      //
+      // Derived from the side's own completed submission, the same test the full
+      // form uses, so the two forms cannot disagree about what is locked.
+      const repForLock = String(formFields.representing || txn.representing || '').toLowerCase().trim()
+      const { data: completedSubRows } = await supabaseAdmin
+        .from('agent_form_submissions')
+        .select('data')
+        .eq('transaction_id', txn.id)
+        .eq('status', 'complete')
+        .filter('data->>submission_mode', 'eq', 'compliance')
+      const sideLockedSub = !!repForLock && (completedSubRows || []).some(
+        (row: any) => String(row?.data?.representing || '').toLowerCase().trim() === repForLock
+      )
+      const submissionData = {
+        ...formFields, notes: notes || null, changed_fields: changedFields, submission_mode: 'subsequent',
+        ...(sideLockedSub ? { locked_transaction: true, locked_reason: 'side_complete' } : {}),
+      }
       const { data: submission } = await supabaseAdmin.from('agent_form_submissions')
         .insert({ form_id: formRecord?.id || null, agent_id: agentId, submitted_at: now, status: 'submitted', transaction_id: txn.id, data: submissionData, updated_at: now })
         .select('id').single()
-      if (!txn.is_locked && changedFields.length > 0) {
+      // Set-only-ON, and outside the changed-fields gate. The answer is not
+      // diffed (see skipKeys), so an agent whose only correction is "yes, we hold
+      // both sides" has an empty changedFields and would never reach the write
+      // block below. They still do not get to clear a flag the office set.
+      if (!txn.is_locked && !sideLockedSub && formFields.crc_both_sides === true) {
+        await supabaseAdmin.from('transactions').update({ is_intermediary: true, updated_at: now }).eq('id', txn.id)
+      }
+      if (!txn.is_locked && !sideLockedSub && changedFields.length > 0) {
         // Only write the fields that actually changed plus the compliance status fields
         // Same rule as the first submission: a referred-out lease is still a
         // lease. When the resubmission does not say what kind of client was
@@ -1000,7 +1043,9 @@ export async function POST(request: NextRequest) {
       const changedHtml = changedFields.length
         ? `<div style="background:#fff8e6;padding:14px 18px;margin:0 0 20px;border-left:3px solid #C5A278;"><p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#1a1a1a;">Changed fields:</p><ul style="margin:0;padding-left:18px;">${changedFields.map(f => `<li style="font-size:13px;color:#555;">${formatLabel(f)}</li>`).join('')}</ul></div>`
         : '<p style="font-size:13px;color:#555;margin:0 0 16px;">No field changes detected.</p>'
-      const lockedNote = txn.is_locked ? '<p style="font-size:13px;color:#C5A278;margin:0 0 16px;"><strong>Note:</strong> Transaction is locked. Manual update required.</p>' : ''
+      const lockedNote = (txn.is_locked || sideLockedSub)
+        ? `<p style="font-size:13px;color:#C5A278;margin:0 0 16px;"><strong>Note:</strong> ${txn.is_locked ? 'Transaction is locked' : `The ${repForLock} side has already been reviewed`}. Manual update required.</p>`
+        : ''
       const notifyHtml = getEmailLayout(
         `<p style="margin:0 0 16px;font-size:14px;color:#555555;">Resubmission received for <strong style="color:#1a1a1a;">${txn.property_address}</strong>.</p>
          ${lockedNote}${changedHtml}
@@ -1011,8 +1056,8 @@ export async function POST(request: NextRequest) {
       )
       await sendNotifications(notificationEmails, 'Compliance Resubmission', notifyHtml, txn.property_address)
       return NextResponse.json({
-        success: true, locked: txn.is_locked, submission_id: submission?.id || null, changed_fields: changedFields,
-        message: txn.is_locked ? 'Your resubmission has been received. Because this transaction has been reviewed by the office, any updates will be applied manually. No action is needed from you.' : 'Resubmission received. The office has been notified.',
+        success: true, locked: txn.is_locked || sideLockedSub, submission_id: submission?.id || null, changed_fields: changedFields,
+        message: (txn.is_locked || sideLockedSub) ? 'Your resubmission has been received. Because this transaction has been reviewed by the office, any updates will be applied manually. No action is needed from you.' : 'Resubmission received. The office has been notified.',
       })
     }
 
@@ -1024,7 +1069,13 @@ export async function POST(request: NextRequest) {
       internal_referral, internal_referral_fee, external_referral, external_referral_fee,
       brokerage_referral, brokerage_referral_fee, title_officer_name, title_company,
       title_company_email, title_phone, loan_type, expedite_acknowledged, bedrooms, bathrooms, garage, sqft,
-      flyer_display_type, flyer_division, flyer_team_name, additional_notes } = body
+      flyer_display_type, flyer_division, flyer_team_name, additional_notes,
+      // Does CRC hold BOTH sides of this deal? Asked on the form so the second
+      // side is expected from the moment the first one files. Without it the
+      // flag had to be set by hand on the deal, and an intermediary deal
+      // nobody remembered to flag expects one side, so it reads compliant the
+      // moment that one side is approved and the other is never chased.
+      crc_both_sides } = body
 
     if (!expedite_acknowledged) return NextResponse.json({ error: 'You must acknowledge the expedite policy' }, { status: 400 })
     if (!acceptance_date) return NextResponse.json({ error: 'Acceptance date is required' }, { status: 400 })
@@ -1314,7 +1365,75 @@ export async function POST(request: NextRequest) {
     if (!txn && !body.confirm_new_deal) {
       const addressMatches = await findDuplicateTransactions(resolvedAddress)
       if (addressMatches.length) {
-        return NextResponse.json({ success: false, duplicate_check: true, matches: addressMatches })
+        // The matches are annotated, never auto-picked.
+        //
+        // 409 S 12th St Unit B carries four deals across six months: a March
+        // lease, a July listing and an August lease, all with the identical
+        // address key. Courtney was on the March one and the August one, both
+        // as landlord. Tested against all 18 historical duplicates, a rule that
+        // narrows on side + open + not-already-filed resolves to exactly one
+        // deal in only 3 to 5 of them, and on THIS one the single survivor is
+        // the March lease - the wrong deal. So the app annotates and the person
+        // chooses; it never chooses for them.
+        //
+        // What was missing was not a decision, it was the information to make
+        // one: three rows reading "409 S 12th St, Unit B" with a status, and
+        // create-new as the easiest button on the screen.
+        const ids = addressMatches.map(m => m.id)
+        const { data: myRows } = await supabaseAdmin
+          .from('transaction_internal_agents')
+          .select('transaction_id, side, agent_role')
+          .eq('agent_id', agentId)
+          .in('transaction_id', ids)
+        const mineByTxn = new Map<string, any>()
+        for (const r of myRows || []) {
+          if (r.transaction_id && !mineByTxn.has(r.transaction_id)) mineByTxn.set(r.transaction_id, r)
+        }
+        // Which sides have already filed compliance, and who filed them, so a
+        // deal can say "tenant side filed by Dashi Jenkins" instead of only a
+        // status. This is what tells the two leases at one unit apart.
+        const { data: filedRows } = await supabaseAdmin
+          .from('agent_form_submissions')
+          .select('transaction_id, agent_id, data')
+          .in('transaction_id', ids)
+          .filter('data->>submission_mode', 'eq', 'compliance')
+        const filerIds = Array.from(new Set((filedRows || []).map((r: any) => r.agent_id).filter(Boolean)))
+        const { data: filerUsers } = filerIds.length
+          ? await supabaseAdmin
+              .from('users')
+              .select('id, first_name, last_name, preferred_first_name, preferred_last_name')
+              .in('id', filerIds)
+          : { data: [] as any[] }
+        const filerName = new Map<string, string>()
+        for (const u of filerUsers || []) {
+          filerName.set(
+            u.id,
+            `${(u as any).preferred_first_name || u.first_name || ''} ${(u as any).preferred_last_name || u.last_name || ''}`.trim()
+          )
+        }
+        const filedByTxn = new Map<string, { side: string; agent_name: string }[]>()
+        for (const r of filedRows || []) {
+          const side = String((r as any)?.data?.representing || '').toLowerCase().trim()
+          if (!r.transaction_id || !side) continue
+          const list = filedByTxn.get(r.transaction_id) || []
+          if (!list.some(x => x.side === side)) {
+            list.push({ side, agent_name: filerName.get(r.agent_id as string) || 'another agent' })
+          }
+          filedByTxn.set(r.transaction_id, list)
+        }
+        const annotated = addressMatches.map(m => {
+          const mine = mineByTxn.get(m.id) || null
+          return {
+            ...m,
+            is_yours: !!mine,
+            your_side: mine?.side || null,
+            your_role: mine?.agent_role || null,
+            sides_filed: filedByTxn.get(m.id) || [],
+          }
+        })
+        // The agent's own deals first. Ordering is a display aid, not an answer.
+        annotated.sort((a, b) => (a.is_yours === b.is_yours ? 0 : a.is_yours ? -1 : 1))
+        return NextResponse.json({ success: false, duplicate_check: true, matches: annotated })
       }
     }
 
@@ -1375,6 +1494,33 @@ export async function POST(request: NextRequest) {
       compliance_status: 'submitted', compliance_submitted_at: now, compliance_submitted_by: agentId, updated_at: now,
     }
 
+    // Sides on this deal the office has already signed off. Read before any
+    // write, because both of the guards below depend on it.
+    //
+    // A side is locked by its own COMPLETE submission rather than by a column:
+    // agent_form_submissions.status is what the tracker and the status
+    // derivation already read, so a lock derived from it can never disagree
+    // with what the office sees on screen, and there is no new column to keep
+    // in step.
+    const completedSides = new Set<string>()
+    if (txn) {
+      const { data: completedRows } = await supabaseAdmin
+        .from('agent_form_submissions')
+        .select('data')
+        .eq('transaction_id', txn.id)
+        .eq('status', 'complete')
+        .filter('data->>submission_mode', 'eq', 'compliance')
+      for (const r of completedRows || []) {
+        const rep = String((r as any)?.data?.representing || '').toLowerCase().trim()
+        if (rep) completedSides.add(rep)
+      }
+    }
+    const thisSide = String(representing || '').toLowerCase().trim()
+    // Locked when THIS side is signed off. Another side being complete does not
+    // lock this one: on an intermediary deal the second agent still has to be
+    // able to file.
+    const sideLocked = !!thisSide && completedSides.has(thisSide)
+
     if (!txn) {
       const { data: newTxn, error: createErr } = await supabaseAdmin.from('transactions')
         .insert({
@@ -1383,7 +1529,12 @@ export async function POST(request: NextRequest) {
           city: addrParts.city || null,
           state: addrParts.state || null,
           zip: addrParts.zip || null,
-          status: 'pending', submitted_by: agentId, transaction_type: feeCodeFromRepresenting(representing, tenant_transaction_type) || (isLease ? 'tenant_non_apt_v2' : 'buyer_v2'), ...txnFields,
+          status: 'pending', submitted_by: agentId, transaction_type: feeCodeFromRepresenting(representing, tenant_transaction_type) || (isLease ? 'tenant_non_apt_v2' : 'buyer_v2'),
+          // On a NEW deal the answer is written either way: there is no office
+          // value to protect yet, and a deal created as "we hold both sides"
+          // must expect two sides from the start.
+          is_intermediary: crc_both_sides === true,
+          ...txnFields,
         })
         .select('id').single()
       if (createErr || !newTxn) { console.error('Failed to create transaction:', createErr); return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 }) }
@@ -1400,9 +1551,19 @@ export async function POST(request: NextRequest) {
       await autoCascadeTransaction(transactionId)
     } else {
       transactionId = txn.id
-      if (txn.is_locked) {
-        await supabaseAdmin.from('agent_form_submissions').insert({ form_id: formRecord?.id || null, agent_id: agentId, submitted_at: now, status: 'submitted', transaction_id: transactionId, data: { ...submissionData, locked_transaction: true }, updated_at: now })
-        const notifyHtml = getEmailLayout(`<p style="font-size:14px;color:#555;">Compliance submission for <strong>${txn.property_address}</strong> - transaction is locked. Manual review required.</p>${buildFormAnswersHtml(submissionData)}`, { title: 'Locked Transaction - Compliance Submission', preheader: `Locked: ${txn.property_address}` })
+      // A signed-off side is treated exactly as a locked transaction always
+      // has been: the submission is recorded, the office is told, and NOTHING
+      // on the deal is rewritten. Before this, a resubmission on an approved
+      // side overwrote the deal's price, gross commission, that side's
+      // commission, client details, dates, the agent's BTSA and rebate, and
+      // stamped compliance_status back to 'submitted' - all without anyone in
+      // the office touching it. On 3006 Brooks Ct that happened three times.
+      if (txn.is_locked || sideLocked) {
+        const lockReason = txn.is_locked
+          ? `transaction is locked`
+          : `the ${representing} side is already signed off`
+        await supabaseAdmin.from('agent_form_submissions').insert({ form_id: formRecord?.id || null, agent_id: agentId, submitted_at: now, status: 'submitted', transaction_id: transactionId, data: { ...submissionData, locked_transaction: true, locked_reason: txn.is_locked ? 'transaction' : 'side_complete' }, updated_at: now })
+        const notifyHtml = getEmailLayout(`<p style="font-size:14px;color:#555;">Compliance submission for <strong>${txn.property_address}</strong> - ${lockReason}. Manual review required.</p>${buildFormAnswersHtml(submissionData)}`, { title: 'Locked Transaction - Compliance Submission', preheader: `Locked: ${txn.property_address}` })
         await sendNotifications(notificationEmails, 'Compliance Submission (Locked)', notifyHtml, txn.property_address)
         return NextResponse.json({ success: true, transaction_id: transactionId, locked: true, message: 'Your compliance request has been received. Because this transaction has been reviewed by the office, any updates will be applied manually. No action is needed from you.' })
       }
@@ -1426,7 +1587,31 @@ export async function POST(request: NextRequest) {
             transaction_type: feeCodeFromRepresenting(representing, tenant_transaction_type) || (isLease ? 'tenant_non_apt_v2' : 'buyer_v2'),
           }
         : {}
-      await supabaseAdmin.from('transactions').update({ ...txnFields, ...attachFields }).eq('id', transactionId)
+      // An already-approved side elsewhere on the deal means this deal's
+      // compliance status is no longer this submission's to set. txnFields
+      // carries compliance_status: 'submitted', so on an intermediary deal the
+      // second side filing would knock the first side's sign-off back to
+      // submitted. The status derivation is the single source of truth for the
+      // deal's column (lib/compliance/derive.ts says so in its header); the
+      // set-status route writes it. So drop the stamp here and leave the column
+      // where the office's last sign-off put it.
+      const statusStamp: Record<string, any> =
+        completedSides.size > 0
+          ? {}
+          : {
+              compliance_status: txnFields.compliance_status,
+              compliance_submitted_at: txnFields.compliance_submitted_at,
+              compliance_submitted_by: txnFields.compliance_submitted_by,
+            }
+      const { compliance_status: _cs, compliance_submitted_at: _csa, compliance_submitted_by: _csb, ...txnFieldsNoStatus } = txnFields
+      // Only ever set intermediary ON from the form. The agent knows whether
+      // CRC has both sides; they do not get to clear a flag the office set,
+      // so an unchecked box leaves the column alone rather than writing false.
+      const intermediaryField = crc_both_sides === true ? { is_intermediary: true } : {}
+      await supabaseAdmin
+        .from('transactions')
+        .update({ ...txnFieldsNoStatus, ...statusStamp, ...intermediaryField, ...attachFields })
+        .eq('id', transactionId)
       // BTSA and rebate live on the agent's commission row - the payout math
       // reads them there. Never touch a row that has already been paid.
       await supabaseAdmin

@@ -31,6 +31,10 @@ interface TrackerRow {
   // Review notes from an earlier submission, when the newest one has none.
   prior_notes?: string | null
   prior_notes_at?: string | null
+  // This side is signed off and the agent has filed again since. The side
+  // stays complete until the office changes it; this only says something new
+  // came in and is worth a look.
+  resubmitted_after_complete?: boolean
   paid: boolean
   // Every agent AND every outside brokerage on the deal is marked paid.
   all_payees_paid: boolean
@@ -525,6 +529,38 @@ export default function AdminCompliancePage() {
     }
   }
 
+  // Mark one of the superseded submissions reviewed, from the list inside the
+  // expanded row. Same route and same status the dropdown writes, so the
+  // derivation, the transaction's status and the check's pay-by date all follow
+  // exactly as they do for a normal sign-off.
+  const markSupersededReviewed = async (r: TrackerRow, submissionId: string) => {
+    setSavingStatus(true)
+    setError('')
+    try {
+      const res = await fetch('/api/admin/compliance/set-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // The completion date stays the one already on this side. Saying a later
+        // submission changes nothing is not a new sign-off, and the deal's
+        // completion date is what the pay-by deadline is counted from - stamping
+        // today here would push every agent's deadline out by however long the
+        // resubmission sat there. Only a side with no date on it yet takes today.
+        body: JSON.stringify({
+          submission_id: submissionId,
+          status: 'complete',
+          completed_at: r.completed_at || new Date().toISOString(),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Could not mark that submission reviewed')
+      await loadRows()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setSavingStatus(false)
+    }
+  }
+
   const saveClosingDate = async (r: TrackerRow) => {
     if (!r.transaction_id) { setError('Link this submission to a transaction before setting the closing date.'); return }
     setSavingClosing(true)
@@ -911,17 +947,48 @@ export default function AdminCompliancePage() {
                                 <RefreshCw size={10} /> Recheck requested {r.recheck_at ? fmtDate(r.recheck_at) : ''}
                               </span>
                             )}
+                            {r.resubmitted_after_complete && (
+                              <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-amber-50 text-amber-700">
+                                <AlertCircle size={10} /> New submission after review
+                              </span>
+                            )}
                           </div>
 
                           {(r.superseded?.length || 0) > 0 && (
                             <div className="text-xs p-3 bg-luxury-gray-5/20 rounded space-y-1">
                               <p className="font-medium text-luxury-gray-1">
-                                This agent filed compliance on this side {(r.superseded?.length || 0) + 1} times. The newest is shown above.
+                                This agent filed compliance on this side {(r.superseded?.length || 0) + 1} times.{' '}
+                                {r.resubmitted_after_complete
+                                  ? 'The one you reviewed is shown above and still stands. The others are listed here.'
+                                  : 'The newest is shown above.'}
                               </p>
                               {(r.superseded || []).map(s => (
-                                <div key={s.id} className="text-luxury-gray-2">
-                                  {fmtDate(s.submitted_at)} - {STATUS_OPTIONS.find(o => o.value === s.compliance_status)?.label || s.compliance_status}
-                                  {s.missing_notes ? `: ${s.missing_notes}` : ''}
+                                <div key={s.id} className="text-luxury-gray-2 flex items-center gap-2">
+                                  <span>
+                                    {fmtDate(s.submitted_at)} - {STATUS_OPTIONS.find(o => o.value === s.compliance_status)?.label || s.compliance_status}
+                                    {s.missing_notes ? `: ${s.missing_notes}` : ''}
+                                  </span>
+                                  {/* Marking the newer submission reviewed is what clears the
+                                      badge: two completed submissions rank newest-first, so the
+                                      one just reviewed becomes the row and nothing newer is left
+                                      outstanding. Without this the office has no control on
+                                      these rows at all and the badge could never come off.
+                                      Shown ONLY when the badge is up. On a side with several
+                                      open submissions and no review yet, completing an older
+                                      one would make it outrank the newest and derive the whole
+                                      deal complete off a stale submission - the newest would
+                                      still be unreviewed and the deal would read payable. That
+                                      side is reviewed with the status dropdown on the row,
+                                      which always acts on the newest. */}
+                                  {r.resubmitted_after_complete && s.compliance_status !== 'complete' && (
+                                    <button
+                                      onClick={() => markSupersededReviewed(r, s.id)}
+                                      disabled={savingStatus}
+                                      className="btn btn-secondary text-xs disabled:opacity-50"
+                                    >
+                                      Mark reviewed
+                                    </button>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -1484,6 +1551,9 @@ export default function AdminCompliancePage() {
                           <span className="text-xs text-luxury-gray-3">
                             {(r.superseded?.length || 0) + 1} submissions
                           </span>
+                        )}
+                        {r.resubmitted_after_complete && (
+                          <span className="text-xs text-amber-700">New submission after review</span>
                         )}
                         {r.prior_notes && r.compliance_status !== 'complete' && (
                           <span className="text-xs text-amber-700">Previously flagged</span>

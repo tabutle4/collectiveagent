@@ -106,31 +106,90 @@ export function deriveSideStatus(
   return statuses.every((s: string) => s === 'complete') ? 'complete' : null
 }
 
+/**
+ * Which submission represents a side, when the side has more than one.
+ *
+ * A COMPLETE submission outranks every open one, however much newer the open
+ * one is. Only the office moves a side off complete.
+ *
+ * Newest-wins alone made an agent's resubmission silently un-approve the
+ * office's sign-off. On 3006 Brooks Ct the agent filed on 8/25, 8/26 and 8/27;
+ * Leah reviewed and completed the 8/25 submission on 8/28; the 8/27 row was
+ * newest, so the deal derived in_review and her sign-off looked like it had
+ * done nothing. Nobody had un-approved anything - the ladder simply stopped
+ * looking at the row she signed.
+ *
+ * The newer submissions are not discarded. They ride along under `superseded`
+ * on the tracker and the row is badged so the office can see a resubmission
+ * arrived and decide whether to reopen the side.
+ */
+type Rankable = { status?: string | null; submitted_at?: string | null; id?: string }
+
+function outranks(a: Rankable, held: Rankable): boolean {
+  const aComplete = String(a.status || '') === 'complete'
+  const heldComplete = String(held.status || '') === 'complete'
+  if (aComplete !== heldComplete) return aComplete
+  // Equally complete (or equally not): newest wins, ties break on id so the
+  // result is stable across calls rather than depending on row order.
+  const at = String(a.submitted_at || '')
+  const ht = String(held.submitted_at || '')
+  if (at !== ht) return at > ht
+  return String(a.id || '') > String(held.id || '')
+}
+
 export function pickSideSubmissions<
-  T extends { data?: any; agent_id?: string | null; submitted_at?: string | null; id?: string }
+  T extends {
+    data?: any
+    agent_id?: string | null
+    submitted_at?: string | null
+    id?: string
+    status?: string | null
+  }
 >(subs: T[]): T[] {
   const compliance = subs.filter(s => (s.data?.submission_mode || '') === 'compliance')
   const pool = compliance.length > 0
     ? compliance
     : subs.filter(s => (s.data?.submission_mode || '') === 'retainer')
 
-  // Newest wins per agent per side. Ties break on id so the result is stable
-  // across calls rather than depending on the order the rows came back.
-  const newestByKey = new Map<string, T>()
+  // One submission per agent per side, chosen by `outranks`: complete first,
+  // then newest. Every caller SELECTs `status`, which that test reads.
+  const winnerByKey = new Map<string, T>()
   for (const s of pool) {
     const key = `${s.agent_id || ''}:${String(s.data?.representing || '').toLowerCase().trim()}`
-    const held = newestByKey.get(key)
-    if (!held) { newestByKey.set(key, s); continue }
-    const a = String(s.submitted_at || '')
-    const b = String(held.submitted_at || '')
-    if (a > b || (a === b && String(s.id || '') > String(held.id || ''))) {
-      newestByKey.set(key, s)
-    }
+    const held = winnerByKey.get(key)
+    if (!held || outranks(s, held)) winnerByKey.set(key, s)
   }
   // Input order preserved: three routes render these as a side list and one
   // reads picked[0] to decide compliance vs retainer mode.
-  const keep = new Set(Array.from(newestByKey.values()))
+  const keep = new Set(Array.from(winnerByKey.values()))
   return pool.filter(s => keep.has(s))
+}
+
+/**
+ * The submission the tracker should show for a side, and whether a newer one
+ * arrived after it was completed.
+ *
+ * Exported so the compliance tracker collapses to the SAME submission the
+ * derivation counts. When the two disagreed about which row represented a
+ * side, the office could complete the row it was shown and watch the deal stay
+ * in_review, because a different row was the one being read.
+ *
+ * `toRankable` is required rather than defaulted: the tracker carries the
+ * submission's status on `compliance_status`, not `status`, and a silent
+ * default would read undefined there and rank every row as not-complete.
+ */
+export function pickHeadSubmission<T>(
+  group: T[],
+  toRankable: (s: T) => Rankable
+): { head: T; rest: T[]; resubmittedAfterComplete: boolean } {
+  let head = group[0]
+  for (const s of group) if (outranks(toRankable(s), toRankable(head))) head = s
+  const rest = group.filter(s => s !== head)
+  const h = toRankable(head)
+  const resubmittedAfterComplete =
+    String(h.status || '') === 'complete' &&
+    rest.some(s => String(toRankable(s).submitted_at || '') > String(h.submitted_at || ''))
+  return { head, rest, resubmittedAfterComplete }
 }
 
 export type DerivedCompliance = {
