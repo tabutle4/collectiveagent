@@ -2511,16 +2511,39 @@ export default function AdminTransactionDetailPage() {
       .catch(() => {})
   }, [])
 
+  // Resolve the commission basis for one TIA row, in the same priority order
+  // the server uses in autoCascadeTransaction and add_internal_agent: the
+  // row's own basis, then its side's commission, then the whole office gross.
+  const basisForRow = useCallback((a: any): number => {
+    const txn = data?.transaction
+    const own = parseFloat(a?.agent_basis || 0)
+    if (own > 0) return own
+    if (a?.side === 'seller' || a?.side === 'landlord') {
+      const listing = parseFloat(txn?.listing_side_commission || 0)
+      if (listing > 0) return listing
+    } else if (a?.side === 'buyer' || a?.side === 'tenant') {
+      const buying = parseFloat(txn?.buying_side_commission || 0)
+      if (buying > 0) return buying
+    }
+    return parseFloat(txn?.office_gross || 0)
+  }, [data?.transaction])
+
   // Auto-calculate and auto-apply agent splits when data loads and office_gross exists.
   // The calc ALWAYS runs for primary contract-bearing roles so that agentCalcData is
   // populated (which drives the team lead-source picker visibility). Auto-apply only
-  // happens when agent_gross has not yet been saved.
+  // happens when the row has not been stamped with commission math yet.
   useEffect(() => {
     if (!data?.transaction?.office_gross || !data?.agents?.length) return
     const agentsList = data.agents || []
     const txn = data.transaction
     const officeGross = parseFloat(txn.office_gross || 0)
     if (officeGross <= 0) return
+    // A closed deal's commission values are preserved as-is, the same rule
+    // apply_primary_split, cascadePrimarySplit and autoCascadeTransaction all
+    // enforce server-side. This effect had no such guard, so simply opening a
+    // closed deal re-derived and re-wrote its splits and the office's
+    // hand-corrected figures reverted on the next page load.
+    if (txn.status === 'closed') return
 
     agentsList.forEach(async (a: any) => {
       // Auto-calc only makes sense for agents whose commission drives the deal.
@@ -2533,7 +2556,16 @@ export default function AdminTransactionDetailPage() {
       if (!['primary_agent', 'listing_agent', 'co_agent'].includes(a.agent_role)) return
       if (a.uses_canonical_math === false) return
 
-      const hasValues = parseFloat(a.agent_gross || 0) > 0
+      // Whether the row has been stamped cannot be read off agent_gross alone.
+      // A 0/100 plan (a broker-kept listing side, "Custom Lease 0/100") pays
+      // the agent nothing by design, so agent_gross is legitimately 0 and the
+      // row read as never-stamped on EVERY page load, re-applying the calc and
+      // with it the wrong basis, forever. Any of the three stamped columns
+      // carrying a value means the math has already been settled.
+      const hasValues =
+        parseFloat(a.agent_basis || 0) > 0 ||
+        parseFloat(a.agent_gross || 0) > 0 ||
+        parseFloat(a.brokerage_split || 0) > 0
       const alreadyApplied = autoCalcApplied.has(a.id)
 
       // Always fetch calc to populate agentCalcData (needed for team lead-source
@@ -2552,7 +2584,13 @@ export default function AdminTransactionDetailPage() {
           body: JSON.stringify({
             agent_id: a.agent_id,
             side: (a as any).side || null,
-            office_gross: officeGross,
+            // Send the row's OWN basis, resolved the way every other entry
+            // point resolves it (existing agent_basis, then the side
+            // commission, then office_gross). Passing office_gross as the
+            // basis handed an intermediary deal the whole gross to one side's
+            // agent: on a $1,250 lease split $625/$625 the landlord-side row
+            // was calculated on $1,250 and the firm's share came back double.
+            agent_basis: basisForRow(a),
             transaction_type: txn.transaction_type,
             lead_source: agentLeadSources[a.agent_id] || 'own',
             is_lease: isLease(txn.transaction_type),
@@ -2575,6 +2613,11 @@ export default function AdminTransactionDetailPage() {
                 action: 'update_internal_agent',
                 internal_agent_id: a.id,
                 updates: {
+                  // agent_basis goes with the figures derived FROM it. Without
+                  // it a row could hold a $625 basis next to a $1,250
+                  // brokerage split, which is how the bad number stayed
+                  // invisible on the agent card.
+                  agent_basis: result.agent_basis,
                   agent_gross: result.agent_gross,
                   brokerage_split: result.brokerage_split,
                   processing_fee: result.processing_fee,
@@ -2590,7 +2633,7 @@ export default function AdminTransactionDetailPage() {
         }
       } catch {}
     })
-  }, [data?.transaction?.office_gross, data?.agents, agentLeadSources, id, autoCalcApplied, agentCalcData])
+  }, [data?.transaction?.office_gross, data?.transaction?.status, data?.agents, agentLeadSources, id, autoCalcApplied, agentCalcData, basisForRow])
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 
@@ -2639,22 +2682,12 @@ export default function AdminTransactionDetailPage() {
   }, [])
   const recalculateRow = async (a: any, leadSourceOverride?: string) => {
     const leadSource = leadSourceOverride ?? a.lead_source ?? 'own'
-    const txn = data?.transaction
 
-    // Derive basis: prefer existing agent_basis, then side commission for the
-    // agent's side, then office_gross. This lets the lead-source-picker work
-    // even on a TIA row that hasn't been initialized yet.
-    let basis = parseFloat(a.agent_basis || 0)
-    if (!basis) {
-      if (a.side === 'seller' || a.side === 'landlord') {
-        basis = parseFloat(txn?.listing_side_commission || 0)
-      } else if (a.side === 'buyer' || a.side === 'tenant') {
-        basis = parseFloat(txn?.buying_side_commission || 0)
-      }
-    }
-    if (!basis) {
-      basis = parseFloat(txn?.office_gross || 0)
-    }
+    // Basis comes from basisForRow, the one resolver on this page. This used to
+    // be a second inline copy of the same priority order sitting 60 lines below
+    // the first, which is the shape of the bug that made this page and the
+    // server disagree about the basis in the first place. One copy, one answer.
+    const basis = basisForRow(a)
 
     if (!basis) {
       alert('Set the office gross or side commission before recalculating.')
