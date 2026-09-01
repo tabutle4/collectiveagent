@@ -265,7 +265,7 @@ export default function CdaApprovalPage() {
             document renders, so the two cannot disagree. */}
         {txn.cda_notes && (
           <div className="container-card border-l-4 border-luxury-accent">
-            <p className="section-title mb-2">Note printed on this CDA</p>
+            <p className="section-title mb-2">Note Printed On This CDA</p>
             <p className="text-xs text-luxury-gray-2 whitespace-pre-wrap">{txn.cda_notes}</p>
             <p className="text-[11px] text-luxury-gray-3 mt-2">
               The title company reads this. It can be changed on the send screen before the CDA goes out.

@@ -41,6 +41,11 @@ function SendDocumentInner() {
   const [cdaNotesSaved, setCdaNotesSaved] = useState('')
   const [savingCdaNotes, setSavingCdaNotes] = useState(false)
   const [cdaNotesMsg, setCdaNotesMsg] = useState('')
+  // Did the note actually load? A failed GET used to leave the box empty and
+  // editable, so someone with write permission could type over a note they
+  // never saw. Until this is true the box is disabled and says why.
+  const [cdaNotesLoaded, setCdaNotesLoaded] = useState(false)
+  const [cdaNotesLoadError, setCdaNotesLoadError] = useState('')
 
   async function load() {
     setLoading(true)
@@ -59,8 +64,20 @@ function SendDocumentInner() {
           const nJson = await nRes.json()
           setCdaNotes(nJson.cda_notes || '')
           setCdaNotesSaved(nJson.cda_notes || '')
+          setCdaNotesLoaded(true)
+          setCdaNotesLoadError('')
+        } else if (nRes.status === 403) {
+          // Reading the note needs can_generate_cda, which is narrower than the
+          // permission that opens this page. Say so rather than showing an
+          // empty box that looks like "there is no note".
+          setCdaNotesLoadError('You do not have permission to read or change the note on this CDA.')
+        } else {
+          setCdaNotesLoadError('The note on this CDA could not be loaded, so it cannot be edited here.')
         }
-      } catch { /* the note is not worth failing the page over */ }
+      } catch {
+        // Still never fails the page, but no longer pretends the note is empty.
+        setCdaNotesLoadError('The note on this CDA could not be loaded, so it cannot be edited here.')
+      }
 
       if (mode === 'title') {
         const tRes = await fetch(`/api/admin/transactions/${id}/cda/${tia}/send-to-title`)
@@ -89,6 +106,12 @@ function SendDocumentInner() {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Could not save the note')
+      // Both, not just the saved copy. The server trims; the box did not, so a
+      // note pasted with a trailing newline stored fine but left the box and
+      // the saved copy unequal forever - the amber "not saved" warning stuck
+      // and "Saved." never appeared. Taking the server's version for both is
+      // what makes the screen agree with the database.
+      setCdaNotes(json.cda_notes || '')
       setCdaNotesSaved(json.cda_notes || '')
       setCdaNotesMsg('Saved. It will appear on the CDA.')
     } catch (e: any) {
@@ -235,7 +258,12 @@ function SendDocumentInner() {
             fields below it. Those two are easy to confuse and the consequence
             of confusing them is not symmetric: a line meant for the email
             ending up on the document goes to the title company on a signed
-            disbursement authorization. */}
+            disbursement authorization.
+
+            Hidden in statement mode: that screen sends a commission statement,
+            not a CDA, so a CDA note editor under a statement preview is a
+            control that does not belong to the document on screen. */}
+        {mode !== 'statement' && (
         <div className="container-card space-y-3">
           <div>
             <label className="field-label">Note on the CDA</label>
@@ -244,18 +272,27 @@ function SendDocumentInner() {
               onChange={(e) => setCdaNotes(e.target.value)}
               rows={3}
               maxLength={4000}
-              className="input-luxury"
-              placeholder="Anything title needs to know. Leave blank for no note."
+              disabled={!cdaNotesLoaded}
+              className="input-luxury disabled:opacity-60"
+              placeholder={
+                cdaNotesLoaded
+                  ? 'Anything title needs to know. Leave blank for no note.'
+                  : 'Loading the note...'
+              }
             />
-            <p className="text-xs text-luxury-gray-3 mt-1">
-              This prints on the CDA itself, so the title company reads it. Internal remarks about
-              the commission belong on the commission notes instead.
-            </p>
+            {cdaNotesLoadError ? (
+              <p className="text-xs text-amber-700 mt-1">{cdaNotesLoadError}</p>
+            ) : (
+              <p className="text-xs text-luxury-gray-3 mt-1">
+                This prints on the CDA itself, so the title company reads it. Internal remarks about
+                the commission belong on the commission notes instead.
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={saveCdaNotes}
-              disabled={savingCdaNotes || cdaNotes === cdaNotesSaved}
+              disabled={savingCdaNotes || !cdaNotesLoaded || cdaNotes === cdaNotesSaved}
               className="btn btn-secondary text-xs disabled:opacity-50"
             >
               {savingCdaNotes ? 'Saving...' : 'Save Note'}
@@ -270,6 +307,7 @@ function SendDocumentInner() {
             )}
           </div>
         </div>
+        )}
 
         {mode === 'title' && (
           <div className="container-card space-y-3">

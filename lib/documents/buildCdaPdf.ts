@@ -22,6 +22,26 @@ const LINE = rgb(0.85, 0.85, 0.85)
 // pdf-lib's standard fonts use WinAnsi (CP1252); a character outside it makes
 // drawText throw. Normalize common smart punctuation to ASCII and drop anything
 // still outside Latin-1 so an odd character in a name/address never crashes a send.
+// Make a string safe for the standard PDF fonts.
+//
+// pdf-lib encodes StandardFonts as WinAnsi, and BOTH drawText and
+// widthOfTextAtSize throw on a code point WinAnsi cannot represent. Measured
+// against pdf-lib directly rather than assumed: the rejected set inside Latin-1
+// is 0x00-0x1F and 0x7F-0x9F, 65 code points in total.
+//
+// The old version stripped only `[^\x00-\xFF]`, which is everything ABOVE
+// Latin-1. Every control character sat below that line and passed straight
+// through. It never mattered while every string reaching here was one this file
+// built, and it started mattering the moment a CDA note became a box a person
+// types into: a tab (0x09) pasted from Excel, Word or Outlook reached
+// widthOfTextAtSize and threw, buildCdaPdf threw with it, and send-to-title
+// returned a 500 so the CDA never left. The web CDA and the approval screen
+// render a tab happily, so it looked correct right up to the point of sending.
+//
+// Tabs become spaces rather than vanishing, because a tab is whitespace and
+// someone typing one meant a gap. Newlines are stripped here too: this function
+// is for a single drawn line, and the one caller with multi-line text splits on
+// newlines BEFORE calling this, so nothing depends on them surviving.
 function enc(s: string | null | undefined): string {
   return String(s ?? '')
     .replace(/[‘’]/g, "'")
@@ -29,6 +49,9 @@ function enc(s: string | null | undefined): string {
     .replace(/–/g, '-')
     .replace(/—/g, '--')
     .replace(/…/g, '...')
+    .replace(/\t/g, ' ')
+    // Every remaining control character, C0 and C1, newlines included.
+    .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
     .replace(/[^\x00-\xFF]/g, '')
 }
 
@@ -208,17 +231,16 @@ export async function buildCdaPdf(model: CdaModel): Promise<Uint8Array> {
   if (model.notes) {
     ensureSpace(28)
     sectionTitle('Notes')
-    // enc() BEFORE wrapping, not just at draw time. wrap() measures with
-    // widthOfTextAtSize, which pdf-lib evaluates against the standard font's
-    // WinAnsi glyph set and which throws on a character that set cannot encode.
-    // Every other string reaching wrap() is one this file built; this is the
-    // first that a person types, so it is the first that can carry an emoji or
-    // a curly quote. Encoding first means measuring and drawing see the same
-    // characters, so the wrap is accurate as well as safe.
-    for (const rawLine of enc(model.notes).split(/\r?\n/)) {
+    // Split the RAW note first, then encode each line. enc() strips newlines,
+    // so encoding before the split would collapse a multi-line note into one
+    // paragraph. Encoding before WRAPPING still matters and still happens
+    // below: wrap() measures with widthOfTextAtSize, which throws on anything
+    // WinAnsi cannot encode, so measuring and drawing have to see the same
+    // characters.
+    for (const rawLine of String(model.notes).split(/\r?\n/)) {
       // A blank line in the typed note stays a blank line on the page.
       if (!rawLine.trim()) { ensureSpace(12); y -= 12; continue }
-      for (const line of wrap(rawLine, font, 10, CONTENT_W)) {
+      for (const line of wrap(enc(rawLine), font, 10, CONTENT_W)) {
         ensureSpace(14)
         text(line, MARGIN, 10, font, INK)
         y -= 14
@@ -285,19 +307,48 @@ export async function buildCdaPdf(model: CdaModel): Promise<Uint8Array> {
   return await pdf.save()
 }
 
-/** Word-wrap a string to fit a max width at a given font size. */
+/**
+ * Word-wrap a string to fit a max width at a given font size.
+ *
+ * Splits on spaces, and falls back to breaking mid-token when a single token is
+ * wider than the line. Without that fallback a long unbroken string - a wire
+ * reference, a URL, a pasted account number - is never broken, draws straight
+ * past the right margin and is silently cut off. It does not throw; the text is
+ * simply not on the page. That was tolerable while every caller passed strings
+ * this file built, and stopped being tolerable once a person could type one
+ * onto a document going to a title company.
+ */
 function wrap(s: string, f: PDFFont, size: number, maxW: number): string[] {
-  const words = s.split(' ')
   const lines: string[] = []
   let cur = ''
-  for (const w of words) {
-    const test = cur ? `${cur} ${w}` : w
-    if (f.widthOfTextAtSize(test, size) > maxW && cur) {
-      lines.push(cur)
-      cur = w
-    } else {
-      cur = test
+
+  // Break one over-long token at the last character that still fits.
+  const pushBroken = (token: string) => {
+    let chunk = ''
+    for (const ch of token) {
+      if (chunk && f.widthOfTextAtSize(chunk + ch, size) > maxW) {
+        lines.push(chunk)
+        chunk = ch
+      } else {
+        chunk += ch
+      }
     }
+    cur = chunk
+  }
+
+  for (const w of s.split(' ')) {
+    const test = cur ? `${cur} ${w}` : w
+    if (f.widthOfTextAtSize(test, size) <= maxW) {
+      cur = test
+      continue
+    }
+    if (cur) {
+      lines.push(cur)
+      cur = ''
+    }
+    // The token alone still does not fit, so break it up.
+    if (f.widthOfTextAtSize(w, size) > maxW) pushBroken(w)
+    else cur = w
   }
   if (cur) lines.push(cur)
   return lines
