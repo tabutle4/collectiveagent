@@ -1,22 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
+import { billedChargeTotal } from '@/lib/payload/commissionOffsetItems'
 
 const authHeader = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
+
+// Human-readable labels for how an invoice was settled outside Payload.
+const METHOD_LABELS: Record<string, string> = {
+  zelle: 'Zelle',
+  check: 'Check',
+  ach: 'ACH',
+  offset: 'Commission Offset',
+}
 
 // The amount to show for a settled invoice. total_paid only reflects real
 // Payload transactions, so it is 0 for invoices settled via a negative line
 // item (mark-invoice-paid). In that case fall back to the sum of the positive
 // charge line items, which equals what the invoice was billed for.
+//
+// billedChargeTotal skips the synthetic commission-offset and offset-reversal
+// rows. Without that skip, a $50 fee that had been staged and unstaged read
+// $100 here, because the old unstage path reversed the offset by appending a
+// second positive $50 charge rather than removing the offset.
 function receiptAmount(inv: any): number {
   const totalPaid = Number(inv?.total_paid) || 0
   if (totalPaid > 0) return totalPaid
-  const charges = (inv?.items || []).reduce((sum: number, item: any) => {
-    const amt = Number(item?.amount) || 0
-    return amt > 0 ? sum + amt : sum
-  }, 0)
-  return charges
+  return billedChargeTotal(inv)
 }
 
 export async function GET(request: NextRequest) {
@@ -43,8 +53,12 @@ export async function GET(request: NextRequest) {
 
     if (!user?.payload_payee_id) return NextResponse.json({ receipts: [] })
 
+    // fields[]=* keeps every default attribute and fields[]=items adds the
+    // nested line items, which receiptAmount and the description fallback both
+    // read. Payload documents fields[] on list endpoints as well as on single
+    // objects: https://docs.payload.com/apis/api-design/
     const res = await fetch(
-      `https://api.payload.com/invoices/?customer_id=${user.payload_payee_id}&limit=50`,
+      `https://api.payload.com/invoices/?customer_id=${user.payload_payee_id}&limit=50&fields[]=*&fields[]=items`,
       { headers: { Authorization: authHeader() } }
     )
 
@@ -62,6 +76,28 @@ export async function GET(request: NextRequest) {
       (inv: any) => Number(inv.amount_due ?? 0) <= 0 && receiptAmount(inv) > 0
     )
 
+    // Who settled each invoice by hand, for the invoices where the app
+    // recorded it. Payload has no field for the CRC user who marked an
+    // invoice paid, so this comes from payload_invoice_settlements. Rows are
+    // only there from the release that started writing them, so anything
+    // settled before that keeps the old "Recorded manually" label rather than
+    // being attributed to a guess. Reversed rows (the offset was unstaged) are
+    // excluded so a settlement that no longer stands is not shown.
+    const invoiceIds = settled.map((inv: any) => inv.id)
+    const settlementByInvoice = new Map<string, any>()
+    if (invoiceIds.length > 0) {
+      const { data: settlements } = await supabase
+        .from('payload_invoice_settlements')
+        .select('invoice_id, settled_by_name, method, note, created_at')
+        .in('invoice_id', invoiceIds)
+        .is('reversed_at', null)
+        .order('created_at', { ascending: false })
+      for (const s of settlements || []) {
+        // Newest first, so the first row seen for an invoice is the one to show.
+        if (!settlementByInvoice.has(s.invoice_id)) settlementByInvoice.set(s.invoice_id, s)
+      }
+    }
+
     const receipts = await Promise.all(
       settled.map(async (inv: any) => {
         const { data: pl } = await supabase
@@ -69,6 +105,9 @@ export async function GET(request: NextRequest) {
           .select('url')
           .eq('invoice_id', inv.id)
           .single()
+
+        const settlement = settlementByInvoice.get(inv.id)
+        const methodLabel = settlement ? METHOD_LABELS[settlement.method] || settlement.method : null
 
         return {
           id: inv.id,
@@ -78,11 +117,18 @@ export async function GET(request: NextRequest) {
           // Brokerage Fee") so the row says what it was for. Labeling by the
           // first line item's type produced confusing rows where two payments
           // for the same month showed as "Payment" and "Monthly Fee".
-          description: inv.description || inv.items?.[0]?.type || 'Payment',
+          description: inv.description || inv.items?.[0]?.description || inv.items?.[0]?.type || 'Payment',
           // How it was settled, so a recorded Zelle/check is not mistaken for a
           // duplicate of a card charge. total_paid only reflects real Payload
           // transactions; a zero balance with no total_paid was recorded by hand.
-          method: Number(inv?.total_paid) > 0 ? 'Paid' : 'Recorded manually',
+          method: Number(inv?.total_paid) > 0 ? 'Paid' : methodLabel || 'Recorded manually',
+          // Who settled it and the note they typed are internal bookkeeping,
+          // so they go only to a billing admin. An agent fetching their own
+          // receipts gets nulls: the agent Fees page does not render either
+          // field, and the note is not written for them to read.
+          // Null also for anything settled before the app started recording it.
+          settled_by_name: isAdmin ? settlement?.settled_by_name || null : null,
+          settled_note: isAdmin ? settlement?.note || null : null,
           url: pl?.url || null,
         }
       })

@@ -27,8 +27,11 @@ export async function GET(request: NextRequest) {
 
     if (!user?.payload_payee_id) return NextResponse.json({ invoices: [] })
 
+    // fields[]=* keeps every default attribute and fields[]=items adds the
+    // nested line items. Payload documents fields[] on list endpoints as well
+    // as on single objects: https://docs.payload.com/apis/api-design/
     const res = await fetch(
-      `https://api.payload.com/invoices/?customer_id=${user.payload_payee_id}&status=unpaid&limit=20`,
+      `https://api.payload.com/invoices/?customer_id=${user.payload_payee_id}&status=unpaid&limit=20&fields[]=*&fields[]=items`,
       { headers: { Authorization: authHeader() } }
     )
 
@@ -41,8 +44,19 @@ export async function GET(request: NextRequest) {
       amount_due: inv.amount_due,
       due_date: inv.due_date,
       status: inv.status,
-      description: inv.items?.[0]?.type || 'Invoice',
-      items: inv.items || [],
+      // The invoice's own description, which is what the office actually typed
+      // (e.g. "MLS Input Listing - 818 Heather Park Ct, Sugar Land, TX 77479").
+      // This used to send the first line item's `type` instead, so the Billing
+      // page could only ever show a generic label like "Monthly Fee" and the
+      // description the office wrote was never visible anywhere in the app.
+      description: inv.description || inv.items?.[0]?.description || inv.items?.[0]?.type || 'Invoice',
+      items: (inv.items || []).map((i: any) => ({
+        id: i.id,
+        type: i.type,
+        description: i.description,
+        amount: i.amount,
+        entry_type: i.entry_type,
+      })),
     }))
 
     return NextResponse.json({ invoices })

@@ -1339,6 +1339,32 @@ CREATE TABLE public.payment_links (
   CONSTRAINT payment_links_pkey PRIMARY KEY (id),
   CONSTRAINT payment_links_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES public.users(id)
 );
+-- Who settled a Payload invoice outside of Payload. invoice_id is the Payload
+-- invoice id (text, e.g. "inv_3fPo3MtPFoleY8MpnUNfM"), not a uuid.
+-- RLS is ENABLED with no policies, like every other table here. This file does
+-- not record RLS state for any table, so it is noted in the comment: the
+-- default ACL for a new public table grants anon full DML, and the anon key is
+-- public, so RLS is what keeps this table private. See
+-- migrations/platform/payload_invoice_settlements.sql.
+-- method: zelle | check | ach | offset
+-- source: mark_invoice_paid | commission_offset | payout_auto_settle
+-- reversed_at is stamped when a staged commission offset is unstaged.
+CREATE TABLE public.payload_invoice_settlements (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone DEFAULT now(),
+  invoice_id text NOT NULL,
+  agent_id uuid,
+  settled_by uuid,
+  settled_by_name text,
+  method text NOT NULL,
+  source text NOT NULL,
+  amount numeric,
+  note text,
+  reversed_at timestamp with time zone,
+  CONSTRAINT payload_invoice_settlements_pkey PRIMARY KEY (id),
+  CONSTRAINT payload_invoice_settlements_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES public.users(id),
+  CONSTRAINT payload_invoice_settlements_settled_by_fkey FOREIGN KEY (settled_by) REFERENCES public.users(id)
+);
 CREATE TABLE public.training_center_bookmarks (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,

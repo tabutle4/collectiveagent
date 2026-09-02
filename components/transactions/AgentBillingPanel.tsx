@@ -70,6 +70,11 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
   const [showAddCredit, setShowAddCredit] = useState(false)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The internal ledger change succeeded but the Payload side of it did not.
+  // Rendered separately from `error` because the debt itself did move, and
+  // showing this as a failure would send the office looking for the wrong
+  // problem. What it means in practice: Payload still needs a hand.
+  const [payloadWarning, setPayloadWarning] = useState<string | null>(null)
   const [reversing, setReversing] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(true)
   // Payload monthly fee invoices (unpaid, not yet staged)
@@ -185,6 +190,7 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
 
   const toggleDebt = async (id: string) => {
     if (isPaid) return
+    setPayloadWarning(null)
     try {
       const res = await fetch(`/api/admin/transactions/${transactionId}`, {
         method: 'POST',
@@ -195,11 +201,12 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
           debt_id: id,
         }),
       })
+      const d = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
         setError(d.error || 'Failed to stage debt')
         return
       }
+      if (d.payload_warning) setPayloadWarning(d.payload_warning)
       // Reload — the debt moves from outstanding (debts) to applied (paid+offset).
       await load()
     } catch {
@@ -249,6 +256,7 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
 
     setReversing(recordId)
     setError(null)
+    setPayloadWarning(null)
     try {
       const body: any = {
         action: useUnstage
@@ -264,10 +272,11 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
+      const d = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
         throw new Error(d.error || 'Reverse failed')
       }
+      if (d.payload_warning) setPayloadWarning(d.payload_warning)
       await load()
       if (!useUnstage) onReversedTia?.()
     } catch (e: any) {
@@ -281,6 +290,7 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
     if (isPaid) return
     setStagingInvoice(inv.id)
     setError(null)
+    setPayloadWarning(null)
     try {
       const res = await fetch(`/api/admin/transactions/${transactionId}`, {
         method: 'POST',
@@ -295,11 +305,12 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
           date_incurred: inv.due_date || new Date().toISOString().split('T')[0],
         }),
       })
+      const d = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
         setError(d.error || 'Failed to stage monthly invoice')
         return
       }
+      if (d.payload_warning) setPayloadWarning(d.payload_warning)
       // Reload — the invoice should now appear in appliedDebts
       await load()
     } catch {
@@ -458,6 +469,18 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
           </div>
         )}
       </div>
+
+      {/* The internal ledger change went through but Payload did not. Shown
+          outside the collapse so it cannot be missed, and separately from
+          `error` so the office does not go looking for a failure that did not
+          happen. */}
+      {payloadWarning && (
+        <div className="p-2 rounded border border-amber-200 bg-amber-50 mb-1.5">
+          <p className="text-xs text-amber-800">
+            Saved here, but Payload was not updated. {payloadWarning}
+          </p>
+        </div>
+      )}
 
       {expanded && (
         <div className="space-y-1.5">

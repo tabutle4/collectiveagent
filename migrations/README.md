@@ -97,6 +97,7 @@ replaying these against an empty database would fail immediately.
 | `office_locations.sql` | Added per-office fields (Houston, DFW, Referral Collective) to `company_settings`, powering the signature builder office selector. |
 | `supabase_migration_license_monitor.sql` | Licence monitor support. Additive only, safe to re-run. |
 | `zoom_recording_jobs.sql` | Created `zoom_recording_jobs` for recording webhooks and SharePoint upload status. |
+| `payload_invoice_settlements.sql` | Created `payload_invoice_settlements`. Payload has no field for the CRC user who marked an invoice paid, so Payment History could only ever say "Recorded manually". **This is why the Billing page can name who settled an invoice, and why it cannot for anything settled before this ran.** |
 
 ## Known stale references
 

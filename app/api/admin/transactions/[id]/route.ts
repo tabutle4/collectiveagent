@@ -12,6 +12,14 @@ import { isLeaseType, num, computeCommissionBreakdown, recomputeOfficeNet, recom
 import { deriveComplianceForTransactions } from '@/lib/compliance/derive'
 import { parseCustomPlanSplit } from '@/lib/transactions/customPlanParser'
 import { settlePayloadInvoiceForDebt } from '@/lib/payload/settleInvoiceForDebt'
+import {
+  applyCommissionOffset,
+  writeCommissionOffset,
+  removeCommissionOffsets,
+  extractPayloadInvoiceId,
+  recordInvoiceSettlement,
+  reverseInvoiceSettlements,
+} from '@/lib/payload/commissionOffset'
 import { buildStatementEmail, buildCdaEmail } from '@/lib/email/buildTransactionEmails'
 import { getEmailLayout } from '@/lib/email/layout'
 import { fundingStatus, btsaTotalFromAgentRows, fundingExpectedLabel, effectiveAgentNetTotal, MATH_TOLERANCE } from '@/lib/transactions/funding'
@@ -2897,44 +2905,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // as "Payload invoice: <id>" or "payload_invoice_id:<id>"), settle it
       // in Payload via a commission-offset line item so the agent cannot also
       // pay it directly and get double-collected. Non-fatal if Payload fails.
-      if (rec.record_type !== 'credit' && rec.notes) {
-        const notesStr = String(rec.notes)
-        const invoiceMatch = notesStr.match(/payload[ _]invoice(?:[ _]id)?:\s*([A-Za-z0-9_-]+)/i)
-        if (invoiceMatch) {
-          const invoiceId = invoiceMatch[1].trim()
-          const payloadAuth = () =>
-            'Basic ' + Buffer.from((process.env.PAYLOAD_SECRET_KEY ?? '') + ':').toString('base64')
-          try {
-            const invRes = await fetch(
-              `https://api.payload.com/invoices/${invoiceId}?fields[]=amount_due`,
-              { headers: { Authorization: payloadAuth() } }
-            )
-            if (invRes.ok) {
-              const inv = await invRes.json()
-              const balanceDue = Number(inv.amount_due ?? 0)
-              if (balanceDue > 0) {
-                const lineRes = await fetch('https://api.payload.com/line_items/', {
-                  method: 'POST',
-                  headers: {
-                    Authorization: payloadAuth(),
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                  },
-                  body: new URLSearchParams({
-                    invoice_id: invoiceId,
-                    type: 'Payment (Commission Offset)',
-                    description: 'Commission Offset',
-                    amount: String(-balanceDue),
-                    entry_type: 'charge',
-                  }),
-                })
-                if (!lineRes.ok) {
-                  const e = await lineRes.json().catch(() => ({}))
-                  console.error('stage_debt: Payload settlement failed', e)
-                }
-              }
-            }
-          } catch (payloadErr) {
-            console.error('stage_debt: Payload call threw', payloadErr)
+      let payloadWarning: string | undefined
+      if (rec.record_type !== 'credit') {
+        const invoiceId = extractPayloadInvoiceId(rec.notes)
+        if (invoiceId) {
+          const applied = await applyCommissionOffset(invoiceId)
+          if (!applied.ok) {
+            payloadWarning = applied.error
+          } else if (applied.amountOffset > 0) {
+            await recordInvoiceSettlement({
+              invoiceId,
+              actor: auth.user,
+              method: 'offset',
+              source: 'commission_offset',
+              amount: applied.amountOffset,
+              note: 'Withheld from commission',
+            })
           }
         }
       }
@@ -2942,7 +2928,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Staging a debt/credit changes the brokerage's net for the txn under
       // the new formula, so refresh it.
       await recomputeOfficeNet(id)
-      return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true, payload_warning: payloadWarning })
     }
 
     // ── Stage a Payload monthly fee invoice as a commission-offset debt ────────
@@ -2990,6 +2976,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         )
       }
 
+      // Clear any leftover commission-offset or offset-reversal line items
+      // BEFORE reading the balance, not after, so an invoice inflated by the
+      // old reversal-charge behavior is repaired here and balanceDue below is
+      // the repaired figure.
+      //
+      // The offset itself is then written with writeCommissionOffset(that same
+      // balanceDue), not applyCommissionOffset - so the number stored in
+      // agent_debts.amount_owed and the number offset in Payload come from ONE
+      // read of amount_due. The earlier version read it twice and claimed the
+      // two agreed "by construction", which was not true: they agreed only
+      // because the window between the reads was short.
+      await removeCommissionOffsets(invoice_id)
+
       // Verify Payload invoice is still open before settling it
       const invRes = await fetch(`https://api.payload.com/invoices/${invoice_id}?fields[]=*&fields[]=items`, {
         headers: { Authorization: payloadAuth() },
@@ -3018,7 +3017,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             agent_id,
             debt_type: 'monthly_fee',
             description: description || 'Monthly Brokerage Fee',
-            amount_owed: num(amount),
+            // balanceDue, not the request body's `amount`. The body value is
+            // whatever the panel last rendered; balanceDue is what Payload
+            // says is open on this invoice right now, read a few lines above.
+            // A money figure is never taken from the request.
+            amount_owed: balanceDue,
             amount_paid: 0,
             date_incurred: date_incurred || new Date().toISOString().split('T')[0],
             status: 'outstanding',
@@ -3058,25 +3061,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Settle the Payload invoice via negative line item (commission offset).
       // If this call fails we still return success for the staging — the
       // internal ledger is correct. Log the error so it can be fixed manually.
+      let payloadWarning: string | undefined
       try {
-        const lineRes = await fetch('https://api.payload.com/line_items/', {
-          method: 'POST',
-          headers: {
-            Authorization: payloadAuth(),
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: new URLSearchParams({
-            invoice_id,
-            type: 'Payment (Commission Offset)',
-            description: 'Commission Offset',
-            amount: String(-balanceDue),
-            entry_type: 'charge',
-          }),
-        })
-        if (!lineRes.ok) {
-          const errData = await lineRes.json().catch(() => ({}))
-          console.error('stage_monthly_invoice: Payload settlement failed', errData)
+        const applied = await writeCommissionOffset(invoice_id, balanceDue)
+        if (!applied.ok) {
+          payloadWarning = applied.error
+          console.error('stage_monthly_invoice: Payload settlement failed', applied.error)
         } else {
+          await recordInvoiceSettlement({
+            invoiceId: invoice_id,
+            agentId: agent_id,
+            actor: auth.user,
+            method: 'offset',
+            source: 'commission_offset',
+            amount: applied.amountOffset,
+            note: 'Withheld from commission',
+          })
           // Advance monthly_fee_paid_through based on the invoice month
           const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december']
           const haystack = (
@@ -3125,7 +3125,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
 
       await recomputeOfficeNet(id)
-      return NextResponse.json({ success: true, debt_id: debtId })
+      return NextResponse.json({ success: true, debt_id: debtId, payload_warning: payloadWarning })
     }
 
     // ── Unstage debt/credit (revert single record to outstanding) ───────────
@@ -3147,7 +3147,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       const { data: rec } = await supabase
         .from('agent_debts')
-        .select('id, status, debt_type, amount_owed, amount_paid, amount_remaining, offset_transaction_id, offset_transaction_agent_id, notes')
+        .select('id, status, debt_type, record_type, amount_owed, amount_paid, amount_remaining, offset_transaction_id, offset_transaction_agent_id, notes')
         .eq('id', recordId)
         .single()
       if (!rec) {
@@ -3182,47 +3182,34 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (error) throw error
 
       // If this debt had a linked Payload invoice (monthly fee OR custom invoice
-      // sent via sendDebtInvoice), re-open it by appending a positive reversal
-      // line item so the agent can still pay it directly if the offset is removed.
-      if (rec.notes) {
-        const notesStr = String(rec.notes)
-        const invoiceMatch = notesStr.match(/payload[ _]invoice(?:[ _]id)?:\s*([A-Za-z0-9_-]+)/i)
-        if (invoiceMatch) {
-          const invoiceId = invoiceMatch[1]
-          const payloadAuth = () =>
-            'Basic ' + Buffer.from((process.env.PAYLOAD_SECRET_KEY ?? '') + ':').toString('base64')
-          try {
-            const reversalAmount = Math.max(0, appliedHere)
-            if (reversalAmount > 0) {
-              const lineRes = await fetch('https://api.payload.com/line_items/', {
-                method: 'POST',
-                headers: {
-                  Authorization: payloadAuth(),
-                  'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: new URLSearchParams({
-                  invoice_id: invoiceId,
-                  type: 'Reversal (Commission Offset Removed)',
-                  description: 'Commission offset removed - fee is outstanding again',
-                  amount: String(reversalAmount),
-                  entry_type: 'charge',
-                }),
-              })
-              if (!lineRes.ok) {
-                const errData = await lineRes.json().catch(() => ({}))
-                console.error('unstage_debt: Payload reversal failed', errData)
-              }
-            }
-          } catch (payloadErr) {
-            console.error('unstage_debt: Payload reversal threw', payloadErr)
-          }
+      // sent via sendDebtInvoice), re-open it by DELETING the commission-offset
+      // line item that staging wrote.
+      //
+      // This used to append a positive reversal charge instead, which is what
+      // made the invoice amount duplicate: a $50 fee staged then unstaged left
+      // the invoice carrying $50 + $50 of charges against one $50 offset. The
+      // balance due came out right, but the invoice gross, its line item
+      // breakdown, and Payment History all read double, and every further
+      // stage/unstage cycle added another $50. Removing the offset restores
+      // the balance without inventing a second charge.
+      //
+      // Credits are skipped, mirroring stage_credit, which never writes an
+      // offset for a credit in the first place.
+      let payloadWarning: string | undefined
+      const invoiceId = rec.record_type === 'credit' ? null : extractPayloadInvoiceId(rec.notes)
+      if (invoiceId) {
+        const cleared = await removeCommissionOffsets(invoiceId)
+        if (!cleared.ok) {
+          payloadWarning = `${cleared.error || 'Payload could not be updated.'} The fee still shows settled in Payload - clear the Commission Offset line item there by hand.`
+        } else {
+          await reverseInvoiceSettlements(invoiceId)
         }
       }
 
       // Unstaging changes the brokerage's net for the txn under the new
       // formula, so refresh it.
       await recomputeOfficeNet(id)
-      return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true, payload_warning: payloadWarning })
     }
 
     // ── Reverse mark paid for a single debt or credit ────────────────────────

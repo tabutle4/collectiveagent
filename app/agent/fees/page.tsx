@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, AlertCircle, ExternalLink, CreditCard, Loader2, Landmark } from 'lucide-react'
+import { realChargeItems } from '@/lib/payload/commissionOffsetItems'
 
 declare global {
   interface Window {
@@ -531,26 +532,28 @@ export default function AgentFeesPage() {
             {openInvoices.map(inv => (
               <div key={inv.id} className="inner-card">
                 <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <p className="text-xs font-semibold text-luxury-gray-1">{inv.description}</p>
+                  {/* min-w-0 lets the description wrap instead of being
+                      squeezed by the amount, which is flex-shrink-0. */}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-luxury-gray-1 break-words whitespace-pre-wrap">
+                      {inv.description}
+                    </p>
                     {inv.due_date && (
                       <p className="text-xs text-luxury-gray-3 mt-0.5">
                         Due {formatDate(inv.due_date)}
                       </p>
                     )}
-                    {inv.items?.length > 1 && (
+                    {realChargeItems(inv).length > 1 && (
                       <div className="mt-1.5 space-y-0.5">
-                        {inv.items
-                          .filter((item: any) => item.entry_type === 'charge')
-                          .map((item: any, i: number) => (
-                            <p key={i} className="text-xs text-luxury-gray-3">
-                              {item.type}: {formatCurrency(item.amount)}
-                            </p>
-                          ))}
+                        {realChargeItems(inv).map((item: any, i: number) => (
+                          <p key={item.id || i} className="text-xs text-luxury-gray-3 break-words">
+                            {item.description || item.type}: {formatCurrency(item.amount)}
+                          </p>
+                        ))}
                       </div>
                     )}
                   </div>
-                  <p className="text-sm font-semibold text-luxury-gray-1 ml-4">
+                  <p className="text-sm font-semibold text-luxury-gray-1 ml-4 flex-shrink-0">
                     {formatCurrency(inv.amount_due ?? inv.amount)}
                   </p>
                 </div>

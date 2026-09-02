@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { recordInvoiceSettlement } from '@/lib/payload/commissionOffset'
 
 const authHeader = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
@@ -154,6 +155,20 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // Record who recorded this payment, so the Billing page's Payment History
+    // can name them instead of only saying "Recorded manually". Payload has no
+    // field for the CRC user who settled an invoice by hand, so it is kept
+    // here and read back by /api/payload/receipts.
+    await recordInvoiceSettlement({
+      invoiceId: invoice_id,
+      agentId: user_id,
+      actor: auth.user,
+      method,
+      source: 'mark_invoice_paid',
+      amount: balanceDue,
+      note: note || null,
+    })
 
     // If this is a monthly fee invoice, advance monthly_fee_paid_through to the
     // end of the billed month. laterDate ensures we never roll the value
