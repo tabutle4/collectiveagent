@@ -682,6 +682,34 @@ CREATE TABLE public.transaction_external_brokerages (
   CONSTRAINT transaction_external_brokerages_pkey PRIMARY KEY (id),
   CONSTRAINT transaction_external_brokerages_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES public.transactions(id)
 );
+-- SOURCE OF TRUTH for a deal's people. The flat contact columns on
+-- transactions (client_name, client_email, client_phone, title_company,
+-- title_officer_name, title_company_email, title_officer_phone) are a
+-- PROJECTION of this table, not a second place to enter data: the
+-- project_contacts_to_transaction trigger recomputes them on every INSERT,
+-- UPDATE and DELETE here. Writing those columns directly is overwritten the
+-- next time that deal's contacts change.
+--
+-- client_name carries ALL clients on the deal, comma-separated, since a deal
+-- can have several (three co-tenants on one lease is normal). Which contact
+-- types count as "the client" comes from the deal's `representing` value via
+-- client_contact_types_for(); a lease commonly records both parties, so the
+-- side matters.
+--
+-- contact_type is NOT constrained and (transaction_id, contact_type) is NOT
+-- unique, deliberately - co-buyers and co-tenants are real. The permitted
+-- values are CONTACT_TYPES in lib/transactions/constants.ts.
+--
+-- contact_type 'title' is LEGACY and is read by nothing. The Payload retainer
+-- webhook used to write the paying customer under it; those rows are clients
+-- and agents, not title companies. TITLE_CONTACT_TYPES and the projection both
+-- exclude it. Reclassify such rows to the party they actually are.
+--
+-- email and phone are jsonb holding a bare string, a one-element array, or
+-- null. Read them with contact_jsonb_first_text() in SQL or
+-- titleContactEmail() in lib/documents/cdaData.ts.
+--
+-- See migrations/transactions/20260902_contact_projection.sql.
 CREATE TABLE public.transaction_contacts (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   created_at timestamp with time zone DEFAULT now(),

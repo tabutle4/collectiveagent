@@ -5,6 +5,26 @@ import { autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { Resend } from 'resend'
 import { getEmailLayout, emailSection, emailButton } from '@/lib/email/layout'
 
+// The Payload payer is NOT the deal's title company, and nothing here writes a
+// title contact any more.
+//
+// This route used to record `customer.full_name` / `customer.email` as a
+// transaction_contacts row typed 'title'. Nothing read that type, so it was
+// inert - but it was also wrong, and an earlier version of this patch made it
+// load-bearing by relabelling those rows 'title_company', which is the Send to
+// Title recipient. The 11 live rows are the paying customers: clients, tenants,
+// one competing brokerage, personal gmail/hotmail/aol addresses and one literal
+// noemail@noemail.com. Four sit on leases, which have no title company.
+//
+// payerName/payerEmail come from the Payload CUSTOMER record - whoever paid the
+// commission or retainer - and they are ALREADY recorded on this deal as
+// checks_received.check_from below, plus in the check notes. So the contact row
+// added nothing and is simply gone.
+//
+// Do not reintroduce it. If the payer needs to be a contact on the deal, it is
+// the client, not title.
+
+
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 const authHeader = () =>
@@ -282,21 +302,6 @@ export async function POST(request: NextRequest) {
         // commission picture: cascade so tia rows populate automatically.
         await autoCascadeTransaction(matchedTxn.id)
 
-        // Best-effort: record the payer as a title contact on the deal.
-        if (payerName || payerEmail) {
-          try {
-            await supabase.from('transaction_contacts').insert({
-              transaction_id: matchedTxn.id,
-              contact_type: 'title',
-              name: payerName || null,
-              company: null,
-              email: payerEmail || null,
-              phone: null,
-            })
-          } catch (err: any) {
-            console.error('Pay-link contact insert failed:', err?.message || err)
-          }
-        }
 
         // Best-effort: notify the transaction's agent, same as the checks page.
         if (matchedTxn.submitted_by) {
@@ -384,21 +389,6 @@ export async function POST(request: NextRequest) {
           .single()
         if (error) throw error
 
-        // Best-effort: record the payer as a title contact on the new deal.
-        if (createdTxn && (payerName || payerEmail)) {
-          try {
-            await supabase.from('transaction_contacts').insert({
-              transaction_id: createdTxn.id,
-              contact_type: 'title',
-              name: payerName || null,
-              company: null,
-              email: payerEmail || null,
-              phone: null,
-            })
-          } catch (err: any) {
-            console.error('Pay-link contact insert failed:', err?.message || err)
-          }
-        }
 
         // Best-effort: notify the matched agent, same as the matched-deal path.
         if (createdTxn && commissionAgent) {

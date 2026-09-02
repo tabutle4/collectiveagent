@@ -4,20 +4,71 @@ import { TransactionStatus } from './types'
 export type { AppRole } from './role'
 
 // ===== Contact Types =====
-// Enforced in code only - not a DB constraint
+// Enforced in code only - not a DB constraint.
+//
+// THE list of transaction_contacts.contact_type values. It was previously a
+// different list that nothing imported: it offered 'title', 'client' and
+// 'coop_broker', while the Contacts tab rendered its own hardcoded options and
+// wrote 'title_company' and 'cooperating_agent'. Two dead lists and one live
+// set of <option> tags meant the app's "official" vocabulary carried values
+// nothing read - and the Payload retainer webhook matched the dead list, which
+// is how 11 rows ended up typed 'title' where Send to Title could not see them.
+//
+// The 15 non-legacy values here are exactly lib/doc-extract.ts
+// VALID_CONTACT_TYPES and the ai-checklist-review prompt, so a contact the AI
+// extracts and a contact typed by hand land on the same type. This array has 17
+// entries: those 15 plus the two legacy values below, which doc-extract maps to
+// 'other' and never produces. Keep the 15 in step if either list changes.
+// The Contacts tab renders its dropdown from this array; add a type here and it
+// appears there.
+//
+// 'client' and 'title' are kept as LEGACY options because live rows still use
+// them. Without them those rows' types would not match any <option> and editing
+// one would blank its type.
+//
+// 'title' is legacy specifically because the Payload retainer webhook used to
+// write the PAYING CUSTOMER under it. Those rows are clients and agents, not
+// title companies - see TITLE_CONTACT_TYPES below. Do not pick it for new
+// contacts; reclassify the existing ones to the party they actually are.
 export const CONTACT_TYPES = [
-  { value: 'client', label: 'Client' },
-  { value: 'title', label: 'Title Officer / Company' },
-  { value: 'team_lead', label: 'Team Lead' },
-  { value: 'internal_referral_agent', label: 'Internal Referral Agent' },
-  { value: 'external_referral_agent', label: 'External Referral Agent' },
-  { value: 'external_referral_brokerage', label: 'External Referral Brokerage' },
-  { value: 'momentum_partner', label: 'Momentum Partner' },
+  { value: 'buyer', label: 'Buyer' },
+  { value: 'seller', label: 'Seller' },
+  { value: 'tenant', label: 'Tenant' },
+  { value: 'landlord', label: 'Landlord' },
+  { value: 'title_company', label: 'Title Company' },
+  { value: 'title_officer', label: 'Title Officer' },
+  { value: 'lender', label: 'Lender' },
   { value: 'loan_officer', label: 'Loan Officer' },
-  { value: 'coop_broker', label: 'Co-op Broker' },
+  { value: 'attorney', label: 'Attorney' },
+  { value: 'inspector', label: 'Inspector' },
+  { value: 'appraiser', label: 'Appraiser' },
+  { value: 'cooperating_agent', label: 'Cooperating Agent' },
+  { value: 'property_manager', label: 'Property Manager' },
+  { value: 'hoa', label: 'HOA' },
+  { value: 'client', label: 'Client' },
+  { value: 'title', label: 'Title (legacy - reclassify)' },
+  { value: 'other', label: 'Other' },
 ]
 
 export type ContactType = (typeof CONTACT_TYPES)[number]['value']
+
+/**
+ * Contact types that can supply the Send to Title recipient, most specific
+ * first. lib/documents/cdaData.ts and the project_transaction_contacts SQL
+ * function both search them in this order and MUST agree.
+ *
+ * 'title' is deliberately NOT here. The Payload retainer webhook used to write
+ * the paying customer under that type, and those 11 live rows are clients,
+ * tenants and one competing brokerage - personal gmail, hotmail and aol
+ * addresses, plus a literal noemail@noemail.com. Four of them are leases, which
+ * have no title company at all. Treating them as title contacts would have put
+ * a commission disclosure in a private individual's inbox.
+ */
+export const TITLE_CONTACT_TYPES = ['title_company', 'title_officer'] as const
+
+/** Contact types that represent a party to the deal, by side. */
+export const BUYER_SIDE_CONTACT_TYPES = ['buyer', 'tenant'] as const
+export const SELLER_SIDE_CONTACT_TYPES = ['seller', 'landlord'] as const
 
 // ===== Referral Types =====
 export const REFERRAL_TYPES = [

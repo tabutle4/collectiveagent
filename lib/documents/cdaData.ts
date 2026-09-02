@@ -3,6 +3,11 @@ import {
   ECOMMISSION_DEBT_TYPE,
   ECOMMISSION_PAYEE_NAME,
 } from '@/lib/transactions/ecommission'
+import {
+  TITLE_CONTACT_TYPES,
+  BUYER_SIDE_CONTACT_TYPES,
+  SELLER_SIDE_CONTACT_TYPES,
+} from '@/lib/transactions/constants'
 
 /**
  * Shared CDA data loader + computation.
@@ -50,6 +55,8 @@ export interface CdaContact {
   email: any
   phone: string | null
   company: string | null
+  /** Orders parties on the document and breaks ties between same-type rows. */
+  created_at?: string | null
 }
 
 /** The title officer and the title business, told apart. */
@@ -147,8 +154,10 @@ export interface CdaModel {
   titleContact: CdaContact | undefined
   /** Title officer vs title business, resolved once for every renderer. */
   titleParty: TitleParty
-  buyerContact: CdaContact | undefined
-  sellerContact: CdaContact | undefined
+  /** Every buyer/tenant on the deal, joined with ", ". Null when there are none. */
+  buyerNames: string | null
+  /** Every seller/landlord on the deal, joined with ", ". Null when there are none. */
+  sellerNames: string | null
   agent: any
   txn: any
   settings: any
@@ -204,19 +213,29 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
 
   if (!txn) return { ok: false, status: 404, error: 'Transaction not found' }
 
-  // Fetch contacts -- title company, buyer/seller
+  // Fetch contacts -- title company, buyer/seller.
+  //
+  // created_at is selected because it ORDERS the parties on the document. A
+  // deal can carry several buyers or several tenants, and without an order the
+  // names would appear in whatever order PostgREST happened to return.
   const { data: contacts } = await supabaseAdmin
     .from('transaction_contacts')
-    .select('contact_type, name, email, phone, company')
+    .select('contact_type, name, email, phone, company, created_at')
     .eq('transaction_id', id)
 
-  const titleContact = (contacts || []).find(c => c.contact_type === 'title_company')
+  const titleContact = resolveTitleContact(contacts || [])
   // A deal may also carry a dedicated title_officer contact. It is always the
   // person, so resolveTitleParty prefers it over the title_company row's name.
   const titleOfficerContact = (contacts || []).find(c => c.contact_type === 'title_officer')
   const titleParty = resolveTitleParty(titleContact, titleOfficerContact)
-  const buyerContact = (contacts || []).find(c => c.contact_type === 'buyer' || c.contact_type === 'tenant')
-  const sellerContact = (contacts || []).find(c => c.contact_type === 'seller' || c.contact_type === 'landlord')
+  // EVERY buyer and EVERY seller, not the first of each.
+  //
+  // These were `.find()` calls returning one row, so a deal with two buyers
+  // named one of them on the CDA the title company receives. Two live deals
+  // were doing exactly that. Joined with ", " because that is how the office
+  // already writes multiple clients by hand.
+  const buyerNames = joinContactNames(contacts || [], BUYER_SIDE_CONTACT_TYPES)
+  const sellerNames = joinContactNames(contacts || [], SELLER_SIDE_CONTACT_TYPES)
 
   // Fetch additional income rows
   const { data: additionalIncomeRows } = await supabaseAdmin
@@ -473,7 +492,7 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
     listingSide, buyingSide, btsaTotal, officeGross, totalGrossCommission,
     officeNet, officeLineLabel, agentPayees, agentRoster, rebatePayees,
     priceForDisplay, priceLabel, salesPricePct, externalPayees, extraRows, notes, brokerageLines,
-    titleContact, titleParty, buyerContact, sellerContact, agent, txn, settings,
+    titleContact, titleParty, buyerNames, sellerNames, agent, txn, settings,
   }
 
   return { ok: true, model, tia, agent, txn }
@@ -488,4 +507,56 @@ export function titleContactEmail(c: CdaContact | undefined): string | null {
     return typeof first === 'string' ? first : (first.value || null)
   }
   return typeof c.email === 'string' ? c.email : null
+}
+
+// Send to Title used to match `contact_type === 'title_company'` and nothing
+// else, so a deal whose title email sat on a `title_officer` row reported "No
+// Title Company contact with an email on this transaction" while the address
+// was visible on the Contacts tab. Four live deals were in that state.
+//
+// Searching TITLE_CONTACT_TYPES in priority order fixes them without renaming a
+// single row. `title_officer` deliberately stays its own type: resolveTitleParty
+// treats it as the PERSON and prefers it over the title_company row's name,
+// which is what stops the email greeting "Hello Stewart," to Stewart Title.
+//
+// The list is imported, not redeclared, because the same order is encoded in
+// the project_transaction_contacts SQL function and the two must not drift.
+
+/**
+ * The deal's title contact: the highest-priority type that carries an email,
+ * falling back to the highest-priority type present when none has one.
+ *
+ * The email matters more than the type here because this contact supplies the
+ * Send to Title recipient. A `title_company` row with a name but no address
+ * loses to a `title_officer` row that can actually be written to.
+ */
+function resolveTitleContact(contacts: CdaContact[]): CdaContact | undefined {
+  const ranked = contacts
+    .filter(c => (TITLE_CONTACT_TYPES as readonly string[]).includes(c.contact_type))
+    .sort((a, b) => {
+      const byType =
+        (TITLE_CONTACT_TYPES as readonly string[]).indexOf(a.contact_type) -
+        (TITLE_CONTACT_TYPES as readonly string[]).indexOf(b.contact_type)
+      if (byType !== 0) return byType
+      // Same type: oldest first, so the choice does not change between requests.
+      return String(a.created_at || '').localeCompare(String(b.created_at || ''))
+    })
+  return ranked.find(c => titleContactEmail(c)) || ranked[0]
+}
+
+/**
+ * Every contact of the given types, names joined with ", " in the order they
+ * were added. Null when the deal has none.
+ *
+ * Comma-joined rather than one name per line because the office already writes
+ * multiple clients this way by hand, and because the web CDA and the emailed
+ * PDF have to render the same text.
+ */
+function joinContactNames(contacts: CdaContact[], types: readonly string[]): string | null {
+  const names = contacts
+    .filter(c => types.includes(c.contact_type))
+    .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+    .map(c => (c.name || '').trim())
+    .filter(n => n.length > 0)
+  return names.length > 0 ? names.join(', ') : null
 }

@@ -120,14 +120,30 @@ export async function POST(request: NextRequest) {
       const contactType = transaction?.transaction_type === 'lease' ? 'landlord' : 'seller'
 
       // Check if contact exists
-      const { data: existingContact } = await supabase
+      // .limit(1) on an array, not .single(). PostgREST errors a .single() that
+      // matches zero OR more than one row, the error was destructured away, and
+      // the code then fell through to the INSERT - so a deal that already had
+      // two rows of this type gained a third on every save. Oldest row wins so
+      // the choice is stable, and a failed lookup writes nothing at all.
+      const { data: existingRows, error: lookupError } = await supabase
         .from('transaction_contacts')
         .select('id')
         .eq('transaction_id', listing_id)
         .eq('contact_type', contactType)
-        .single()
+        .order('created_at', { ascending: true })
+        .limit(2)
+      const existingContact = lookupError ? null : existingRows?.[0]
+      // Several rows of this type means several people, and this route has one
+      // client field. Writing it into the oldest row flattens them, and with
+      // the projection trigger live the value written is itself the joined
+      // list, so the column would recompute with a name in it twice.
+      const tooManyToWrite = !lookupError && (existingRows?.length ?? 0) > 1
 
-      if (existingContact) {
+      if (lookupError) {
+        console.error('Contact lookup failed, not writing:', lookupError.message)
+      } else if (tooManyToWrite) {
+        console.warn(`Skipping ${contactType} contact write: deal has ${existingRows?.length} rows of this type.`)
+      } else if (existingContact) {
         await supabase
           .from('transaction_contacts')
           .update({

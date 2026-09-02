@@ -153,6 +153,26 @@ export async function buildCdaPdf(model: CdaModel): Promise<Uint8Array> {
     y -= size + 6
   }
 
+  // A label/value row whose value may not fit on one line. The value wraps at
+  // the width left over beside the label and each line stays right-aligned, so
+  // "Shatijah Buckley, Anthony Gibson, Desmond Sims" reads as a block under the
+  // label instead of running under it.
+  const rowWrapped = (label: string, value: string, opts: { size?: number } = {}) => {
+    const size = opts.size ?? 10
+    const labelW = font.widthOfTextAtSize(enc(label), size)
+    const avail = Math.max(60, CONTENT_W - labelW - 12)
+    const lines = wrap(enc(value), font, size, avail)
+    ensureSpace(size + 8)
+    text(label, MARGIN, size, font, MUTED)
+    textR(lines[0] ?? '--', PAGE_W - MARGIN, size, font, INK)
+    y -= size + 6
+    for (const extra of lines.slice(1)) {
+      ensureSpace(size + 6)
+      textR(extra, PAGE_W - MARGIN, size, font, INK)
+      y -= size + 6
+    }
+  }
+
   const gap = (n = 10) => { y -= n }
   const sectionTitle = (s: string) => {
     ensureSpace(24)
@@ -206,10 +226,13 @@ export async function buildCdaPdf(model: CdaModel): Promise<Uint8Array> {
   y = Math.min(leftEndY, rightEndY) - 16
 
   // ── Parties ────────────────────────────────────────────────────────────────
-  if (model.buyerContact || model.sellerContact) {
+  // rowWrapped, not row: these lines now carry EVERY buyer and EVERY seller, so
+  // a deal with three co-tenants produces a value too wide for one line. row()
+  // draws a single right-aligned run and would have overlapped the label.
+  if (model.buyerNames || model.sellerNames) {
     sectionTitle('Parties')
-    if (model.buyerContact) row('Buyer / Tenant', model.buyerContact.name || '--')
-    if (model.sellerContact) row('Seller / Landlord', model.sellerContact.name || '--')
+    if (model.buyerNames) rowWrapped('Buyer / Tenant', model.buyerNames)
+    if (model.sellerNames) rowWrapped('Seller / Landlord', model.sellerNames)
     gap(6)
   }
 
@@ -247,10 +270,10 @@ export async function buildCdaPdf(model: CdaModel): Promise<Uint8Array> {
   for (const rb of model.rebatePayees || []) {
     if (rb.amount <= 0) continue
     const rebatePayee = rb.side === 'buyer'
-      ? (model.buyerContact?.name || '--')
+      ? (model.buyerNames || '--')
       : rb.side === 'seller'
-        ? (model.sellerContact?.name || '--')
-        : (model.buyerContact?.name || model.sellerContact?.name || '--')
+        ? (model.sellerNames || '--')
+        : (model.buyerNames || model.sellerNames || '--')
     payeeRow(rb.label, rebatePayee, money(rb.amount))
   }
   gap(6)

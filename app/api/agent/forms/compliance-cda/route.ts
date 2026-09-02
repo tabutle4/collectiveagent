@@ -961,12 +961,44 @@ export async function POST(request: NextRequest) {
           fields: { name: string | null; company: string | null; email: string | null; phone: string | null }
         ) => {
           if (!fields.name && !fields.company && !fields.email && !fields.phone) return
-          const { data: existingContact } = await supabaseAdmin
+          // .limit(1) on an array, not .maybeSingle(). Supabase errors a
+          // maybeSingle() that matches more than one row, and the error was being
+          // destructured away, so `data` came back null and the code fell through
+          // to the INSERT - adding a THIRD row every time. Legitimately duplicated
+          // types made this self-feeding: three co-tenants on one lease is real
+          // data, and 15 deals carry same-type rows today. Oldest row wins so the
+          // choice is stable, and a failed lookup writes nothing.
+          const { data: existingRows, error: lookupError } = await supabaseAdmin
             .from('transaction_contacts')
             .select('id')
             .eq('transaction_id', txn.id)
             .eq('contact_type', contactType)
-            .maybeSingle()
+            .order('created_at', { ascending: true })
+            .limit(2)
+          if (lookupError) {
+            console.error('Contact lookup failed, not writing:', lookupError.message)
+            return
+          }
+          // Several contacts of this type: do nothing.
+          //
+          // This form has ONE text box per client field, and writing it into the
+          // oldest row flattens several people into one. Worse, with the
+          // projection trigger live the box is prefilled from client_name, which
+          // is itself the joined list - so resubmitting would write
+          // "A, B" into A's row and the column would recompute to "A, B, B".
+          // 12 deals carry two client rows today. The rows are richer than the
+          // form; leave them alone.
+          //
+          // This also covers contact_type 'title_company', where the reasoning
+          // above does not apply - a deal genuinely has one title officer. Zero
+          // deals carry two title_company rows today, and this patch closes the
+          // path that made duplicates, so the guard is inert there. If one ever
+          // does, this form silently stops updating its title contact.
+          if ((existingRows?.length ?? 0) > 1) {
+            console.warn(`Skipping ${contactType} contact write: deal has ${existingRows?.length} rows of this type.`)
+            return
+          }
+          const existingContact = existingRows?.[0]
           if (existingContact) {
             await supabaseAdmin.from('transaction_contacts')
               .update({ name: fields.name, company: fields.company, email: fields.email, phone: fields.phone, updated_at: now })
@@ -1654,12 +1686,44 @@ export async function POST(request: NextRequest) {
       : 'buyer'
     async function upsertContact(contactType: string, fields: { name: string | null; company: string | null; email: string | null; phone: string | null }) {
       if (!fields.name && !fields.company && !fields.email && !fields.phone) return
-      const { data: existing } = await supabaseAdmin
+      // .limit(1) on an array, not .maybeSingle(). Supabase errors a
+      // maybeSingle() that matches more than one row, and the error was being
+      // destructured away, so `data` came back null and the code fell through
+      // to the INSERT - adding a THIRD row every time. Legitimately duplicated
+      // types made this self-feeding: three co-tenants on one lease is real
+      // data, and 15 deals carry same-type rows today. Oldest row wins so the
+      // choice is stable, and a failed lookup writes nothing.
+      const { data: existingRows, error: lookupError } = await supabaseAdmin
         .from('transaction_contacts')
         .select('id')
         .eq('transaction_id', transactionId)
         .eq('contact_type', contactType)
-        .maybeSingle()
+        .order('created_at', { ascending: true })
+        .limit(2)
+      if (lookupError) {
+        console.error('Contact lookup failed, not writing:', lookupError.message)
+        return
+      }
+      // Several contacts of this type: do nothing.
+      //
+      // This form has ONE text box per client field, and writing it into the
+      // oldest row flattens several people into one. Worse, with the
+      // projection trigger live the box is prefilled from client_name, which
+      // is itself the joined list - so resubmitting would write
+      // "A, B" into A's row and the column would recompute to "A, B, B".
+      // 12 deals carry two client rows today. The rows are richer than the
+      // form; leave them alone.
+      //
+      // This also covers contact_type 'title_company', where the reasoning
+      // above does not apply - a deal genuinely has one title officer. Zero
+      // deals carry two title_company rows today, and this patch closes the
+      // path that made duplicates, so the guard is inert there. If one ever
+      // does, this form silently stops updating its title contact.
+      if ((existingRows?.length ?? 0) > 1) {
+        console.warn(`Skipping ${contactType} contact write: deal has ${existingRows?.length} rows of this type.`)
+        return
+      }
+      const existing = existingRows?.[0]
       if (existing) {
         await supabaseAdmin.from('transaction_contacts')
           .update({ name: fields.name, company: fields.company, email: fields.email, phone: fields.phone, updated_at: now })

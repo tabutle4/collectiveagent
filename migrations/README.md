@@ -63,6 +63,8 @@ replaying these against an empty database would fail immediately.
 | `supabase_migration_agent_overrides.sql` | T3. Per-agent custom commission terms overriding the standard New Agent Plan. |
 | `supabase_migration_tia_basis_input_mode.sql` | Phase 2.8. Percentage-based referral basis on `transaction_internal_agents`. |
 | `20260424_transaction_page_unification.sql` | Transaction detail page unification, 2026-04-24. Added `transactions.released_to_agent_at`. Column drops were deliberately deferred to a follow-up. |
+| `20260902_contact_projection.sql` | Made `transaction_contacts` the source of truth for a deal's people and the flat contact columns on `transactions` a projection of it, maintained by the `project_contacts_to_transaction` trigger. Nothing had ever copied between the two stores, so editing the Contacts tab left the Overview cards and ~40 other readers stale. `client_name` now carries **all** clients, comma-separated. Also backfilled 69 missing contact rows (62 client + 7 title; 10 more were skipped because `representing` does not name a side) and filled 83 empty `client_name`s. Additive; created three functions and one trigger. |
+| `20260902_contact_cleanup.sql` | Deleted 2 exact-duplicate contact rows the Payload retainer webhook had inserted blind on 6321 Foster St. Destructive; run only after `20260902_contact_projection.sql` is verified. The surviving 9 `contact_type = 'title'` rows are left as-is on purpose: they hold the paying **customer**, not a title company (four are leases), so they are excluded from `TITLE_CONTACT_TYPES` and from the projection rather than relabelled. Legitimate same-type duplicates (co-buyers, co-tenants) were also left alone. |
 
 ### checks/
 

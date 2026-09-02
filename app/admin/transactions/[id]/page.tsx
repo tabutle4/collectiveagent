@@ -49,7 +49,7 @@ import LowCommissionFlagPanel from '@/components/transactions/LowCommissionFlagP
 import AddAgentModal from '@/components/transactions/AddAgentModal'
 import AgentBillingPanel from '@/components/transactions/AgentBillingPanel'
 import AgentCardFinancials, { OverridableField } from '@/components/transactions/AgentCardFinancials'
-import { AGENT_ROLE_OPTIONS, SIDE_OPTIONS, PAYMENT_METHOD_OPTIONS } from '@/lib/transactions/constants'
+import { AGENT_ROLE_OPTIONS, SIDE_OPTIONS, PAYMENT_METHOD_OPTIONS, CONTACT_TYPES } from '@/lib/transactions/constants'
 import { getTransactionTypeLabel } from '@/lib/transactions/transactionTypes'
 import { FIELD_GROUPS, hasValue } from '@/lib/compliance/fieldGroups'
 
@@ -124,21 +124,6 @@ const paymentMethodLabel = (m: string | null | undefined) => {
   return hit ? hit.label : m
 }
 
-const CONTACT_TYPES = [
-  { value: 'buyer', label: 'Buyer' },
-  { value: 'seller', label: 'Seller' },
-  { value: 'tenant', label: 'Tenant' },
-  { value: 'landlord', label: 'Landlord' },
-  { value: 'title_company', label: 'Title Company' },
-  { value: 'lender', label: 'Lender' },
-  { value: 'attorney', label: 'Attorney' },
-  { value: 'inspector', label: 'Inspector' },
-  { value: 'appraiser', label: 'Appraiser' },
-  { value: 'hoa', label: 'HOA' },
-  { value: 'property_manager', label: 'Property Manager' },
-  { value: 'coop_agent', label: 'Co-op Agent' },
-  { value: 'other', label: 'Other' },
-]
 
 const isLease = (txnType: string | null) => {
   if (!txnType) return false
@@ -6544,21 +6529,9 @@ export default function AdminTransactionDetailPage() {
                           onChange={e => setContactForm(p => ({ ...p, contact_type: e.target.value }))}
                         >
                           <option value="">Select...</option>
-                          <option value="buyer">Buyer</option>
-                          <option value="seller">Seller</option>
-                          <option value="tenant">Tenant</option>
-                          <option value="landlord">Landlord</option>
-                          <option value="title_company">Title Company</option>
-                          <option value="title_officer">Title Officer</option>
-                          <option value="lender">Lender</option>
-                          <option value="loan_officer">Loan Officer</option>
-                          <option value="attorney">Attorney</option>
-                          <option value="inspector">Inspector</option>
-                          <option value="appraiser">Appraiser</option>
-                          <option value="cooperating_agent">Cooperating Agent</option>
-                          <option value="property_manager">Property Manager</option>
-                          <option value="hoa">HOA</option>
-                          <option value="other">Other</option>
+                          {CONTACT_TYPES.map(ct => (
+                            <option key={ct.value} value={ct.value}>{ct.label}</option>
+                          ))}
                         </select>
                       </div>
                       {contactForm.contact_type === 'other' && (

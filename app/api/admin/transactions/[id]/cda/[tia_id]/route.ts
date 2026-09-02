@@ -62,7 +62,7 @@ export async function GET(
       listingSide, buyingSide, btsaTotal, totalGrossCommission,
       officeNet, officeLineLabel, agentPayees, agentRoster, rebatePayees,
       priceForDisplay, priceLabel, salesPricePct, externalPayees, extraRows, notes, brokerageLines,
-      titleContact, titleParty, buyerContact, sellerContact, txn, settings,
+      titleContact, titleParty, buyerNames, sellerNames, txn, settings,
     } = model
 
     const html = `<!DOCTYPE html>
@@ -143,11 +143,11 @@ export async function GET(
     </div>
   </div>
 
-  ${buyerContact || sellerContact ? `
+  ${buyerNames || sellerNames ? `
   <div style="margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid #eee">
     <div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:8px">Parties</div>
-    ${buyerContact ? `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px;border-bottom:1px dotted #eee"><span style="color:#777">Buyer / Tenant</span><span style="font-weight:500">${buyerContact.name || '--'}</span></div>` : ''}
-    ${sellerContact ? `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:#777">Seller / Landlord</span><span style="font-weight:500">${sellerContact.name || '--'}</span></div>` : ''}
+    ${buyerNames ? `<div style="display:flex;justify-content:space-between;gap:16px;padding:3px 0;font-size:11px;border-bottom:1px dotted #eee"><span style="color:#777;white-space:nowrap">Buyer / Tenant</span><span style="font-weight:500;text-align:right">${escHtml(buyerNames)}</span></div>` : ''}
+    ${sellerNames ? `<div style="display:flex;justify-content:space-between;gap:16px;padding:3px 0;font-size:11px"><span style="color:#777;white-space:nowrap">Seller / Landlord</span><span style="font-weight:500;text-align:right">${escHtml(sellerNames)}</span></div>` : ''}
   </div>` : ''}
 
   <div style="margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid #eee">
@@ -169,7 +169,7 @@ export async function GET(
         ${officeNet > 0 ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${officeLineLabel}</td><td style="padding:4px 0">${agencyName}</td><td style="padding:4px 0;text-align:right">${fmt$(officeNet)}</td></tr>` : ''}
         ${(agentPayees || []).map((p: { name: string; amount: number }) => `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${listingSide > 0 ? 'Listing' : 'Buying'} agent commission</td><td style="padding:4px 0">${p.name}</td><td style="padding:4px 0;text-align:right">${fmt$(p.amount)}</td></tr>`).join('')}
         ${(externalPayees || []).map((p: { name: string; amount: number }) => `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">External payout</td><td style="padding:4px 0">${p.name}</td><td style="padding:4px 0;text-align:right">${fmt$(p.amount)}</td></tr>`).join('')}
-        ${(rebatePayees || []).filter((rb: { amount: number }) => rb.amount > 0).map((rb: { label: string; side: string | null; amount: number }) => `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${rb.label}</td><td style="padding:4px 0">${rb.side === 'buyer' ? (buyerContact?.name || '--') : rb.side === 'seller' ? (sellerContact?.name || '--') : (buyerContact?.name || sellerContact?.name || '--')}</td><td style="padding:4px 0;text-align:right">${fmt$(rb.amount)}</td></tr>`).join('')}
+        ${(rebatePayees || []).filter((rb: { amount: number }) => rb.amount > 0).map((rb: { label: string; side: string | null; amount: number }) => `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${rb.label}</td><td style="padding:4px 0">${escHtml(rb.side === 'buyer' ? (buyerNames || '--') : rb.side === 'seller' ? (sellerNames || '--') : (buyerNames || sellerNames || '--'))}</td><td style="padding:4px 0;text-align:right">${fmt$(rb.amount)}</td></tr>`).join('')}
       </tbody>
     </table>
   </div>
