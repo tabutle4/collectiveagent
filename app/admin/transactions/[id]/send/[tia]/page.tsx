@@ -56,8 +56,10 @@ function SendDocumentInner() {
       if (!txnRes.ok) throw new Error(txnJson.error || 'Failed to load')
       setData(txnJson)
 
-      // Loaded in both modes: the note prints on the CDA, so the approver
-      // needs to see it too, not only whoever sends it.
+      // Every mode that shows a CDA. Skipped in statement mode, where the note
+      // editor does not render at all, so the request could only ever produce a
+      // 403 that nothing displays.
+      if (mode !== 'statement') {
       try {
         const nRes = await fetch(`/api/admin/transactions/${id}/cda-notes`)
         if (nRes.ok) {
@@ -77,6 +79,7 @@ function SendDocumentInner() {
       } catch {
         // Still never fails the page, but no longer pretends the note is empty.
         setCdaNotesLoadError('The note on this CDA could not be loaded, so it cannot be edited here.')
+      }
       }
 
       if (mode === 'title') {
@@ -273,7 +276,7 @@ function SendDocumentInner() {
               rows={3}
               maxLength={4000}
               disabled={!cdaNotesLoaded}
-              className="input-luxury disabled:opacity-60"
+              className={cdaNotesLoaded ? 'input-luxury' : 'input-luxury bg-luxury-gray-6'}
               placeholder={
                 cdaNotesLoaded
                   ? 'Anything title needs to know. Leave blank for no note.'
@@ -284,8 +287,9 @@ function SendDocumentInner() {
               <p className="text-xs text-amber-700 mt-1">{cdaNotesLoadError}</p>
             ) : (
               <p className="text-xs text-luxury-gray-3 mt-1">
-                This prints on the CDA itself, so the title company reads it. Internal remarks about
-                the commission belong on the commission notes instead.
+                This prints on the CDA itself and is added to the email that sends it to title, so
+                the title company reads it twice. Internal remarks about the commission belong on
+                the commission notes instead.
               </p>
             )}
           </div>
@@ -332,6 +336,21 @@ function SendDocumentInner() {
                 Your saved email signature is added automatically. Attaches the CDA and{title?.wiring_filename ? ` ${title.wiring_filename}` : ' the wiring instructions'}.
               </p>
             </div>
+            {/* What the server will append, shown read-only rather than dropped
+                into the Message box. Bound to cdaNotesSaved, not cdaNotes: the
+                email is built server-side from the stored note, so an edit that
+                has not been saved is not in it, and showing the unsaved text
+                here would promise something that is not going to be sent. */}
+            {cdaNotesSaved && (
+              <div className="border-l-4 border-luxury-accent pl-3 py-2">
+                <p className="field-label">Added to this email below your message</p>
+                <p className="text-sm text-luxury-gray-1 whitespace-pre-wrap leading-relaxed">{cdaNotesSaved}</p>
+                <p className="text-xs text-luxury-gray-3 mt-2">
+                  This is the note on the CDA. It is added by the server when you send, so it always
+                  matches the document. Edit it above and save to change it.
+                </p>
+              </div>
+            )}
           </div>
         )}
 

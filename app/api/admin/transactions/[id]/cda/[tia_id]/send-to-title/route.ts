@@ -170,7 +170,31 @@ export async function POST(
       .split('\n')
       .map(line => line.trim() === '' ? '<div style="height:10px"></div>' : `<div>${escapeHtml(line)}</div>`)
       .join('')
-    const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#333;line-height:1.5">${bodyHtml}${
+    // The CDA note, in the email as well as on the attached document.
+    //
+    // Appended HERE, server-side at send time, and deliberately NOT pre-filled
+    // into the editable Message box: the box is populated when the page loads,
+    // so a note edited afterwards would leave the email carrying the old text
+    // while the attached PDF carried the new one. Built from model.notes, the
+    // same value buildCdaPdf renders, so the two cannot disagree.
+    //
+    // Split into one div per line rather than using white-space:pre-wrap. That
+    // is the convention bodyHtml above already uses, and Outlook renders mail
+    // through the Word engine, which does not support pre-wrap - a multi-line
+    // note would collapse into one run for exactly the recipient this email is
+    // written for. Escaped with the same helper the body uses.
+    const notesHtml = model.notes
+      ? `<div style="margin-top:20px;border-left:3px solid #C5A278;padding:8px 14px">`
+        + `<div style="font-weight:600;color:#333;margin-bottom:6px;font-size:13px">Note on the CDA</div>`
+        + `<div style="font-size:13px;color:#555">`
+        + model.notes
+            .split('\n')
+            .map(line => line.trim() === '' ? '<div style="height:8px"></div>' : `<div>${escapeHtml(line)}</div>`)
+            .join('')
+        + `</div></div>`
+      : ''
+
+    const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#333;line-height:1.5">${bodyHtml}${notesHtml}${
       signatureHtml ? `<div style="margin-top:24px">${signatureHtml}</div>` : ''
     }</div>`
 

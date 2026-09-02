@@ -19,9 +19,6 @@ const INK = rgb(0.2, 0.2, 0.2)
 const MUTED = rgb(0.45, 0.45, 0.45)
 const LINE = rgb(0.85, 0.85, 0.85)
 
-// pdf-lib's standard fonts use WinAnsi (CP1252); a character outside it makes
-// drawText throw. Normalize common smart punctuation to ASCII and drop anything
-// still outside Latin-1 so an odd character in a name/address never crashes a send.
 // Make a string safe for the standard PDF fonts.
 //
 // pdf-lib encodes StandardFonts as WinAnsi, and BOTH drawText and
@@ -42,6 +39,17 @@ const LINE = rgb(0.85, 0.85, 0.85)
 // someone typing one meant a gap. Newlines are stripped here too: this function
 // is for a single drawn line, and the one caller with multi-line text splits on
 // newlines BEFORE calling this, so nothing depends on them surviving.
+//
+// The final strip used to be `[^\x00-\xFF]` - everything above Latin-1 - which
+// was far too wide. WinAnsi is CP1252, not Latin-1, and it carries 27 extra code
+// points at bytes 0x80-0x9F. Every one of those was being dropped. Measured
+// against pdf-lib 1.17.1 directly: it accepts all 27, so a bullet, a euro sign,
+// a trademark and an oe ligature all render. Dropping them meant a bullet list
+// pasted out of Word showed its bullets on the web CDA and the approval screen
+// and then lost them on the PDF title receives - the same shape of surprise the
+// tab bug had, without the crash. They are kept now, and the handful of
+// characters WinAnsi genuinely cannot carry are mapped to something readable
+// rather than deleted.
 function enc(s: string | null | undefined): string {
   return String(s ?? '')
     .replace(/[‘’]/g, "'")
@@ -50,9 +58,37 @@ function enc(s: string | null | undefined): string {
     .replace(/—/g, '--')
     .replace(/…/g, '...')
     .replace(/\t/g, ' ')
+    // Characters WinAnsi cannot carry but people paste constantly. Mapped to a
+    // readable ASCII stand-in, because silently deleting them changes meaning:
+    // "Fee EUR500" is wrong but legible, "Fee 500" reads as dollars.
+    .replace(/[\u2010\u2011\u2012]/g, '-')
+    .replace(/\u2015/g, '--')
+    .replace(/\u2032/g, "'")
+    .replace(/\u2033/g, '"')
+    .replace(/\u2192/g, '->')
+    .replace(/\u2190/g, '<-')
+    .replace(/\u2265/g, '>=')
+    .replace(/\u2264/g, '<=')
+    .replace(/\u2044/g, '/')
+    .replace(/\u2116/g, 'No.')
+    .replace(/\u2120/g, '(SM)')
+    // A non-breaking space renders, but wrap() splits on a plain space, so an
+    // nbsp-joined phrase would never break and could run off the page.
+    .replace(/\u00A0/g, ' ')
+    // Unicode line and paragraph separators: this function draws one line.
+    .replace(/[\u2028\u2029]/g, ' ')
+    // Zero-width and BOM: invisible, and they widen the measured string.
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
     // Every remaining control character, C0 and C1, newlines included.
     .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
-    .replace(/[^\x00-\xFF]/g, '')
+    // Anything still outside WinAnsi. Printable Latin-1, plus the 27 CP1252
+    // code points at bytes 0x80-0x9F that pdf-lib accepts. This class overlaps
+    // the control strip above on purpose: that one documents the tab crash, this
+    // one is the encoder's actual boundary.
+    .replace(
+      /[^\x20-\x7E\xA0-\xFF\u20AC\u201A\u0192\u201E\u2026\u2020\u2021\u02C6\u2030\u0160\u2039\u0152\u017D\u2018\u2019\u201C\u201D\u2022\u2013\u2014\u02DC\u2122\u0161\u203A\u0153\u017E\u0178]/g,
+      ''
+    )
 }
 
 function money(n: number | null | undefined): string {
@@ -238,9 +274,14 @@ export async function buildCdaPdf(model: CdaModel): Promise<Uint8Array> {
     // WinAnsi cannot encode, so measuring and drawing have to see the same
     // characters.
     for (const rawLine of String(model.notes).split(/\r?\n/)) {
+      // Encode once, then decide. The blank test used to run on the RAW line, so
+      // a line holding only characters enc() strips passed the test, came back
+      // empty, wrapped to nothing, and disappeared instead of leaving the blank
+      // line the typist put there.
+      const encoded = enc(rawLine)
       // A blank line in the typed note stays a blank line on the page.
-      if (!rawLine.trim()) { ensureSpace(12); y -= 12; continue }
-      for (const line of wrap(enc(rawLine), font, 10, CONTENT_W)) {
+      if (!encoded.trim()) { ensureSpace(12); y -= 12; continue }
+      for (const line of wrap(encoded, font, 10, CONTENT_W)) {
         ensureSpace(14)
         text(line, MARGIN, 10, font, INK)
         y -= 14
