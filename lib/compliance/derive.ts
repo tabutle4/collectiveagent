@@ -25,6 +25,56 @@ import { emailButton } from '@/lib/email/layout'
 export const SIDE_MODES_FILTER = '("compliance","retainer")'
 
 /**
+ * The side of the deal a `representing` answer belongs to.
+ *
+ * `representing` records the product, not just the side. A new construction
+ * buyer answers `nc_buyer`, a commercial buyer `commercial_buyer`, a business
+ * buyer `business_buyer` - all three are the BUYER side, and the seller family
+ * is the same shape. The dedupe key below and the resubmission locks in the
+ * compliance form both keyed on the raw string, so one agent who filed once as
+ * `buyer` and again as `nc_buyer` produced a phantom second side: the complete
+ * submission could not outrank the open one because they landed under different
+ * keys, and a one-sided deal then needed two approvals to clear. On
+ * 9020 Madera Road the buyer side was approved 6/15 and the deal still read
+ * incomplete off a `nc_buyer` row filed 7/20.
+ *
+ * Aliases collapse WITHIN a side only. `landlord` and `tenant` are different
+ * sides and must never merge, and neither may `seller` and `buyer`: an agent
+ * filing two of those is attempting to represent both sides of the deal, which
+ * is a real situation the office has to see rather than a duplicate to fold
+ * away.
+ *
+ * An unrecognised value is returned unchanged rather than bucketed, so a new
+ * option added to the form keeps a side of its own until it is deliberately
+ * aliased here. Display code must NOT use this - an agent who filed as a new
+ * construction buyer should still read "New construction buyer side".
+ */
+const SIDE_ALIASES: Record<string, string> = {
+  buyer: 'buyer',
+  nc_buyer: 'buyer',
+  // transactions.representing carries a third spelling of the same thing on 3
+  // rows, and transactionTypes.ts already aliases new_construction_buyer_v2 to
+  // nc_buyer_v2. Both inputs reach this function, so both spellings map here or
+  // a deal stamped new_construction_buyer would fail to match a side filed as
+  // buyer - the exact mismatch this helper exists to close.
+  new_construction_buyer: 'buyer',
+  commercial_buyer: 'buyer',
+  business_buyer: 'buyer',
+  seller: 'seller',
+  commercial_seller: 'seller',
+  business_seller: 'seller',
+}
+
+// Deliberately NOT aliased: `dual` (46 transactions) means the deal is
+// intermediary, not that the agent is on the buyer or seller side. Folding it
+// into either would make a one-sided lock match a two-sided deal.
+
+export function canonicalSide(representing: unknown): string {
+  const raw = String(representing || '').toLowerCase().trim()
+  return SIDE_ALIASES[raw] || raw
+}
+
+/**
  * Pick the submissions that act as compliance sides for ONE transaction.
  *
  * Compliance submissions win outright. The retainer is used only when the deal
@@ -45,7 +95,7 @@ export const SIDE_MODES_FILTER = '("compliance","retainer")'
  * many sides the deal had.
  *
  * Two agents co-listing ONE side keep both rows - they are different agents,
- * and sidesCovered already counts distinct `representing` rather than rows, so
+ * and sidesCovered already counts distinct sides rather than rows, so
  * both still have to be approved.
  *
  * Callers holding submissions for several transactions must group by
@@ -58,14 +108,14 @@ export const SIDE_MODES_FILTER = '("compliance","retainer")'
  * many the deal expects.
  *
  * Counting submissions is wrong: two agents co-listing the buyer side file two
- * submissions but cover one side. Counting distinct `representing` values is
+ * submissions but cover one side. Counting distinct canonical sides is
  * the real measure. Older submissions can carry no `representing` at all, and
  * in that case coverage cannot be determined from them, so fall back to the
  * submission count rather than collapsing every unknown into a single side and
  * reporting a complete deal as incomplete.
  */
 export function sidesCovered(subs: any[]): number {
-  const vals = subs.map(s => String(s.data?.representing || '').toLowerCase().trim())
+  const vals = subs.map(s => canonicalSide(s.data?.representing))
   if (vals.some(v => !v)) return subs.length
   return new Set(vals).size
 }
@@ -155,7 +205,7 @@ export function pickSideSubmissions<
   // then newest. Every caller SELECTs `status`, which that test reads.
   const winnerByKey = new Map<string, T>()
   for (const s of pool) {
-    const key = `${s.agent_id || ''}:${String(s.data?.representing || '').toLowerCase().trim()}`
+    const key = `${s.agent_id || ''}:${canonicalSide(s.data?.representing)}`
     const held = winnerByKey.get(key)
     if (!held || outranks(s, held)) winnerByKey.set(key, s)
   }

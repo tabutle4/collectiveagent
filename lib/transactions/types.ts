@@ -55,10 +55,24 @@ export const STATUS_COLORS: Record<TransactionStatus, string> = {
 
 // ===== Compliance Status =====
 
+// The live vocabulary in transactions.compliance_status, checked against the
+// database 2026-09-04. This list was missing 'complete', 'not_submitted' and
+// 'incomplete' - the three most common values in the table, 1,239 rows between
+// them - while listing 'not_requested', which is retired.
+//
+// There is only ONE "not requested" state. 'not_requested' and 'not_submitted'
+// were two spellings of it, differing only by which route created the deal, and
+// every UI surface already labelled 'not_submitted' as "Not requested".
+//
+// 'approved' and 'revision_requested' have no live rows but are still
+// recognised by readers elsewhere (complianceLabel on the payouts report,
+// sideStatusLabel in lib/compliance/derive.ts), so they stay for older rows.
 export const COMPLIANCE_STATUSES = [
-  'not_requested',
+  'not_submitted',
   'submitted',
   'in_review',
+  'incomplete',
+  'complete',
   'approved',
   'revision_requested',
 ] as const

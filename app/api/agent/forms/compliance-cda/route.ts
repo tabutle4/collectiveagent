@@ -12,6 +12,7 @@ import { ensurePrimaryTia, autoCascadeTransaction, recomputeOfficeNet } from '@/
 import { syncEcommissionRecords } from '@/lib/transactions/ecommissionSync'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 import { findDuplicateTransactions, findPartialAddressMatches } from '@/lib/transactions/dedupe'
+import { canonicalSide } from '@/lib/compliance/derive'
 
 // Convert compliance-form commission inputs into a gross commission dollar
 // amount. commission_basis_price is the PRICE the commission is computed on
@@ -557,7 +558,10 @@ export async function POST(request: NextRequest) {
       //
       // Derived from the side's own completed submission, the same test the full
       // form uses, so the two forms cannot disagree about what is locked.
-      const repForLock = String(formFields.representing || txn.representing || '').toLowerCase().trim()
+      // canonicalSide, not the raw answer: `buyer` and `nc_buyer` are the same
+      // side, and keying on the raw string let a refile under the sibling name
+      // walk straight past this lock.
+      const repForLock = canonicalSide(formFields.representing || txn.representing)
       const { data: completedSubRows } = await supabaseAdmin
         .from('agent_form_submissions')
         .select('data')
@@ -565,7 +569,7 @@ export async function POST(request: NextRequest) {
         .eq('status', 'complete')
         .filter('data->>submission_mode', 'eq', 'compliance')
       const sideLockedSub = !!repForLock && (completedSubRows || []).some(
-        (row: any) => String(row?.data?.representing || '').toLowerCase().trim() === repForLock
+        (row: any) => canonicalSide(row?.data?.representing) === repForLock
       )
       const submissionData = {
         ...formFields, notes: notes || null, changed_fields: changedFields, submission_mode: 'subsequent',
@@ -1543,11 +1547,14 @@ export async function POST(request: NextRequest) {
         .eq('status', 'complete')
         .filter('data->>submission_mode', 'eq', 'compliance')
       for (const r of completedRows || []) {
-        const rep = String((r as any)?.data?.representing || '').toLowerCase().trim()
+        // Canonical side, so a side approved as `buyer` also locks a refile
+        // arriving as `nc_buyer`. Before this the deal's price, gross
+        // commission, dates, BTSA and rebate were rewritten by that refile.
+        const rep = canonicalSide((r as any)?.data?.representing)
         if (rep) completedSides.add(rep)
       }
     }
-    const thisSide = String(representing || '').toLowerCase().trim()
+    const thisSide = canonicalSide(representing)
     // Locked when THIS side is signed off. Another side being complete does not
     // lock this one: on an intermediary deal the second agent still has to be
     // able to file.

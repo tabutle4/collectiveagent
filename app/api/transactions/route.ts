@@ -247,7 +247,7 @@ export async function POST(request: NextRequest) {
       ...body,
       submitted_by: submittedBy,
       status: body.status || 'prospect',
-      compliance_status: body.compliance_status || 'not_requested',
+      compliance_status: body.compliance_status || 'not_submitted',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })

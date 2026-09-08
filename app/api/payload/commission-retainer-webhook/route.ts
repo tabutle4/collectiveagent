@@ -335,7 +335,7 @@ export async function POST(request: NextRequest) {
             .insert({
               property_address: submittedAddress || `${payerName || 'Payload payment'} (Commission)`,
               status: 'prospect',
-              compliance_status: 'not_requested',
+              compliance_status: 'not_submitted',
               submitted_by: commissionAgent?.id ?? null,
               office_location: commissionAgent?.office ?? null,
               created_at: nowIso,
@@ -474,7 +474,7 @@ export async function POST(request: NextRequest) {
         client_name: payerName || null,
         transaction_type: transactionType,
         status: 'prospect',
-        compliance_status: 'not_requested',
+        compliance_status: 'not_submitted',
         submitted_by: agentUser.id,
         office_location: agentUser.office || null,
         created_at: nowIso,

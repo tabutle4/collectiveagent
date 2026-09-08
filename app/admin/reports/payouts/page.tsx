@@ -104,7 +104,9 @@ function complianceLabel(status: string): { label: string; cls: string } {
     complete:      { label: 'complete',      cls: 'text-green-700' },
     approved:      { label: 'complete',      cls: 'text-green-700' },
     not_submitted: { label: 'not requested', cls: 'text-luxury-gray-3' },
+    not_requested: { label: 'not requested', cls: 'text-luxury-gray-3' },
     in_review:     { label: 'in review',     cls: 'text-yellow-600' },
+    submitted:     { label: 'in review',     cls: 'text-yellow-600' },
     incomplete:    { label: 'incomplete',    cls: 'text-red-500' },
   }
   return map[status] || { label: status, cls: 'text-luxury-gray-3' }

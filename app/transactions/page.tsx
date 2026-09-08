@@ -830,6 +830,7 @@ export default function TransactionsPage() {
                     {formatVolume(t) && <p>{formatVolume(t)}</p>}
                     {canViewAll &&
                       t.compliance_status &&
+                      t.compliance_status !== 'not_submitted' &&
                       t.compliance_status !== 'not_requested' && (
                         <p>{t.compliance_status.replace(/_/g, ' ')}</p>
                       )}
