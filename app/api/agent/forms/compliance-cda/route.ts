@@ -7,6 +7,7 @@ import { Resend } from 'resend'
 import { normalizeAddressForStorage, toTitleCase, normalizePropertyStats, normalizeAddressComponents, buildDisplayAddress } from '@/lib/transactions/utils'
 import { checkRequired, requiredFieldsError, complianceRules, complianceIsLease } from '@/lib/forms/requiredFields'
 import { feeCodeFromRepresenting, feeCodeFromRetainerType } from '@/lib/transactions/feeCode'
+import { applyRetainerShell, retainerProspectName } from '@/lib/transactions/retainerShell'
 import { createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
 import { ensurePrimaryTia, autoCascadeTransaction, recomputeOfficeNet } from '@/lib/transactions/cascade'
 import { syncEcommissionRecords } from '@/lib/transactions/ecommissionSync'
@@ -36,8 +37,9 @@ function retainerNameTerm(clientName: any): string {
 // retainer submission check, and the compliance submission check. They must
 // agree, or the form shows a match the submit does not honor, or the reverse.
 async function findRetainerProspects(agentId: string, clientName: any) {
+  // No early return on a blank term any more: the panel has to appear even when
+  // the name gives nothing to match on.
   const term = retainerNameTerm(clientName)
-  if (!term) return []
   const { data: tiaRows } = await supabaseAdmin
     .from('transaction_internal_agents')
     .select('transaction_id')
@@ -46,13 +48,32 @@ async function findRetainerProspects(agentId: string, clientName: any) {
   if (!tiaRows?.length) return []
   const ids = Array.from(new Set(tiaRows.map((r: any) => r.transaction_id).filter(Boolean)))
   if (!ids.length) return []
+  // Every open retainer prospect this agent holds, NOT just the ones whose
+  // name matches. Matching on the name could not work: the agent who most needs
+  // this panel is the one CORRECTING the client name, and the record they need
+  // is filed under the name they are replacing. On Prospect - Matthew Hetrick
+  // the first filing was recorded under the agent's own name, the second under
+  // the client's, so the term went from "Cherrish" to "Matthew", nothing
+  // matched, and a duplicate deal was created that had to be relinked by hand.
+  //
+  // Returning them all is safe at this volume: two open retainer prospects
+  // exist across the whole brokerage, and no agent holds more than two. Name
+  // matches are listed first so the likely one is still at the top.
   const { data: prospects } = await supabaseAdmin
     .from('transactions')
     .select('id, client_name, property_address, created_at, status')
     .in('id', ids)
-    .or(`client_name.ilike.%${term}%,property_address.ilike.%${term}%`)
     .eq('status', 'prospect')
-  return (prospects || []).map((t: any) => ({
+    .is('archived_at', null)
+  const scored = (prospects || []).map((t: any) => {
+    const haystack = `${t.client_name || ''} ${t.property_address || ''}`.toLowerCase()
+    return { t, matches: term ? haystack.includes(term.toLowerCase()) : false }
+  })
+  scored.sort((a, b) => {
+    if (a.matches !== b.matches) return a.matches ? -1 : 1
+    return String(b.t.created_at || '').localeCompare(String(a.t.created_at || ''))
+  })
+  return scored.map(({ t }: any) => ({
     id: t.id,
     client_name: t.client_name || t.property_address,
     created_at: t.created_at,
@@ -289,6 +310,10 @@ export async function POST(request: NextRequest) {
       const [min, max] = limits[retainer_transaction_type] || [0, 0]
       if (amount < min || amount > max) return NextResponse.json({ error: `Retainer amount must be between $${min} and $${max} for this transaction type` }, { status: 400 })
       const isLease = retainer_transaction_type !== 'residential_buyer'
+      // Resolved once: the attach branch, the create branch and the shell below
+      // must all agree on the deal's type, because the retainer's income side is
+      // derived from it.
+      const retainerTxnType = feeCodeFromRetainerType(retainer_transaction_type) || (isLease ? 'tenant_non_apt_v2' : 'buyer_v2')
 
       // Check for existing retainer transactions for this agent with a similar client name.
       // confirm_new_deal=true means agent already reviewed the matches and confirmed this is a new deal.
@@ -405,7 +430,7 @@ export async function POST(request: NextRequest) {
         }
         transactionId = attachRetainerId
         await supabaseAdmin.from('transactions').update({
-          transaction_type: feeCodeFromRetainerType(retainer_transaction_type) || (isLease ? 'tenant_non_apt_v2' : 'buyer_v2'),
+          transaction_type: retainerTxnType,
           updated_at: now,
         }).eq('id', transactionId)
         // A basis already on the row means the office has priced it. The agent
@@ -427,7 +452,7 @@ export async function POST(request: NextRequest) {
         }
       } else {
         const { data: newTxn, error: createErr } = await supabaseAdmin.from('transactions')
-          .insert({ property_address: formatNameToTitleCase(client_name.trim()), client_name: formatNameToTitleCase(client_name.trim()), status: 'prospect', transaction_type: feeCodeFromRetainerType(retainer_transaction_type) || (isLease ? 'tenant_non_apt_v2' : 'buyer_v2'), submitted_by: agentId, updated_at: now })
+          .insert({ property_address: retainerProspectName(client_name), client_name: formatNameToTitleCase(client_name.trim()), status: 'prospect', transaction_type: retainerTxnType, submitted_by: agentId, updated_at: now })
           .select('id').single()
         if (createErr || !newTxn) { console.error('Failed to create retainer transaction:', createErr); return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 }) }
         transactionId = newTxn.id
@@ -435,6 +460,20 @@ export async function POST(request: NextRequest) {
           transaction_id: transactionId, agent_id: agentId, agent_role: 'primary_agent', ...retainerFields,
         })
       }
+      // The transaction-level half of the shell: zero base commission, the
+      // retainer as additional income, and the checklist completed so the deal
+      // reads ready to pay out. The commission row above is left alone.
+      //
+      // The amount follows the same rule the commission row does: when the
+      // office has already priced this retainer, its figure wins over what the
+      // agent's form collected, or the deal would show one number and the money
+      // row another.
+      await applyRetainerShell({
+        transactionId,
+        transactionType: retainerTxnType,
+        amount: officeHasPriced ? existingBasis : amount,
+        completedBy: agentId,
+      })
       // Attaching to an existing retainer is a resubmission, not a new filing.
       // The deal and the commission row are already reused above; the
       // submission has to be too, or Leah gets a second row on her queue for

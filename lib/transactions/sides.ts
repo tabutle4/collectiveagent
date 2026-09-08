@@ -43,9 +43,11 @@ export function sideCategory(side: Side | string | null | undefined): SideCatego
  * type by convention. Buying-side primary agents on intermediary deals use the
  * `other_side_transaction_type` to determine their side.
  *
- * Internal — used by defaultSideForRoleAndTransaction.
+ * Exported so lib/transactions/retainerShell.ts can resolve a retainer's side
+ * from the deal's type instead of repeating the landlord/seller string test.
+ * Used by defaultSideForRoleAndTransaction below.
  */
-function defaultSideForTransactionType(
+export function defaultSideForTransactionType(
   transactionType: string | null | undefined
 ): Side | null {
   if (!transactionType) return null

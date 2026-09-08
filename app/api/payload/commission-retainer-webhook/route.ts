@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase, fetchAllRows } from '@/lib/supabase'
 import { canonicalAddressKey, findExactTransactionByAddress } from '@/lib/transactions/dedupe'
 import { autoCascadeTransaction } from '@/lib/transactions/cascade'
+import { applyRetainerShell, retainerProspectName, retainerClientKey } from '@/lib/transactions/retainerShell'
+import { formatNameToTitleCase } from '@/lib/nameFormatter'
 import { Resend } from 'resend'
 import { getEmailLayout, emailSection, emailButton } from '@/lib/email/layout'
 
@@ -438,7 +440,15 @@ export async function POST(request: NextRequest) {
     // for the same client, so this matches on agent plus client name against
     // prospects that are still open. Anything already advanced past prospect
     // is a live deal and must not absorb a new retainer silently.
-    const retainerKey = (payerName || '').trim().toLowerCase()
+    // retainerClientKey, not a bare lowercase compare: retainer prospects are
+    // named `Client Name - Prospect`, and an exact match against the payer name
+    // stops matching the moment that suffix is present. Every retainer payment
+    // after that would mint another duplicate deal.
+    //
+    // client_name and property_address are tested independently rather than as
+    // a fallback chain, so a deal whose client_name drifted still matches on its
+    // address and vice versa.
+    const retainerKey = retainerClientKey(payerName)
     if (retainerKey) {
       const { data: priorProspects } = await supabase
         .from('transactions')
@@ -446,8 +456,10 @@ export async function POST(request: NextRequest) {
         .eq('submitted_by', agentUser.id)
         .eq('status', 'prospect')
       const already = (priorProspects || []).find((t: any) =>
-        !t.archived_at &&
-        String(t.client_name || t.property_address || '').trim().toLowerCase() === retainerKey
+        !t.archived_at && (
+          retainerClientKey(t.client_name) === retainerKey ||
+          retainerClientKey(t.property_address) === retainerKey
+        )
       )
       if (already) {
         const { data: check, error: dupErr } = await supabase
@@ -470,8 +482,8 @@ export async function POST(request: NextRequest) {
     const { data: newTxn, error: txnError } = await supabase
       .from('transactions')
       .insert({
-        property_address: payerName || 'Retainer client',
-        client_name: payerName || null,
+        property_address: retainerProspectName(payerName),
+        client_name: payerName ? formatNameToTitleCase(String(payerName).trim()) : null,
         transaction_type: transactionType,
         status: 'prospect',
         compliance_status: 'not_submitted',
@@ -570,6 +582,16 @@ export async function POST(request: NextRequest) {
     } catch (err: any) {
       console.error('Pay-link retainer row block error:', err?.message || err)
     }
+
+    // Zero base commission, the retainer as additional income, checklist
+    // completed. Same shape the retainer form produces, so a deal opened by a
+    // payment and one opened by the form are indistinguishable afterwards.
+    await applyRetainerShell({
+      transactionId: newTxn.id,
+      transactionType: txnTypeCode,
+      amount,
+      completedBy: agentUser.id,
+    })
 
     const { data: check, error: checkError } = await supabase
       .from('checks_received')
