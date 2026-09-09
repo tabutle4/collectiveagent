@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
-import { pickHeadSubmission } from '@/lib/compliance/derive'
+import { pickHeadSubmission, canonicalSide } from '@/lib/compliance/derive'
 
 export const dynamic = 'force-dynamic'
 
@@ -343,9 +343,26 @@ export async function GET(request: NextRequest) {
     // submissions ride along under `superseded`.
     //
     // Rows are ordered submitted_at DESC, so the first of each group is the
-    // newest and becomes the row. Unlinked submissions (no transaction) and
-    // retainers are never grouped: without a deal, agent + side does not
-    // identify anything.
+    // newest and becomes the row. Only submissions with no transaction are left
+    // ungrouped: without a deal, agent + side does not identify anything.
+    //
+    // The key uses canonicalSide, not the raw `representing` answer. Grouping on
+    // the raw string split one side into two rows whenever an agent filed once
+    // as `buyer` and again as `nc_buyer` - on 1142 Pine Rivage Dr. Sedreia's two
+    // filings showed as two rows here while pickSideSubmissions had already
+    // collapsed them into one side, so this tracker and the status derivation
+    // disagreed about how many sides the deal had.
+    //
+    // Retainers group too, which they previously did not. A retainer carries no
+    // `representing` at all, so two retainer filings by one agent on one deal
+    // both key on a blank side and collapse - which is what the derivation does
+    // with them. On Prospect - Matthew Hetrick, Cherrish's 8/17 and 8/18
+    // retainers showed as two rows for the same retainer.
+    //
+    // `submission_mode` is in the key so a compliance submission and a retainer
+    // on the same deal never merge into one row. They are different things and
+    // pickSideSubmissions treats them as such: compliance wins outright and the
+    // retainer stops contributing once a real compliance side exists.
     // Which submission survives as the row is pickHeadSubmission's decision,
     // the same one the status derivation makes, so the office can never
     // complete the row it is shown and have a different row be the one read.
@@ -360,12 +377,12 @@ export async function GET(request: NextRequest) {
     const groupOrder: string[] = []
     const groups: Record<string, any[]> = {}
     for (const row of result) {
-      if (!row.transaction_id || row.submission_mode !== 'compliance') {
+      if (!row.transaction_id) {
         row.superseded = []
         collapsed.push(row)
         continue
       }
-      const key = `${row.transaction_id}:${row.agent_id || ''}:${row.side || ''}`
+      const key = `${row.transaction_id}:${row.agent_id || ''}:${canonicalSide(row.side)}:${row.submission_mode}`
       if (!groups[key]) { groups[key] = []; groupOrder.push(key) }
       groups[key].push(row)
       // Placeholder keeps the group in its first-appearance position, so the

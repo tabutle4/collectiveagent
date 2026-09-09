@@ -183,9 +183,11 @@ export default function ComplianceCdaForm() {
   }, [router])
 
   // Deep link support: /agent/forms/compliance-cda?mode=subsequent opens the
-  // right mode directly. The retired subsequent-compliance page redirects here
-  // with this parameter. Read from window.location instead of useSearchParams
-  // so the page needs no Suspense boundary.
+  // right mode directly. The old subsequent-compliance page used to redirect
+  // here with this parameter; it and its unreachable API route have now been
+  // deleted, so an old bookmark 404s rather than forwarding. Read from
+  // window.location instead of useSearchParams so the page needs no Suspense
+  // boundary.
   useEffect(() => {
     const m = new URLSearchParams(window.location.search).get('mode')
     if (m === 'subsequent' || m === 'retainer' || m === 'compliance') setMode(m)

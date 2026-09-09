@@ -14,6 +14,7 @@ import { syncEcommissionRecords } from '@/lib/transactions/ecommissionSync'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 import { findDuplicateTransactions, findPartialAddressMatches } from '@/lib/transactions/dedupe'
 import { canonicalSide } from '@/lib/compliance/derive'
+import { getSideLock, hasAnyCompleteSide, type SideLockReason } from '@/lib/compliance/sideLock'
 
 // Convert compliance-form commission inputs into a gross commission dollar
 // amount. commission_basis_price is the PRICE the commission is computed on
@@ -597,22 +598,19 @@ export async function POST(request: NextRequest) {
       //
       // Derived from the side's own completed submission, the same test the full
       // form uses, so the two forms cannot disagree about what is locked.
-      // canonicalSide, not the raw answer: `buyer` and `nc_buyer` are the same
-      // side, and keying on the raw string let a refile under the sibling name
-      // walk straight past this lock.
+      // One helper for both forms, so they cannot disagree about what is
+      // locked. A side locks when it is signed off, or when it has been filed
+      // and the deal's checklist is finished - see lib/compliance/sideLock.ts.
       const repForLock = canonicalSide(formFields.representing || txn.representing)
-      const { data: completedSubRows } = await supabaseAdmin
-        .from('agent_form_submissions')
-        .select('data')
-        .eq('transaction_id', txn.id)
-        .eq('status', 'complete')
-        .filter('data->>submission_mode', 'eq', 'compliance')
-      const sideLockedSub = !!repForLock && (completedSubRows || []).some(
-        (row: any) => canonicalSide(row?.data?.representing) === repForLock
-      )
+      const subLock = await getSideLock({
+        transactionId: txn.id,
+        transactionType: txn.transaction_type,
+        representing: formFields.representing || txn.representing,
+      })
+      const sideLockedSub = subLock.locked
       const submissionData = {
         ...formFields, notes: notes || null, changed_fields: changedFields, submission_mode: 'subsequent',
-        ...(sideLockedSub ? { locked_transaction: true, locked_reason: 'side_complete' } : {}),
+        ...(sideLockedSub ? { locked_transaction: true, locked_reason: subLock.reason } : {}),
       }
       const { data: submission } = await supabaseAdmin.from('agent_form_submissions')
         .insert({ form_id: formRecord?.id || null, agent_id: agentId, submitted_at: now, status: 'submitted', transaction_id: txn.id, data: submissionData, updated_at: now })
@@ -1119,7 +1117,7 @@ export async function POST(request: NextRequest) {
         ? `<div style="background:#fff8e6;padding:14px 18px;margin:0 0 20px;border-left:3px solid #C5A278;"><p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#1a1a1a;">Changed fields:</p><ul style="margin:0;padding-left:18px;">${changedFields.map(f => `<li style="font-size:13px;color:#555;">${formatLabel(f)}</li>`).join('')}</ul></div>`
         : '<p style="font-size:13px;color:#555;margin:0 0 16px;">No field changes detected.</p>'
       const lockedNote = (txn.is_locked || sideLockedSub)
-        ? `<p style="font-size:13px;color:#C5A278;margin:0 0 16px;"><strong>Note:</strong> ${txn.is_locked ? 'Transaction is locked' : `The ${repForLock} side has already been reviewed`}. Manual update required.</p>`
+        ? `<p style="font-size:13px;color:#C5A278;margin:0 0 16px;"><strong>Note:</strong> ${txn.is_locked ? 'Transaction is locked' : subLock.reason === 'checklist_complete' ? `The ${repForLock} side is filed and the checklist is complete` : `The ${repForLock} side has already been reviewed`}. Manual update required.</p>`
         : ''
       const notifyHtml = getEmailLayout(
         `<p style="margin:0 0 16px;font-size:14px;color:#555555;">Resubmission received for <strong style="color:#1a1a1a;">${txn.property_address}</strong>.</p>
@@ -1577,27 +1575,18 @@ export async function POST(request: NextRequest) {
     // derivation already read, so a lock derived from it can never disagree
     // with what the office sees on screen, and there is no new column to keep
     // in step.
-    const completedSides = new Set<string>()
-    if (txn) {
-      const { data: completedRows } = await supabaseAdmin
-        .from('agent_form_submissions')
-        .select('data')
-        .eq('transaction_id', txn.id)
-        .eq('status', 'complete')
-        .filter('data->>submission_mode', 'eq', 'compliance')
-      for (const r of completedRows || []) {
-        // Canonical side, so a side approved as `buyer` also locks a refile
-        // arriving as `nc_buyer`. Before this the deal's price, gross
-        // commission, dates, BTSA and rebate were rewritten by that refile.
-        const rep = canonicalSide((r as any)?.data?.representing)
-        if (rep) completedSides.add(rep)
-      }
-    }
-    const thisSide = canonicalSide(representing)
-    // Locked when THIS side is signed off. Another side being complete does not
-    // lock this one: on an intermediary deal the second agent still has to be
-    // able to file.
-    const sideLocked = !!thisSide && completedSides.has(thisSide)
+    // Same helper the subsequent path above uses. Locked when THIS side is
+    // signed off, or when it has been filed and the deal's checklist is
+    // complete. Another side being complete does not lock this one: on an
+    // intermediary deal the second agent still has to be able to file.
+    const fullLock = txn
+      ? await getSideLock({
+          transactionId: txn.id,
+          transactionType: txn.transaction_type,
+          representing,
+        })
+      : { locked: false, reason: null as SideLockReason | null }
+    const sideLocked = fullLock.locked
 
     if (!txn) {
       const { data: newTxn, error: createErr } = await supabaseAdmin.from('transactions')
@@ -1639,8 +1628,10 @@ export async function POST(request: NextRequest) {
       if (txn.is_locked || sideLocked) {
         const lockReason = txn.is_locked
           ? `transaction is locked`
-          : `the ${representing} side is already signed off`
-        await supabaseAdmin.from('agent_form_submissions').insert({ form_id: formRecord?.id || null, agent_id: agentId, submitted_at: now, status: 'submitted', transaction_id: transactionId, data: { ...submissionData, locked_transaction: true, locked_reason: txn.is_locked ? 'transaction' : 'side_complete' }, updated_at: now })
+          : fullLock.reason === 'checklist_complete'
+            ? `the ${representing} side is filed and the checklist is complete`
+            : `the ${representing} side is already signed off`
+        await supabaseAdmin.from('agent_form_submissions').insert({ form_id: formRecord?.id || null, agent_id: agentId, submitted_at: now, status: 'submitted', transaction_id: transactionId, data: { ...submissionData, locked_transaction: true, locked_reason: txn.is_locked ? 'transaction' : fullLock.reason }, updated_at: now })
         const notifyHtml = getEmailLayout(`<p style="font-size:14px;color:#555;">Compliance submission for <strong>${txn.property_address}</strong> - ${lockReason}. Manual review required.</p>${buildFormAnswersHtml(submissionData)}`, { title: 'Locked Transaction - Compliance Submission', preheader: `Locked: ${txn.property_address}` })
         await sendNotifications(notificationEmails, 'Compliance Submission (Locked)', notifyHtml, txn.property_address)
         return NextResponse.json({ success: true, transaction_id: transactionId, locked: true, message: 'Your compliance request has been received. Because this transaction has been reviewed by the office, any updates will be applied manually. No action is needed from you.' })
@@ -1674,7 +1665,7 @@ export async function POST(request: NextRequest) {
       // set-status route writes it. So drop the stamp here and leave the column
       // where the office's last sign-off put it.
       const statusStamp: Record<string, any> =
-        completedSides.size > 0
+        (await hasAnyCompleteSide(transactionId))
           ? {}
           : {
               compliance_status: txnFields.compliance_status,
