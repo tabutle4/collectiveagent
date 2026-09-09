@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Plus, X, ChevronDown, ChevronUp } from 'lucide-react'
 
 const fmt$ = (n: any) => new Intl.NumberFormat('en-US', {
@@ -75,6 +75,27 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
   // showing this as a failure would send the office looking for the wrong
   // problem. What it means in practice: Payload still needs a hand.
   const [payloadWarning, setPayloadWarning] = useState<string | null>(null)
+
+  // onAppliedChange is held in a ref and deliberately kept OUT of the notify
+  // effect's dependency array below.
+  //
+  // The page passes it as `handleBillingChange(a.id)`. useCallback there
+  // memoizes the OUTER function, but calling it returns a NEW inner closure on
+  // every render, so the prop's identity changed every time the page
+  // re-rendered. With the prop in the dep array the effect re-fired, called it
+  // with a fresh object literal, the page did
+  // setBillingApplied(prev => ({ ...prev, [tiaId]: applied })) - always a new
+  // object, so React could never bail out - the page re-rendered, and the whole
+  // thing went round again without end. React tore the subtree down with
+  // "Maximum update depth exceeded", which is why unchecking an applied debt
+  // did nothing at all: the click never got as far as sending a request.
+  //
+  // A ref keeps the latest callback available without making it a trigger, so
+  // the effect now fires only when the billing data actually changes.
+  const onAppliedChangeRef = useRef(onAppliedChange)
+  useEffect(() => {
+    onAppliedChangeRef.current = onAppliedChange
+  }, [onAppliedChange])
   const [reversing, setReversing] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(true)
   // Payload monthly fee invoices (unpaid, not yet staged)
@@ -180,13 +201,14 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
         .reduce((s, c) => s + (c.amount_remaining ?? c.amount_owed), 0) +
       stagedCredits.reduce((s, c) => s + (c.amount_paid ?? c.amount_owed), 0)
 
-    onAppliedChange({
+    onAppliedChangeRef.current({
       debts: debtTotal,
       credits: creditTotal,
       debt_ids: [...Array.from(checkedDebts), ...stagedDebts.map(d => d.id)],
       credit_ids: [...Array.from(checkedCredits), ...stagedCredits.map(c => c.id)],
     })
-  }, [debts, credits, appliedDebts, appliedCredits, isPaid, checkedDebts, checkedCredits, onAppliedChange])
+    // onAppliedChange is intentionally absent: see the ref above.
+  }, [debts, credits, appliedDebts, appliedCredits, isPaid, checkedDebts, checkedCredits])
 
   const toggleDebt = async (id: string) => {
     if (isPaid) return
@@ -469,6 +491,18 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
           </div>
         )}
       </div>
+
+      {/* Failures from staging, unstaging and reversing land in `error`. This
+          block is the only thing that renders it in this panel. Without it the
+          value was set and never shown - the sole reader was the add-debt /
+          add-credit form's `error` prop, so unless one of those forms happened
+          to be open, a failed uncheck looked exactly like a click that did
+          nothing. Outside the collapse so it cannot be missed. */}
+      {error && (
+        <div className="p-2 rounded border border-red-300 bg-red-50 mb-1.5">
+          <p className="text-xs text-red-600">{error}</p>
+        </div>
+      )}
 
       {/* The internal ledger change went through but Payload did not. Shown
           outside the collapse so it cannot be missed, and separately from

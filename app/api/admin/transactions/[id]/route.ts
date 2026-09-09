@@ -3157,6 +3157,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         rec.offset_transaction_id !== id ||
         rec.offset_transaction_agent_id !== internal_agent_id
       ) {
+        // Logged with both sides of the comparison. A silent 409 here is
+        // indistinguishable from a dead button once it reaches the office, and
+        // the mismatch is the whole diagnosis.
+        console.error('unstage: record is not staged here', {
+          action,
+          record: recordId,
+          expected_transaction: id,
+          actual_transaction: rec.offset_transaction_id,
+          expected_tia: internal_agent_id,
+          actual_tia: rec.offset_transaction_agent_id,
+        })
         return NextResponse.json(
           { error: 'Record is not staged on this transaction/agent.' },
           { status: 409 }
@@ -3209,6 +3220,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Unstaging changes the brokerage's net for the txn under the new
       // formula, so refresh it.
       await recomputeOfficeNet(id)
+      // One line per completed unstage, so "did the request even arrive" is
+      // answerable from the Vercel logs instead of inferred from timestamps.
+      console.log('unstage: done', {
+        action,
+        record: recordId,
+        transaction: id,
+        payload_invoice: invoiceId ?? null,
+        amount_reversed: appliedHere,
+        payload_warning: payloadWarning ?? null,
+      })
       return NextResponse.json({ success: true, payload_warning: payloadWarning })
     }
 

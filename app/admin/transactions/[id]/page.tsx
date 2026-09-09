@@ -2660,10 +2660,30 @@ export default function AdminTransactionDetailPage() {
     debts: number; credits: number; debt_ids: string[]; credit_ids: string[]
   }>>({})
 
+  // Second line of defence against the render loop this used to drive. The
+  // panel no longer treats this callback as an effect trigger, but this state
+  // setter also used to return a brand-new object unconditionally, so React
+  // could never bail out of the re-render even when nothing had changed.
+  // Returning `prev` unchanged when the totals and ids match makes an
+  // identical report a no-op.
   const handleBillingChange = useCallback((tiaId: string) => (
     applied: { debts: number; credits: number; debt_ids: string[]; credit_ids: string[] }
   ) => {
-    setBillingApplied(prev => ({ ...prev, [tiaId]: applied }))
+    setBillingApplied(prev => {
+      const cur = prev[tiaId]
+      const sameIds = (a: string[], b: string[]) =>
+        a.length === b.length && a.every((v, i) => v === b[i])
+      if (
+        cur &&
+        cur.debts === applied.debts &&
+        cur.credits === applied.credits &&
+        sameIds(cur.debt_ids, applied.debt_ids) &&
+        sameIds(cur.credit_ids, applied.credit_ids)
+      ) {
+        return prev
+      }
+      return { ...prev, [tiaId]: applied }
+    })
   }, [])
   const recalculateRow = async (a: any, leadSourceOverride?: string) => {
     const leadSource = leadSourceOverride ?? a.lead_source ?? 'own'
