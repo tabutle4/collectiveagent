@@ -79,12 +79,18 @@ In your Vercel project dashboard:
 2. Add these variables:
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://zuhqqtfnyjlvbpcprdhf.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1aHFxdGZueWpsdmJwY3ByZGhmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEyNTUyMjAsImV4cCI6MjA3NjgzMTIyMH0.EP5nnbIpWoOVQ7jUrjnkuEJsGAmLY1oVLpS4pnlyjj4
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1aHFxdGZueWpsdmJwY3ByZGhmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTI1NTIyMCwiZXhwIjoyMDc2ODMxMjIwfQ.YxuuI3nDmkTn4d2HwoRHBxRVw8IQcansJ00VcnTLUP8
-RESEND_API_KEY=re_MPcnVzMr_G8sKQDjM7cZfgDyiPSzNN5jU
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+RESEND_API_KEY=your_resend_api_key
 NEXT_PUBLIC_APP_URL=https://your-vercel-url.vercel.app
 ```
+
+**Never paste real values into this file.** It is committed to the repository, so
+anything written here is readable by everyone with repository access and stays in
+git history forever, even after the line is edited out. The live values belong in
+Vercel (Settings, then Environment Variables) and in your local `.env`, which is
+git-ignored. Copy the placeholder names from `.env.example`.
 
 **Important:** Update `NEXT_PUBLIC_APP_URL` with your actual Vercel URL after first deployment.
 
