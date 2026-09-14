@@ -127,6 +127,10 @@ export type PermissionCode =
   | 'can_view_owner_dashboard'
   | 'can_view_ops_dashboard'
   | 'can_view_admin_dashboard'
+  // Broker Associate offer page. Granted to broker and operations by role;
+  // individual agents receive it only through a user_permission_overrides row.
+  | 'can_view_broker_offer'
+  | 'can_manage_broker_offer'
 
 // Role names as defined in the database
 export type RoleName = 'agent' | 'tc' | 'operations' | 'broker' | 'support'
@@ -355,6 +359,9 @@ export async function getPermissionsObject(
     'can_view_owner_dashboard',
     'can_view_ops_dashboard',
     'can_view_admin_dashboard',
+    // Broker Associate offer page
+    'can_view_broker_offer',
+    'can_manage_broker_offer',
   ]
 
   for (const perm of allPermissions) {
