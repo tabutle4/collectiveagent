@@ -1,0 +1,438 @@
+/*
+ * Broker associate offer page.
+ *
+ * Page scoped styles rather than Tailwind utilities, because this page is a
+ * direct port of an approved design and has to match it exactly. Light only:
+ * the rest of the app has no dark mode, so a prefers-color-scheme switch here
+ * would make this one page disagree with every other screen.
+ *
+ * Mobile first throughout. Every layout rule below is the phone layout; the
+ * single min-width query at the bottom is the only thing that widens it.
+ */
+
+.page {
+  --ink: #0f0e0c;
+  --paper: #faf8f4;
+  --surface: #f2eee7;
+  --gold: #8f7327;
+  --gold-lit: #c9a544;
+  --slate: #5c574e;
+  --hair: #dcd5c7;
+  --opt2-bg: #12110e;
+  --opt2-fg: #f4f0e6;
+  --opt2-sub: #a9a294;
+  --opt2-hair: #2e2a22;
+
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-offer-body), -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica,
+    Arial, sans-serif;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page *,
+.page *::before,
+.page *::after {
+  box-sizing: border-box;
+}
+
+.wrap {
+  width: 100%;
+  margin: 0 auto;
+  padding-inline: 18px;
+  padding-block: 0 64px;
+}
+
+/* header band, full bleed */
+.band {
+  background: var(--opt2-bg);
+  color: var(--opt2-fg);
+  margin-inline: -18px;
+  padding: 30px 18px 26px;
+  border-bottom: 2px solid var(--gold);
+  margin-bottom: 30px;
+}
+
+.bandIn {
+  width: 100%;
+  margin: 0 auto;
+}
+
+.firm {
+  font-family: var(--font-offer-mono), ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold-lit);
+  margin: 0;
+}
+
+.title {
+  font-family: var(--font-offer-display), Georgia, 'Times New Roman', serif;
+  font-optical-sizing: auto;
+  font-weight: 700;
+  font-size: clamp(1.7rem, 6.4vw, 3rem);
+  line-height: 1.05;
+  letter-spacing: -0.015em;
+  margin: 0.35em 0 0;
+  text-wrap: balance;
+  max-width: 24ch;
+}
+
+.for {
+  font-size: 0.92rem;
+  color: var(--opt2-sub);
+  margin: 0.7em 0 0;
+}
+
+.h2 {
+  font-family: var(--font-offer-display), Georgia, 'Times New Roman', serif;
+  font-optical-sizing: auto;
+  font-weight: 600;
+  font-size: 1.3rem;
+  letter-spacing: -0.005em;
+  margin: 0;
+  text-wrap: balance;
+}
+
+.eyebrow {
+  font-family: var(--font-offer-mono), ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin: 0;
+}
+
+.page p {
+  margin: 0;
+  max-width: 70ch;
+}
+
+.section {
+  margin-bottom: 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.rule {
+  height: 1px;
+  background: var(--hair);
+  border: 0;
+  margin: 0 0 34px;
+}
+
+/* the rule that closes the two option panels needs air above it too */
+.ruleAfterOpts {
+  composes: rule;
+  margin-top: 34px;
+}
+
+/* option panels: one column on a phone */
+.opts {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.opt {
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+}
+
+.optDark {
+  background: var(--opt2-bg);
+  color: var(--opt2-fg);
+  border-color: var(--opt2-hair);
+}
+
+.optHead {
+  padding: 18px 18px 16px;
+  border-bottom: 1px solid var(--hair);
+}
+
+.optDark .optHead {
+  border-bottom-color: var(--opt2-hair);
+}
+
+.optNum {
+  font-family: var(--font-offer-mono), ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.optDark .optNum {
+  color: var(--gold-lit);
+}
+
+.optName {
+  font-family: var(--font-offer-display), Georgia, 'Times New Roman', serif;
+  font-weight: 700;
+  font-size: 1.5rem;
+  line-height: 1.1;
+  margin: 0.3em 0 0;
+  letter-spacing: -0.01em;
+}
+
+.optTag {
+  font-size: 0.84rem;
+  color: var(--slate);
+  margin: 0.5em 0 0;
+}
+
+.optDark .optTag {
+  color: var(--opt2-sub);
+}
+
+.optBody {
+  padding: 18px 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  flex: 1;
+}
+
+.figs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.fig {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.figValue {
+  font-family: var(--font-offer-display), Georgia, 'Times New Roman', serif;
+  font-weight: 700;
+  font-size: 1.95rem;
+  line-height: 1;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+
+.optDark .figValue {
+  color: var(--gold-lit);
+}
+
+.figKey {
+  font-family: var(--font-offer-mono), ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+
+.optDark .figKey {
+  color: var(--opt2-sub);
+}
+
+.grp {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.grpTitle {
+  font-family: var(--font-offer-mono), ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--slate);
+  font-weight: 500;
+}
+
+.optDark .grpTitle {
+  color: var(--opt2-sub);
+}
+
+.grp p {
+  font-size: 0.86rem;
+  line-height: 1.5;
+  max-width: none;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.list li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 6px;
+  height: 6px;
+  background: var(--gold);
+  transform: rotate(45deg);
+}
+
+.optDark .list li::before {
+  background: var(--gold-lit);
+}
+
+.plain li::before {
+  background: var(--slate);
+  opacity: 0.45;
+}
+
+.optDark .plain li::before {
+  background: var(--opt2-sub);
+  opacity: 0.55;
+}
+
+.pull {
+  border-left: 3px solid var(--gold);
+  padding: 4px 0 4px 14px;
+  font-size: 0.88rem;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.optDark .pull {
+  border-left-color: var(--gold-lit);
+}
+
+.intro {
+  font-size: 0.89rem;
+  line-height: 1.5;
+  max-width: none;
+}
+
+/* the how it works rail */
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.steps li {
+  position: relative;
+  padding: 0 0 15px 20px;
+  border-left: 1px solid var(--opt2-hair);
+}
+
+.steps li:last-child {
+  padding-bottom: 0;
+  border-left-color: transparent;
+}
+
+.steps li::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 0.5em;
+  width: 7px;
+  height: 7px;
+  background: var(--gold-lit);
+  transform: rotate(45deg);
+}
+
+.stepWhen {
+  display: block;
+  font-family: var(--font-offer-mono), ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.57rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold-lit);
+  margin-bottom: 3px;
+}
+
+.stepWhat {
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+/* the two column closers, one column on a phone */
+.two {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 22px;
+}
+
+.foot {
+  font-size: 0.78rem;
+  color: var(--slate);
+  max-width: 74ch;
+}
+
+.denied {
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  padding: 40px 22px;
+  text-align: center;
+  margin: 48px auto;
+  max-width: 420px;
+}
+
+.deniedTitle {
+  font-family: var(--font-offer-display), Georgia, 'Times New Roman', serif;
+  font-weight: 600;
+  font-size: 1.15rem;
+  margin: 0 0 6px;
+}
+
+/* Tablet and up. The only widening rule in the file. */
+@media (min-width: 840px) {
+  .wrap {
+    padding-inline: 34px;
+    padding-block: 0 84px;
+  }
+
+  .band {
+    margin-inline: -34px;
+    padding: 40px 34px 34px;
+    margin-bottom: 38px;
+  }
+
+  .opts {
+    grid-template-columns: 1fr 1fr;
+    gap: 22px;
+  }
+
+  .optHead {
+    padding: 20px 22px 18px;
+  }
+
+  .optBody {
+    padding: 20px 22px 24px;
+    gap: 20px;
+  }
+
+  .h2 {
+    font-size: 1.5rem;
+  }
+
+  .figValue {
+    font-size: 2.1rem;
+  }
+
+  .two {
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+}
