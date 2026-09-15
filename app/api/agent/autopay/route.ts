@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireAuth } from '@/lib/api-auth'
+import { isMonthlyFeeInvoice } from '@/lib/payload/agentInvoiceList'
 
 export const dynamic = 'force-dynamic'
 
@@ -73,6 +74,43 @@ const isUsableCard = (pm: PayloadMethod) =>
   pm?.type === 'card' &&
   pm?.keep_active !== false &&
   String(pm?.status || 'active').toLowerCase() === 'active'
+
+/**
+ * Open invoices this customer has that are NOT monthly fees and are not marked
+ * as exempt from automatic collection.
+ *
+ * Turning autopay on makes every open invoice for the customer collectable on
+ * its due date, not just the monthly fee. Invoices this app created after the
+ * autopay work shipped carry an explicit `autopay_allowed: false`, but anything
+ * created before it carries whatever Payload's undocumented default is. An
+ * agent with an old unpaid MLS input fee or eCommission balance would have it
+ * charged without ever agreeing to that.
+ *
+ * Returns null if the invoices could not be read, which the caller treats as
+ * "cannot verify" rather than "nothing found".
+ */
+async function autopayExposedInvoices(customerId: string): Promise<any[] | null> {
+  // No status filter. Payload documents `draft unpaid partially_paid paid
+  // closed sync`, so filtering on `unpaid` alone would miss a part-paid MLS fee
+  // that still has a balance. `amount_due > 0` below is the real test and does
+  // not need narrowing. Other routes filter on status by convention; a guard is
+  // the one place that convention is too tight.
+  // https://docs.payload.com/apis/object-reference/invoices/
+  const res = await fetch(
+    `https://api.payload.com/invoices/?customer_id=${encodeURIComponent(customerId)}&limit=100&fields[]=*&fields[]=items`,
+    { headers: { Authorization: authHeader() } }
+  )
+  if (!res.ok) return null
+  const data = await res.json().catch(() => null)
+  if (!data) return null
+
+  return (data.values || []).filter(
+    (inv: any) =>
+      Number(inv?.amount_due ?? 0) > 0 &&
+      !isMonthlyFeeInvoice(inv) &&
+      inv?.autopay_allowed !== false
+  )
+}
 
 async function setDefault(methodId: string, value: boolean): Promise<boolean> {
   const res = await fetch(`https://api.payload.com/payment_methods/${methodId}`, {
@@ -193,6 +231,31 @@ export async function PUT(request: NextRequest) {
           { status: 400 }
         )
       }
+      // Refuse rather than enrol an agent whose other open invoices would be
+      // swept up. This is read only and runs before anything is written.
+      const exposed = await autopayExposedInvoices(customerId)
+      if (exposed === null) {
+        return NextResponse.json(
+          { error: 'We could not check your account just now. Please try again shortly.' },
+          { status: 502 }
+        )
+      }
+      if (exposed.length > 0) {
+        console.error(
+          'Autopay enrolment blocked for user',
+          auth.user.id,
+          '- open invoices that are not monthly fees and are not exempt:',
+          exposed.map((inv: any) => inv.id)
+        )
+        return NextResponse.json(
+          {
+            error:
+              'Autopay cannot be switched on while you have other unpaid invoices that are not your monthly fee. Please contact office@collectiverealtyco.com and we will sort it out.',
+          },
+          { status: 409 }
+        )
+      }
+
       const ok = await setDefault(card.id, true)
       if (!ok) {
         return NextResponse.json(

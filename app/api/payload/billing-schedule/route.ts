@@ -7,8 +7,14 @@ const authHeader = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
 
 // Creates a monthly billing schedule for an agent starting next month.
-// Only needed if NOT using the auto_billing_toggle in checkout.
-// If the agent enabled autopay at checkout, Payload handles this automatically.
+//
+// Not part of how monthly fees are billed. app/api/cron/create-monthly-invoices
+// creates the invoice and Payload's automatic payments collect it from an
+// agent who has turned autopay on from their Fees page. A schedule here would
+// generate a SECOND invoice each month, and its static description carries no
+// "<month> <year>", which the Payload webhook parses to advance
+// monthly_fee_paid_through. The old comment pointed at an auto_billing_toggle
+// in checkout that no longer exists.
 export async function POST(request: NextRequest) {
   const auth = await requirePermission(request, 'can_manage_agent_billing')
   if (auth.error) return auth.error

@@ -42,6 +42,10 @@ export default function AdminBillingPage() {
   const [offsetScanning, setOffsetScanning] = useState(false)
   const [offsetScanError, setOffsetScanError] = useState<string | null>(null)
   const [showRepair, setShowRepair] = useState(false)
+  const [sweepScan, setSweepScan] = useState<any>(null)
+  const [sweepScanning, setSweepScanning] = useState(false)
+  const [sweepScanError, setSweepScanError] = useState<string | null>(null)
+  const [showSweep, setShowSweep] = useState(false)
   const [agents, setAgents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -490,6 +494,32 @@ export default function AdminBillingPage() {
   // execute=true performs the deletions (POST). The route deletes leftover
   // offset lines only in matched positive/negative pairs, so no invoice
   // balance changes - it only brings the duplicated charges back down.
+  const runSweep = async (execute: boolean) => {
+    if (execute) {
+      if (
+        !confirm(
+          `Turn off automatic payment on ${sweepScan?.invoices_to_change} invoice(s)?\n\nThese are unpaid invoices that are not monthly brokerage fees. Turning autopay off means an agent is never charged for them without choosing to pay. No balance changes and no invoice is settled or voided.`
+        )
+      )
+        return
+    }
+    setSweepScanning(true)
+    setSweepScanError(null)
+    try {
+      const res = await fetch('/api/admin/payload/autopay-sweep', {
+        method: execute ? 'POST' : 'GET',
+        cache: 'no-store',
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Scan failed')
+      setSweepScan(data)
+    } catch (err: any) {
+      setSweepScanError(err.message || 'Scan failed')
+    } finally {
+      setSweepScanning(false)
+    }
+  }
+
   const runOffsetScan = async (execute: boolean) => {
     if (execute) {
       if (
@@ -880,6 +910,113 @@ export default function AdminBillingPage() {
           </button>
         )}
       </div>
+
+      {/* One-time sweep taking automatic payment off unpaid invoices that are
+          not monthly brokerage fees. Payload allows autopay on an invoice by
+          default, so anything created before the autopay work shipped is
+          collectable the moment that agent enables autopay. New invoices set
+          the flag at creation, so this is the backlog only.
+          Collapsed by default, same as the repair card below it. */}
+      {userPermissions.includes('can_manage_agent_billing') && (
+        <div className="container-card mb-4">
+          <button
+            onClick={() => setShowSweep(!showSweep)}
+            className="text-xs font-semibold text-luxury-gray-2 flex items-center gap-1"
+          >
+            {showSweep ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            Autopay Cleanup
+          </button>
+          {showSweep && (
+          <div className="flex items-start justify-between gap-4 flex-wrap mt-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-luxury-gray-3">
+                Finds unpaid invoices that are not monthly brokerage fees and still allow
+                automatic payment, and turns it off. Monthly fees are left alone. No balance
+                changes and nothing is settled or voided.
+              </p>
+              {sweepScan && (
+                <div className="mt-2 space-y-0.5">
+                  <p className="text-xs text-luxury-gray-1">
+                    Scanned {sweepScan.agents_scanned} of {sweepScan.agents_total} agents,{' '}
+                    {sweepScan.invoices_scanned} invoices.
+                  </p>
+                  {sweepScan.invoices_to_change === 0 ? (
+                    <p className="text-xs text-green-600 font-medium">
+                      Nothing to change. No invoice outside the monthly fee allows autopay.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-xs text-amber-800 font-medium">
+                        {sweepScan.invoices_to_change} invoice
+                        {sweepScan.invoices_to_change === 1 ? '' : 's'} totalling{' '}
+                        {formatCurrency(sweepScan.total_exposed)} could be charged automatically.
+                      </p>
+                      <div className="mt-1 space-y-0.5">
+                        {sweepScan.findings.slice(0, 12).map((f: any) => (
+                          <p key={f.invoice_id} className="text-xs text-luxury-gray-3 break-words">
+                            {f.agent_name}: {f.description} {formatCurrency(f.amount_due)}
+                            {f.due_date ? `, due ${formatDate(f.due_date)}` : ''}
+                            {f.error ? ` - ${f.error}` : ''}
+                          </p>
+                        ))}
+                        {sweepScan.findings.length > 12 && (
+                          <p className="text-xs text-luxury-gray-3">
+                            and {sweepScan.findings.length - 12} more
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  )}
+                  {sweepScan.mode === 'executed' && (
+                    <p className="text-xs text-luxury-gray-1 font-medium mt-1">
+                      Cleanup finished. Autopay turned off on {sweepScan.updated} invoice
+                      {sweepScan.updated === 1 ? '' : 's'}.
+                      {sweepScan.failed > 0
+                        ? ` ${sweepScan.failed} could not be changed, listed above.`
+                        : ' None failed.'}
+                    </p>
+                  )}
+                  {sweepScan.stopped_early && (
+                    <p className="text-xs text-red-600 break-words">{sweepScan.stopped_early}</p>
+                  )}
+                  {sweepScan.incomplete_agents?.length > 0 && (
+                    <p className="text-xs text-amber-800 break-words">
+                      Could not fully read the invoices for{' '}
+                      {sweepScan.incomplete_agents.join(', ')}. Their totals are incomplete, so
+                      treat this run as unfinished for them. An agent billed on a different
+                      Payload account will show here every time.
+                    </p>
+                  )}
+                </div>
+              )}
+              {sweepScanError && <p className="text-xs text-red-600 mt-1">{sweepScanError}</p>}
+            </div>
+            <div className="flex flex-wrap gap-1.5 flex-shrink-0">
+              <button
+                onClick={() => runSweep(false)}
+                disabled={sweepScanning}
+                className="btn btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Search size={12} />
+                {sweepScanning ? 'Scanning...' : 'Scan Invoices'}
+              </button>
+              {sweepScan && sweepScan.mode === 'dry_run' && sweepScan.invoices_to_change > 0 && (
+                <button
+                  onClick={() => runSweep(true)}
+                  disabled={sweepScanning}
+                  className="btn btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <CheckCircle size={12} />
+                  {sweepScanning
+                    ? 'Updating...'
+                    : `Turn Off Autopay on ${sweepScan.invoices_to_change} Invoice${sweepScan.invoices_to_change === 1 ? '' : 's'}`}
+                </button>
+              )}
+            </div>
+          </div>
+          )}
+        </div>
+      )}
 
       {/* One-time repair for Payload invoices left inflated by the old unstage
           behavior, which reversed a commission offset by adding a second

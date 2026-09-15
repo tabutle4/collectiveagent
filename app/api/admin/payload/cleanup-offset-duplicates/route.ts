@@ -6,6 +6,13 @@ import {
   isCommissionOffsetReversal,
   isCommissionOffsetItem,
 } from '@/lib/payload/commissionOffsetItems'
+// The paging walk moved to a shared module when the autopay sweep needed the
+// same one. Moved verbatim; aliased here so every call site below is unchanged.
+import {
+  listAgentInvoices as fetchInvoices,
+  sleep,
+  PAUSE_MS,
+} from '@/lib/payload/agentInvoiceList'
 
 // 100 users carry a Payload customer ID as of Sept 2 2026, and all 100 are
 // scanned - the query filters on payload_payee_id only, with no status filter.
@@ -82,9 +89,6 @@ const authHeader = () =>
  * safe: a repaired invoice has no reversals left and is skipped.
  */
 
-const PAUSE_MS = 120
-
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 interface PlannedDeletion {
   reversal_id: string
@@ -170,77 +174,6 @@ function planInvoice(inv: any): Omit<InvoiceFinding, 'agent_id' | 'agent_name'> 
     planned,
     unpaired_reversals: unpaired,
     surviving_offsets: availableOffsets.length,
-  }
-}
-
-// Payload documents limit and offset on list endpoints but publishes no
-// maximum limit (https://docs.payload.com/apis/api-design/). A single
-// limit=200 request would therefore miss everything past whatever cap Payload
-// actually applies, with no error - the repair would report itself complete
-// while leaving invoices doubled. So page explicitly with a conservative page
-// size and keep going until a short page arrives.
-const PAGE_SIZE = 100
-const MAX_PAGES = 20
-
-interface InvoicePageResult {
-  values: any[]
-  rateLimited: boolean
-  /**
-   * True when this agent's invoice list could NOT be read in full, for any
-   * reason. Every path that returns early without reaching the end of the set
-   * must set this.
-   *
-   * The point is that an agent whose list is incomplete must never be counted
-   * as repaired. An earlier version returned a partial list with no flag on an
-   * HTTP error, so a transient failure on page two reported that agent as
-   * fully scanned and clean.
-   */
-  incomplete: boolean
-  reason?: string
-}
-
-async function fetchInvoices(customerId: string): Promise<InvoicePageResult> {
-  const all: any[] = []
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const res = await fetch(
-      `${PAYLOAD_API}/invoices/?customer_id=${customerId}&limit=${PAGE_SIZE}&offset=${
-        page * PAGE_SIZE
-      }&fields[]=*&fields[]=items`,
-      { headers: { Authorization: authHeader() } }
-    )
-    if (res.status === 429) {
-      return { values: all, rateLimited: true, incomplete: true, reason: 'rate limited' }
-    }
-    if (!res.ok) {
-      // Includes a customer_id Payload does not recognise (404), which is the
-      // expected result for an agent billed on a different Payload account.
-      // Reported rather than assumed empty: the honest statement is that this
-      // agent's invoices could not be read, not that they have none.
-      return {
-        values: all,
-        rateLimited: false,
-        incomplete: true,
-        reason: `HTTP ${res.status}${page > 0 ? ` on page ${page + 1}` : ''}`,
-      }
-    }
-    const data = await res.json()
-    const values = data?.values || []
-    all.push(...values)
-    // A page shorter than what was asked for is the end of the set. This also
-    // covers the case where Payload caps limit below PAGE_SIZE: the short page
-    // ends the loop early, which is why PAGE_SIZE is conservative.
-    if (values.length < PAGE_SIZE) {
-      return { values: all, rateLimited: false, incomplete: false }
-    }
-    await sleep(PAUSE_MS)
-  }
-  // MAX_PAGES * PAGE_SIZE invoices for one agent means something unexpected.
-  // Report it rather than silently truncating.
-  return {
-    values: all,
-    rateLimited: false,
-    incomplete: true,
-    reason: `more than ${MAX_PAGES * PAGE_SIZE} invoices`,
   }
 }
 

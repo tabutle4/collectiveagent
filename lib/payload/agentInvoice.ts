@@ -33,21 +33,34 @@
  * ## Why it reports rather than repairs
  *
  * An earlier version of this file corrected a wrong flag with
- * `PUT /invoices/{id}` carrying only `autopay_allowed`. That is not safe.
- * Payload's API design page, under "Changes to a Nested Object Tree" ->
- * "Deleting an Existing Nested Object", says: "Remove the nested object from
+ * `PUT /invoices/{id}` carrying only `autopay_allowed`.
+ *
+ * The concern was Payload's API design page, under "Changes to a Nested Object
+ * Tree" -> "Deleting an Existing Nested Object": "Remove the nested object from
  * the parent's object tree in an update operation and the object will be
- * deleted." Line items are nested objects on an invoice, so a PUT that omits
- * them is that sentence. https://docs.payload.com/apis/api-design/
+ * deleted." Line items are nested objects on an invoice, so that sentence reads
+ * as though a PUT omitting them removes them.
  *
- * `app/api/cron/apply-late-fees/route.ts` reached the same conclusion
- * independently and appends via `POST /line_items/` for exactly this reason.
+ * **That reading was tested against live Payload on 15 September 2026 and is
+ * wrong.** A partial `PUT /invoices/{id}` carrying only `due_date`, which
+ * `app/api/payload/update-invoice-due-date/route.ts` has been doing in
+ * production all along, leaves the line items intact. Omitting a nested object
+ * is not the same as removing it from the tree.
  *
- * Worse, the repair would have fired precisely when the flag was wrong, which
- * is the onboarding and custom invoices asking for false. A custom invoice
- * carries no top-level description, so its line item is its only label and its
- * only amount: emptying it leaves the agent owing money against an invoice that
- * reads as nothing at zero dollars.
+ * The comment in `app/api/cron/apply-late-fees/route.ts` makes the same
+ * inference and is also unconfirmed. Do not treat either as evidence.
+ *
+ * Creation still reports rather than repairs, because a repair is not needed on
+ * the create path: if the flag does not land, the invoice is simply not
+ * autopay-collectable and is reported so it can be set by hand. Repairing
+ * invoices that already exist is a separate job with its own controls.
+ *
+ * The argument that does survive is about blast radius on the create path. A
+ * repair there would fire precisely when the flag was wrong, which is every
+ * onboarding and custom invoice asking for false. A custom invoice carries no
+ * top-level description, so its line item is its only label and its only
+ * amount, and getting that wrong at scale is not something a create path should
+ * be able to do unattended.
  *
  * Reporting is the correct behaviour. A flag that did not land means autopay
  * does not collect that invoice, and someone pays it by hand, which is exactly
@@ -121,14 +134,20 @@ export async function createAgentInvoice(
   let res = await postInvoice(params)
   let invoice = await res.json().catch(() => null)
 
-  // Payload rejected the request outright, so nothing was created and the
-  // flag is the only thing this patch added to it. Create the invoice without
-  // it rather than leave the caller unable to bill anyone.
-  if (!res.ok && res.status >= 400 && res.status < 500) {
+  // 400 only, not the whole 4xx range. Payload documents four 4xx codes and
+  // only 400 is "a validation issue due to missing or malformed attributes",
+  // which is the one failure this retry exists to survive.
+  // https://docs.payload.com/apis/api-design/
+  //
+  // 429 matters most: the monthly cron makes about 220 Payload calls in a tight
+  // sequential loop, so it is the one place a rate limit is plausible. Retrying
+  // a 429 would add load to the thing that just throttled us and would log the
+  // wrong diagnosis. 401 and 403 are an expired or out-of-scope key, where a
+  // second POST is equally pointless and equally misleading in the log.
+  if (!res.ok && res.status === 400) {
     console.error(
-      'Payload rejected the invoice with autopay_allowed set (status',
-      res.status,
-      '). Retrying without it. The invoice autopay setting must be applied by hand.',
+      'Payload rejected the invoice with autopay_allowed set (status 400).',
+      'Retrying without it. The invoice autopay setting must be applied by hand.',
       invoice
     )
     params.delete('autopay_allowed')
@@ -156,12 +175,19 @@ export async function createAgentInvoice(
   // provider-shaped message rather than left to throw a TypeError two lines
   // later. The invoice may still exist at Payload, so the message says so.
   if (!invoice?.id) {
-    console.error('Payload returned a success status with no invoice id:', invoice)
+    // The operator detail goes to the log. The message does not:
+    // app/api/onboarding/create-payment passes it straight back to
+    // app/onboard/[token]/page.tsx, which shows it to a prospective agent
+    // partway through joining. They cannot act on "check Payload", and it names
+    // a vendor they have no relationship with.
+    console.error(
+      'Payload returned a success status with no invoice id. An invoice may exist at Payload; check before creating another.',
+      invoice
+    )
     return {
       ok: false,
       error: {
-        message:
-          'The payment provider accepted the invoice but did not return it. Check Payload before creating it again.',
+        message: 'We could not set up this payment. Please contact office@collectiverealtyco.com.',
       },
       autopayConfirmed: false,
     }

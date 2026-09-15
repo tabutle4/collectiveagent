@@ -108,8 +108,20 @@ export async function POST(request: NextRequest) {
             customer_id: customerId,
             // Pass processing fee to the agent
             conv_fee: true,
-            // Let agent save payment method and enable autopay
-            auto_billing_toggle: true,
+            // Save the card, yes. Enable autopay, no.
+            //
+            // `auto_billing_toggle` renders Payload's own "make this the
+            // billing default" checkbox, which sets default_payment_method
+            // directly and therefore enrols the agent in autopay without any of
+            // this app's code running. That is a second, unguarded door: the
+            // check in app/api/agent/autopay that refuses to enrol an agent
+            // whose other open invoices would be swept up never sees it.
+            //
+            // So checkout saves the card and the Fees page switch turns autopay
+            // on. One door, and it is the guarded one. The agent still decides
+            // both, they are just two deliberate clicks instead of a checkbox
+            // buried in a payment form.
+            // https://docs.payload.com/ui/payloadjs/checkout/
             keep_active_toggle: true,
             // Accept both cards and bank accounts
             card_payments: true,
