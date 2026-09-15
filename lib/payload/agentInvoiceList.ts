@@ -7,6 +7,8 @@
  * actually see all of them" is how they drift.
  */
 
+import { isCommissionOffsetItem } from '@/lib/payload/commissionOffsetItems'
+
 const PAYLOAD_API = 'https://api.payload.com'
 
 export const PAUSE_MS = 120
@@ -84,36 +86,64 @@ export async function listAgentInvoices(customerId: string): Promise<InvoicePage
   }
 }
 
-/**
- * Line item types that make a line a monthly brokerage fee charge.
- *
- * NOT the same set `app/api/cron/apply-late-fees` matches on: that cron keys on
- * `'Monthly Fee'` exactly and leaves the prorated variant out. The prorated
- * type is included here because a monthly fee billed mid-month is still a
- * monthly fee, and that difference is exactly what makes the `every` below
- * load-bearing.
- */
+/** The monthly brokerage fee itself. */
 export const MONTHLY_FEE_ITEM_TYPES = ['Monthly Fee', 'Monthly Fee (Prorated)']
 
 /**
- * True only when EVERY line on the invoice is a monthly fee charge.
- *
- * `some` is wrong here and the difference is a $399 mistake. The join invoice
- * carries two lines:
- *
- *   app/api/onboarding/create-payment: items[0] 'Onboarding Fee'
- *                                      items[1] 'Monthly Fee (Prorated)'
- *
- * Under `some` the prorated line matched and the whole invoice was treated as a
- * monthly fee - so the largest invoice an agent can carry was classified as the
- * one thing autopay is allowed to collect, by the very code written to keep it
- * out. `app/api/payload/create-invoice` builds an onboarding invoice the same
- * way, so both writers were affected.
- *
- * An empty item list returns false: an invoice with nothing on it is not a
- * monthly fee, and callers here treat "not a monthly fee" as the cautious side.
+ * Lines that legitimately ride along on a monthly fee invoice without changing
+ * what it is. A late fee is a consequence of not paying the monthly fee, not a
+ * separate bill, so an overdue monthly invoice is still a monthly invoice.
+ * app/api/cron/apply-late-fees appends this to unpaid monthly invoices the
+ * morning after the due date.
  */
-export const isMonthlyFeeInvoice = (inv: any) => {
-  const items = inv?.items || []
-  return items.length > 0 && items.every((i: any) => MONTHLY_FEE_ITEM_TYPES.includes(i?.type))
+export const MONTHLY_FEE_COMPANION_TYPES = ['Late Fee']
+
+/**
+ * The lines that represent something the agent was actually billed for.
+ *
+ * Everything else on a Payload invoice is bookkeeping and must not be read as
+ * a charge:
+ *
+ *   entry_type 'payment'            a real card or bank payment
+ *   negative 'charge' lines         how this app records a settlement, both
+ *                                   the commission offset and the Zelle/check/
+ *                                   ACH rows mark-invoice-paid writes
+ *   commission offset + reversal    synthetic staging rows, positive OR
+ *                                   negative, caught by the shared predicate
+ */
+const chargeLines = (inv: any): any[] =>
+  (inv?.items || []).filter(
+    (i: any) =>
+      i?.entry_type === 'charge' && Number(i?.amount) > 0 && !isCommissionOffsetItem(i)
+  )
+
+/**
+ * True when this invoice is the agent's monthly brokerage fee.
+ *
+ * This has now been wrong in both directions, so the rule is spelled out:
+ *
+ *   `some` was wrong.  The join invoice is 'Onboarding Fee' + 'Monthly Fee
+ *   (Prorated)', so matching on any line let a $399 invoice pass as a monthly
+ *   fee - waved through by the code written to keep it out.
+ *
+ *   `every` over ALL items was also wrong, and worse in practice. An unpaid
+ *   monthly fee picks up a 'Late Fee' line on the 6th, and may carry commission
+ *   offset or settlement rows. Requiring every line to be a monthly fee meant
+ *   every OVERDUE monthly fee was classified as something else - so the sweep
+ *   listed them and would have switched autopay off on exactly the invoices
+ *   autopay exists to collect.
+ *
+ * The rule that holds: look only at real charge lines, require at least one to
+ * be the monthly fee, and require all of them to be the fee or something that
+ * rides along with it. A join invoice fails because 'Onboarding Fee' is neither.
+ */
+export const isMonthlyFeeInvoice = (inv: any): boolean => {
+  const charges = chargeLines(inv)
+  if (charges.length === 0) return false
+
+  const allowed = [...MONTHLY_FEE_ITEM_TYPES, ...MONTHLY_FEE_COMPANION_TYPES]
+  return (
+    charges.some((i: any) => MONTHLY_FEE_ITEM_TYPES.includes(i?.type)) &&
+    charges.every((i: any) => allowed.includes(i?.type))
+  )
 }
