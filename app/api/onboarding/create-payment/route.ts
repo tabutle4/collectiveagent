@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { createAgentInvoice } from '@/lib/payload/agentInvoice'
 
 const plAuth = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
@@ -235,22 +236,27 @@ export async function POST(request: NextRequest) {
       invoiceAmount = standardOnboardingFee + proratedAmount
     }
 
-    // Step 3: Create the invoice
-    const invoiceRes = await fetch('https://api.payload.com/invoices/', {
-      method: 'POST',
-      headers: {
-        Authorization: plAuth(),
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: params,
-    })
+    // Step 3: Create the invoice.
+    //
+    // Never collectable by autopay. This is the same Payload customer the
+    // monthly fee is billed to, so once that agent turns autopay on, an unpaid
+    // join invoice still sitting on the account would otherwise be fair game
+    // for automatic collection.
+    const created = await createAgentInvoice(params, { autopayAllowed: false })
 
-    const invoiceData = await invoiceRes.json()
-    if (!invoiceRes.ok) {
-      console.error('Payload invoice creation failed:', invoiceData)
+    if (!created.ok) {
+      console.error('Payload invoice creation failed:', created.error)
       return NextResponse.json(
-        { error: invoiceData.message || 'Failed to create invoice' },
+        { error: created.error?.message || 'Failed to create invoice' },
         { status: 500 }
+      )
+    }
+
+    const invoiceData = created.invoice
+    if (!created.autopayConfirmed) {
+      console.error(
+        'Onboarding invoice created but could not be confirmed as exempt from autopay:',
+        invoiceData?.id
       )
     }
 

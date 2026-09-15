@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase'
-
-const authHeader = () =>
-  'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
+import { createAgentInvoice } from '@/lib/payload/agentInvoice'
 
 type InvoiceType = 'onboarding' | 'monthly' | 'custom'
 
@@ -124,21 +122,26 @@ export async function POST(request: NextRequest) {
       params.append('items[0][entry_type]', 'charge')
     }
 
-    const res = await fetch('https://api.payload.com/invoices/', {
-      method: 'POST',
-      headers: {
-        Authorization: authHeader(),
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: params,
+    // The monthly brokerage fee is the only agent invoice autopay may collect.
+    // An onboarding fee or a custom invoice the office typed (an MLS input fee,
+    // an eCommission balance) has to be looked at before it is paid.
+    const created = await createAgentInvoice(params, {
+      autopayAllowed: type === 'monthly',
     })
 
-    const data = await res.json()
-    if (!res.ok) {
-      console.error('Payload invoice creation failed:', data)
+    if (!created.ok) {
+      console.error('Payload invoice creation failed:', created.error)
       return NextResponse.json(
-        { error: data.message || 'Failed to create invoice' },
+        { error: created.error?.message || 'Failed to create invoice' },
         { status: 500 }
+      )
+    }
+
+    const data = created.invoice
+    if (!created.autopayConfirmed) {
+      console.error(
+        'Invoice created but its autopay setting could not be confirmed:',
+        data?.id
       )
     }
 

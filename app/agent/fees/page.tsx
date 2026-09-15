@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, AlertCircle, ExternalLink, CreditCard, Loader2, Landmark } from 'lucide-react'
+import { CheckCircle2, AlertCircle, ExternalLink, CreditCard, Loader2, Landmark, RefreshCw } from 'lucide-react'
 import { realChargeItems } from '@/lib/payload/commissionOffsetItems'
 
 declare global {
@@ -27,6 +27,12 @@ export default function AgentFeesPage() {
   const [paying, setPaying] = useState<string | null>(null)
   const [monthlyFee, setMonthlyFee] = useState(50)
   const [connectingBank, setConnectingBank] = useState(false)
+  // Autopay on the monthly fee, read live from Payload via /api/agent/autopay.
+  // The agent owns this switch; the brokerage only decides which invoices are
+  // eligible for it, which is set on the invoice at creation.
+  const [autopay, setAutopay] = useState<any>(null)
+  const [autopaySaving, setAutopaySaving] = useState(false)
+  const [autopayError, setAutopayError] = useState<string | null>(null)
   const payloadScriptLoaded = useRef(false)
 
   useEffect(() => {
@@ -63,6 +69,7 @@ export default function AgentFeesPage() {
     }
     fetchUser()
     loadBank()
+    loadAutopay()
   }, [router]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -155,11 +162,9 @@ export default function AgentFeesPage() {
       const tokenRes = await fetch('/api/payload/checkout-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-  invoice_id: invoice.id,
-  amount: invoice.amount_due ?? invoice.amount,
-  description: invoice.description,
-}),
+        // Only the invoice id. The amount and the description are read from
+        // the invoice on the server now, so nothing chargeable is decided here.
+        body: JSON.stringify({ invoice_id: invoice.id }),
       })
       const tokenData = await tokenRes.json()
       if (!tokenData.client_token)
@@ -187,6 +192,9 @@ export default function AgentFeesPage() {
           body: JSON.stringify({ transaction_id: evt.transaction_id }),
         })
         await loadData()
+        // The agent may have ticked save or autopay inside the checkout, so the
+        // card above has to be re-read rather than left showing the old state.
+        await loadAutopay()
         setPaying(null)
       })
 
@@ -194,6 +202,43 @@ export default function AgentFeesPage() {
     } catch (err: any) {
       alert(err.message || 'Something went wrong. Please contact the office.')
       setPaying(null)
+    }
+  }
+
+  const loadAutopay = async () => {
+    try {
+      const res = await fetch('/api/agent/autopay')
+      if (!res.ok) {
+        // Distinguish "we could not check" from "nothing is set up", so an
+        // enrolled agent is never told to go set up something they already have.
+        setAutopay({ detailsAvailable: false })
+        return
+      }
+      setAutopay(await res.json())
+    } catch {
+      setAutopay({ detailsAvailable: false })
+    }
+  }
+
+  const toggleAutopay = async (enabled: boolean) => {
+    setAutopaySaving(true)
+    setAutopayError(null)
+    try {
+      const res = await fetch('/api/agent/autopay', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      })
+      const result = await res.json()
+      if (!res.ok) {
+        setAutopayError(result.error || 'Could not update autopay. Please try again.')
+      } else {
+        await loadAutopay()
+      }
+    } catch {
+      setAutopayError('Could not update autopay. Please try again.')
+    } finally {
+      setAutopaySaving(false)
     }
   }
 
@@ -341,6 +386,94 @@ export default function AgentFeesPage() {
                 {connectingBank ? <Loader2 size={12} className="animate-spin" /> : <CreditCard size={12} />}
                 {connectingBank ? 'Sending...' : 'Connect Bank'}
               </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Autopay on the monthly brokerage fee. The agent turns this on and off
+          themselves. It never applies to onboarding or custom invoices: those
+          are created with autopay disabled on the invoice itself, so they still
+          have to be paid deliberately. */}
+      <div className="container-card mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-1">
+              Monthly Fee Autopay
+            </p>
+            {autopay?.enabled ? (
+              <>
+                <p className="text-sm font-semibold text-luxury-gray-1 flex items-center gap-1.5">
+                  <CreditCard size={14} className="text-luxury-gray-3 flex-shrink-0" />
+                  {autopay.card_brand
+                    ? autopay.card_brand.replace(/_/g, ' ')
+                    : autopay.card_last4
+                      ? 'Card'
+                      : 'Saved payment method'}
+                  {autopay.card_last4 && (
+                    <span className="text-luxury-gray-2 font-normal">
+                      &bull;&bull;&bull;&bull; {autopay.card_last4}
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs text-luxury-gray-3 mt-1">
+                  Your monthly brokerage fee is charged to this automatically on the 5th. Other
+                  invoices are never charged automatically.
+                </p>
+              </>
+            ) : autopay?.detailsAvailable === false ? (
+              <p className="text-xs text-luxury-gray-3 mt-1">
+                We cannot reach our payment provider right now, so we cannot show whether autopay
+                is on. Nothing has changed. Please check back shortly.
+              </p>
+            ) : autopay?.available ? (
+              <p className="text-xs text-luxury-gray-3 mt-1">
+                You have a card saved. Turn on autopay and your monthly brokerage fee is charged
+                on the 5th each month.
+              </p>
+            ) : autopay?.savedBankOnly ? (
+              <p className="text-xs text-luxury-gray-3 mt-1">
+                Autopay needs a card on file. A bank account takes several days to clear, which
+                would show as a late payment.
+              </p>
+            ) : (
+              <p className="text-xs text-luxury-gray-3 mt-1">
+                To set this up, pay an invoice below and tick the option to save your payment
+                method.
+              </p>
+            )}
+            {autopayError && <p className="text-xs text-red-700 mt-1">{autopayError}</p>}
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {autopay?.enabled ? (
+              <>
+                <CheckCircle2 size={18} className="text-green-600" />
+                <span className="text-xs font-medium text-green-600">On</span>
+                <button
+                  onClick={() => toggleAutopay(false)}
+                  disabled={autopaySaving}
+                  className="btn btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {autopaySaving ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                  {autopaySaving ? 'Saving...' : 'Turn off'}
+                </button>
+              </>
+            ) : autopay?.detailsAvailable === false ? (
+              // Not "Off": we do not know. Saying Off next to "we cannot reach
+              // our payment provider" tells an enrolled agent their autopay
+              // stopped, which is not something this state can know.
+              <span className="text-xs font-medium text-luxury-gray-3">Unavailable</span>
+            ) : autopay?.available ? (
+              <button
+                onClick={() => toggleAutopay(true)}
+                disabled={autopaySaving}
+                className="btn btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {autopaySaving ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                {autopaySaving ? 'Saving...' : 'Turn on autopay'}
+              </button>
+            ) : (
+              <span className="text-xs font-medium text-luxury-gray-3">Off</span>
             )}
           </div>
         </div>

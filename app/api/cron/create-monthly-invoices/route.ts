@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAgentInvoice } from '@/lib/payload/agentInvoice'
+
+// The loop is sequential over every eligible agent and now makes one more
+// Payload round trip each, to read the new invoice back. Matching the app's
+// convention on long crons (verify-bank-connections, verify-licenses and
+// reconcile-payouts all use 300). A timeout mid-loop would leave some agents
+// with next month's invoice and some silently without one.
+export const maxDuration = 300
 
 const plAuth = () => 'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
 
@@ -67,6 +75,7 @@ export async function GET(request: NextRequest) {
     let created = 0
     let skipped = 0
     const errors: string[] = []
+    const unconfirmed: string[] = []
 
     for (const agent of eligibleAgents) {
       try {
@@ -89,14 +98,10 @@ export async function GET(request: NextRequest) {
           continue
         }
 
-        // Create the invoice
-        const res = await fetch('https://api.payload.com/invoices/', {
-          method: 'POST',
-          headers: {
-            Authorization: plAuth(),
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: new URLSearchParams({
+        // The monthly fee is the one agent invoice autopay is allowed to
+        // collect, so this is the only caller that passes true.
+        const result = await createAgentInvoice(
+          new URLSearchParams({
             type: 'bill',
             due_date: dueDate,
             processing_id: process.env.PAYLOAD_PROCESSING_ID!,
@@ -107,14 +112,24 @@ export async function GET(request: NextRequest) {
             'items[0][amount]': monthlyFee.toString(),
             'items[0][entry_type]': 'charge',
           }),
-        })
+          { autopayAllowed: true }
+        )
 
-        const data = await res.json()
-        if (!res.ok) {
-          errors.push(
-            `${agent.preferred_first_name || agent.first_name} ${agent.preferred_last_name || agent.last_name}: ${data.message}`
-          )
+        const agentName = `${agent.preferred_first_name || agent.first_name} ${agent.preferred_last_name || agent.last_name}`
+
+        if (!result.ok) {
+          errors.push(`${agentName}: ${result.error?.message}`)
           continue
+        }
+
+        const data = result.invoice
+
+        // The invoice exists and is payable either way, so this is reported
+        // rather than treated as a failure. An unconfirmed flag on a monthly
+        // fee means autopay may not collect it, and the agent gets the payment
+        // link as usual.
+        if (!result.autopayConfirmed) {
+          unconfirmed.push(`${agentName} (${data?.id})`)
         }
 
         // Send payment link so Payload emails the agent
@@ -136,7 +151,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log(`Monthly invoices: ${created} created, ${skipped} skipped, ${errors.length} errors`)
+    console.log(
+      `Monthly invoices: ${created} created, ${skipped} skipped, ${errors.length} errors, ${unconfirmed.length} with an unconfirmed autopay setting`
+    )
     return NextResponse.json({
       success: true,
       created,
@@ -144,6 +161,7 @@ export async function GET(request: NextRequest) {
       target_month: `${monthName} ${year}`,
       fee_amount: monthlyFee,
       errors: errors.length ? errors : undefined,
+      autopay_unconfirmed: unconfirmed.length ? unconfirmed : undefined,
     })
   } catch (error: any) {
     console.error('Create monthly invoices cron error:', error)
