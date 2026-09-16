@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Trash2 } from 'lucide-react'
+import { Trash2, X } from 'lucide-react'
 
 function formatCT(isoString: string) {
   if (!isoString) return ''
@@ -26,19 +26,45 @@ export default function RecordingsPage() {
   const [emailSaved, setEmailSaved] = useState(false)
   const [emailError, setEmailError] = useState('')
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [allowedRooms, setAllowedRooms] = useState<string[]>([])
+  const [knownRooms, setKnownRooms] = useState<string[]>([])
+  const [newRoom, setNewRoom] = useState('')
+  const [roomsSaving, setRoomsSaving] = useState(false)
+  const [roomsSaved, setRoomsSaved] = useState(false)
+  const [roomsError, setRoomsError] = useState('')
+  const [showHidden, setShowHidden] = useState(false)
+  const [hiddenCount, setHiddenCount] = useState(0)
 
   useEffect(() => {
-    loadJobs()
-    fetch('/api/zoom/recording-settings')
-      .then(r => r.json())
-      .then(d => { if (d.notifyEmail) setNotifyEmail(d.notifyEmail) })
+    loadJobs(false)
+    loadSettings()
   }, [])
 
-  function loadJobs() {
-    setLoading(true)
-    fetch('/api/zoom/recording-jobs')
+  function loadSettings() {
+    fetch('/api/zoom/recording-settings')
       .then(r => r.json())
-      .then(d => { setJobs(d.jobs || []); setLoading(false) })
+      .then(d => {
+        if (d.notifyEmail) setNotifyEmail(d.notifyEmail)
+        setAllowedRooms(d.allowedRooms || [])
+        setKnownRooms(d.knownRooms || [])
+      })
+  }
+
+  function loadJobs(hidden: boolean) {
+    setLoading(true)
+    fetch(`/api/zoom/recording-jobs${hidden ? '?ignored=1' : ''}`)
+      .then(r => r.json())
+      .then(d => {
+        setJobs(d.jobs || [])
+        setHiddenCount(d.ignoredCount || 0)
+        setLoading(false)
+      })
+  }
+
+  function toggleHidden() {
+    const next = !showHidden
+    setShowHidden(next)
+    loadJobs(next)
   }
 
   async function saveEmail() {
@@ -62,6 +88,42 @@ export default function RecordingsPage() {
     }
   }
 
+  async function saveRooms(rooms: string[]) {
+    setRoomsSaving(true)
+    setRoomsError('')
+    setRoomsSaved(false)
+    try {
+      const res = await fetch('/api/zoom/recording-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allowedRooms: rooms }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to save')
+      setAllowedRooms(rooms)
+      setRoomsSaved(true)
+      setTimeout(() => setRoomsSaved(false), 3000)
+      loadSettings()
+    } catch (err: any) {
+      setRoomsError(err.message)
+    } finally {
+      setRoomsSaving(false)
+    }
+  }
+
+  function addRoom(name: string) {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    if (allowedRooms.some(r => r.trim().toLowerCase() === trimmed.toLowerCase())) return
+    const updated = [...allowedRooms, trimmed]
+    setNewRoom('')
+    saveRooms(updated)
+  }
+
+  function removeRoom(name: string) {
+    saveRooms(allowedRooms.filter(r => r !== name))
+  }
+
   async function deleteJob(e: React.MouseEvent, jobId: string) {
     e.preventDefault()
     e.stopPropagation()
@@ -70,6 +132,7 @@ export default function RecordingsPage() {
     try {
       await fetch(`/api/zoom/recording-jobs?id=${jobId}`, { method: 'DELETE' })
       setJobs(prev => prev.filter(j => j.id !== jobId))
+      setHiddenCount(prev => (showHidden && prev > 0 ? prev - 1 : prev))
     } catch { }
     finally { setDeleting(null) }
   }
@@ -105,9 +168,67 @@ export default function RecordingsPage() {
         {emailError && <p className="text-red-400 text-xs mt-2">{emailError}</p>}
       </div>
 
+      <div className="container-card p-5">
+        <p className="text-luxury-gray-2 font-medium mb-1">Allowed Zoom Rooms</p>
+        <p className="text-luxury-gray-3 text-sm mb-4">
+          Only recordings made in these Zoom rooms appear here. Anything recorded in another room, such as a
+          personal meeting room, is hidden instead of uploaded. Leave this empty to accept every recording on the
+          Zoom account.
+        </p>
+
+        {allowedRooms.length > 0 ? (
+          <div className="flex flex-wrap gap-2 mb-3">
+            {allowedRooms.map(room => (
+              <span key={room} className="flex items-center gap-1.5 bg-luxury-accent/10 border border-luxury-accent text-luxury-accent text-xs px-3 py-1.5 rounded-full">
+                {room}
+                <button onClick={() => removeRoom(room)} disabled={roomsSaving} title="Remove room"><X size={10} /></button>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-amber-700 text-xs mb-3">
+            No rooms listed, so every Zoom recording on the account will appear here.
+          </p>
+        )}
+
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newRoom}
+            onChange={e => setNewRoom(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addRoom(newRoom)}
+            placeholder="Add a room name..."
+            className="input-luxury flex-1 text-sm"
+          />
+          <button onClick={() => addRoom(newRoom)} disabled={roomsSaving || !newRoom.trim()} className="btn-secondary px-3 py-2 text-xs disabled:opacity-50 disabled:cursor-not-allowed">
+            {roomsSaving ? 'Saving...' : roomsSaved ? 'Saved' : 'Add'}
+          </button>
+        </div>
+
+        {knownRooms.length > 0 && (
+          <div className="mt-3">
+            <p className="text-luxury-gray-3 text-xs mb-2">Rooms Zoom has sent recently. Click one to allow it.</p>
+            <div className="flex flex-wrap gap-2">
+              {knownRooms.map(room => (
+                <button
+                  key={room}
+                  onClick={() => addRoom(room)}
+                  disabled={roomsSaving}
+                  className="bg-luxury-gray-5 border border-luxury-gray-4 text-luxury-gray-2 text-xs px-3 py-1.5 rounded-full hover:border-luxury-accent transition-colors disabled:opacity-50"
+                >
+                  {room}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {roomsError && <p className="text-red-400 text-xs mt-2">{roomsError}</p>}
+      </div>
+
       {loading && <p className="text-luxury-gray-3">Loading...</p>}
 
-      {!loading && jobs.length === 0 && (
+      {!loading && !showHidden && jobs.length === 0 && (
         <div className="container-card p-6 space-y-4">
           <p className="text-luxury-gray-2 font-medium">No recordings yet</p>
           <p className="text-luxury-gray-3 text-sm">
@@ -134,7 +255,54 @@ export default function RecordingsPage() {
         </div>
       )}
 
-      {!loading && jobs.length > 0 && (
+      {!loading && showHidden && jobs.length === 0 && (
+        <div className="container-card p-6">
+          <p className="text-luxury-gray-2 font-medium mb-1">No hidden recordings</p>
+          <p className="text-luxury-gray-3 text-sm">Nothing has been turned away by the allowed rooms list.</p>
+        </div>
+      )}
+
+      {!loading && jobs.length > 0 && showHidden && (
+        <div className="space-y-3">
+          {jobs.map(job => (
+            <div
+              key={job.id}
+              className="block bg-luxury-dark-1 border border-luxury-dark-3 rounded-lg p-4"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-luxury-white font-medium truncate">{job.meeting_title}</p>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                    {job.start_time && (
+                      <p className="text-luxury-gray-2 text-xs">{formatCT(job.start_time)}</p>
+                    )}
+                    <p className="text-luxury-gray-3 text-xs">Not uploaded. The Zoom recording was left alone.</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => addRoom(job.meeting_title)}
+                    disabled={roomsSaving}
+                    className="btn-secondary px-3 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Allow this room
+                  </button>
+                  <button
+                    onClick={e => deleteJob(e, job.id)}
+                    disabled={deleting === job.id}
+                    className="text-luxury-gray-3 hover:text-red-400 transition-colors p-1 disabled:opacity-50"
+                    title="Delete recording"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && jobs.length > 0 && !showHidden && (
         <div className="space-y-3">
           {jobs.map(job => (
             <Link
@@ -182,7 +350,12 @@ export default function RecordingsPage() {
           ))}
         </div>
       )}
+
+      {(hiddenCount > 0 || showHidden) && (
+        <button onClick={toggleHidden} className="text-luxury-gray-3 text-sm underline">
+          {showHidden ? 'Back to recordings' : `Show hidden recordings (${hiddenCount})`}
+        </button>
+      )}
     </div>
   )
 }
-

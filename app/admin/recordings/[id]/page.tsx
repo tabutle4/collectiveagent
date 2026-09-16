@@ -3,21 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Send, Sparkles, X, ChevronLeft } from 'lucide-react'
-
-const PROGRAM_NAMES = [
-  'Industry Intelligence & Market Mastery Meeting',
-  'Next Level Lead Gen & Marketing Coaching',
-  'New Agent Coaching Circle',
-  'Convert & Close Coaching',
-  'Seasoned Agent Coaching Circle',
-  'Monthly Apartment Locator Q&A With Maureen Eno',
-  'Collective Access Coaching In Dallas With Terraneka Hill',
-  'Collective Access Coaching In Houston With Eric Roberts',
-  'Collective Access Coaching In Houston And Dallas With Eric Roberts And Terraneka Hill',
-  'Monthly Lease Training With Briana Thomas',
-  'Navigating the Training Center, Coaching & Onboarding',
-  'Other',
-]
+import { AI_SUGGEST_ALL_PROMPT, AI_TOPIC_TAGS_PROMPT, PROGRAM_NAMES } from '@/lib/zoom/naming-prompts'
 
 function extractDate(title: string): string {
   return title.split(' - ')[1] || ''
@@ -137,7 +123,7 @@ export default function RecordingDetailPage() {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                messages: [{ role: 'user', content: `Based on this transcript, suggest exactly 3 to 4 short topic tags (3-6 words each, title case) for this recording. Respond with ONLY a JSON array of strings, nothing else. Example: ["Buyer Consultation Scripts", "Objection Handling", "Follow Up Systems"]` }],
+                messages: [{ role: 'user', content: AI_TOPIC_TAGS_PROMPT }],
                 context: {
                   meetingTitle: j.meeting_title || '',
                   title: j.final_title || j.suggested_title || '',
@@ -194,7 +180,7 @@ export default function RecordingDetailPage() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                      messages: [{ role: 'user', content: `Based on this transcript, suggest exactly 3 to 4 short topic tags (3-6 words each, title case) for this recording. Respond with ONLY a JSON array of strings, nothing else. Example: ["Buyer Consultation Scripts", "Objection Handling", "Follow Up Systems"]` }],
+                      messages: [{ role: 'user', content: AI_TOPIC_TAGS_PROMPT }],
                       context: {
                         meetingTitle: j.meeting_title || '',
                         title: j.final_title || j.suggested_title || '',
@@ -311,7 +297,7 @@ export default function RecordingDetailPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [{ role: 'user', content: `Based on the calendar and transcript data, suggest the correct program name, 3-4 topic tags, and the best SharePoint folder for this recording. Respond with only this JSON: {"program": "Program Name", "topics": ["Topic 1", "Topic 2", "Topic 3"], "folder": "Folder Name", "title": "Full title in correct format"}` }],
+          messages: [{ role: 'user', content: AI_SUGGEST_ALL_PROMPT }],
           context: {
             meetingTitle: job?.meeting_title || '',
             title, folder,

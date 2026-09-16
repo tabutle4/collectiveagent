@@ -74,14 +74,28 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ job: { ...job, participants: participants || [] } })
   }
 
-  const { data: jobs, error } = await supabaseAdmin
+  // Recordings from Zoom rooms that are not on the allow list are filed as
+  // 'ignored'. They stay out of the list unless they are asked for explicitly.
+  const showIgnored = searchParams.get('ignored') === '1'
+
+  const baseQuery = supabaseAdmin
     .from('zoom_recording_jobs')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(50)
 
+  const { data: jobs, error } = showIgnored
+    ? await baseQuery.eq('status', 'ignored')
+    : await baseQuery.neq('status', 'ignored')
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ jobs })
+
+  const { count: ignoredCount } = await supabaseAdmin
+    .from('zoom_recording_jobs')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'ignored')
+
+  return NextResponse.json({ jobs, ignoredCount: ignoredCount || 0 })
 }
 
 export async function DELETE(req: NextRequest) {
@@ -100,8 +114,10 @@ export async function DELETE(req: NextRequest) {
     .single()
 
   if (job) {
-    // Delete from Zoom (only if not already uploaded — confirm route deletes after upload)
-    if (job.status !== 'uploaded' && job.meeting_id) {
+    // Delete from Zoom (only if not already uploaded — confirm route deletes after upload).
+    // An 'ignored' job belongs to a Zoom room this app does not manage, so its Zoom
+    // recording is left alone; only our own row goes away.
+    if (job.status !== 'uploaded' && job.status !== 'ignored' && job.meeting_id) {
       const zoomToken = await getZoomAccessToken()
       if (zoomToken) await deleteZoomRecording(job.meeting_id, zoomToken)
     }
