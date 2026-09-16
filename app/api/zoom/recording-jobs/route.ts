@@ -1,27 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
+import { getZoomAccessToken } from '@/lib/zoom/zoom-api'
 import { getGraphToken } from '@/lib/microsoft-graph'
 
 const ONEDRIVE_USER = process.env.MICROSOFT_ONEDRIVE_USER!
 
-async function getZoomAccessToken(): Promise<string | null> {
-  try {
-    const res = await fetch(
-      `https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${process.env.ZOOM_ACCOUNT_ID}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${Buffer.from(`${process.env.ZOOM_CLIENT_ID}:${process.env.ZOOM_CLIENT_SECRET}`).toString('base64')}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      }
-    )
-    if (!res.ok) return null
-    const { access_token } = await res.json()
-    return access_token || null
-  } catch { return null }
-}
 
 async function deleteZoomRecording(meetingId: string, zoomToken: string): Promise<void> {
   try {

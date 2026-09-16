@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
+import { getZoomAccessToken } from '@/lib/zoom/zoom-api'
 import { getGraphToken } from '@/lib/microsoft-graph'
 import { Resend } from 'resend'
 import { getEmailLayout, emailButton, emailSignature } from '@/lib/email/layout'
@@ -11,23 +12,6 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 const ONEDRIVE_USER = process.env.MICROSOFT_ONEDRIVE_USER!
 const SHAREPOINT_SITE = 'collectiverealtyco.sharepoint.com:/sites/agenttrainingcenter:'
 
-async function getZoomAccessToken(): Promise<string | null> {
-  try {
-    const res = await fetch(
-      `https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${process.env.ZOOM_ACCOUNT_ID}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${Buffer.from(`${process.env.ZOOM_CLIENT_ID}:${process.env.ZOOM_CLIENT_SECRET}`).toString('base64')}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      }
-    )
-    if (!res.ok) return null
-    const { access_token } = await res.json()
-    return access_token || null
-  } catch { return null }
-}
 
 async function deleteZoomRecording(meetingId: string, zoomToken: string): Promise<void> {
   try {
@@ -261,6 +245,15 @@ export async function POST(req: NextRequest) {
 
   if (job.status === 'uploaded') {
     return NextResponse.json({ error: 'Already uploaded' }, { status: 409 })
+  }
+
+  // A hidden recording holds no Zoom file reference, so there is nothing to upload.
+  // It has to be restored through the process route first.
+  if (job.status === 'ignored') {
+    return NextResponse.json(
+      { error: 'This recording is hidden. Use Process this recording on the recordings page first.' },
+      { status: 400 }
+    )
   }
 
   // Mark as processing

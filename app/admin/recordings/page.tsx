@@ -34,6 +34,8 @@ export default function RecordingsPage() {
   const [roomsError, setRoomsError] = useState('')
   const [showHidden, setShowHidden] = useState(false)
   const [hiddenCount, setHiddenCount] = useState(0)
+  const [processing, setProcessing] = useState<string | null>(null)
+  const [processError, setProcessError] = useState('')
 
   useEffect(() => {
     loadJobs(false)
@@ -124,6 +126,29 @@ export default function RecordingsPage() {
     saveRooms(allowedRooms.filter(r => r !== name))
   }
 
+  // Pulls a hidden recording back into the normal pipeline: the server fetches it
+  // from Zoom again, stages it to OneDrive and marks it pending, so it is named and
+  // emailed like any other recording.
+  async function processJob(jobId: string) {
+    setProcessing(jobId)
+    setProcessError('')
+    try {
+      const res = await fetch('/api/zoom/recording-process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not process this recording')
+      setJobs(prev => prev.filter(j => j.id !== jobId))
+      setHiddenCount(prev => (prev > 0 ? prev - 1 : 0))
+    } catch (err: any) {
+      setProcessError(err.message)
+    } finally {
+      setProcessing(null)
+    }
+  }
+
   async function deleteJob(e: React.MouseEvent, jobId: string) {
     e.preventDefault()
     e.stopPropagation()
@@ -155,7 +180,7 @@ export default function RecordingsPage() {
             value={notifyEmail}
             onChange={e => setNotifyEmail(e.target.value)}
             placeholder="email@collectiverealtyco.com"
-            className="flex-1 bg-luxury-dark-1 border border-luxury-dark-3 rounded-lg px-4 py-2 text-luxury-white text-sm focus:outline-none focus:border-luxury-accent"
+            className="input-luxury flex-1 text-sm"
           />
           <button
             onClick={saveEmail}
@@ -276,10 +301,17 @@ export default function RecordingsPage() {
                     {job.start_time && (
                       <p className="text-luxury-gray-2 text-xs">{formatCT(job.start_time)}</p>
                     )}
-                    <p className="text-luxury-gray-3 text-xs">Not uploaded. The Zoom recording was left alone.</p>
+                    <p className="text-luxury-gray-3 text-xs">Not uploaded. The Zoom recording was left alone. Use Process this recording to bring it in.</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => processJob(job.id)}
+                    disabled={processing === job.id}
+                    className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {processing === job.id ? 'Processing...' : 'Process this recording'}
+                  </button>
                   <button
                     onClick={() => addRoom(job.meeting_title)}
                     disabled={roomsSaving}
@@ -350,6 +382,8 @@ export default function RecordingsPage() {
           ))}
         </div>
       )}
+
+      {processError && <p className="text-red-400 text-xs">{processError}</p>}
 
       {(hiddenCount > 0 || showHidden) && (
         <button onClick={toggleHidden} className="text-luxury-gray-3 text-sm underline">

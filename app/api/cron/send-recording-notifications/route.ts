@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { Resend } from 'resend'
 import { getEmailLayout, emailButton, emailSignature } from '@/lib/email/layout'
 import { requireCronSecret } from '@/lib/api-auth'
+import { getZoomAccessToken } from '@/lib/zoom/zoom-api'
 import { buildRecordingContext } from '@/lib/zoom/recording-context'
 import { listSharePointFolders } from '@/lib/zoom/sharepoint-folders'
 import { suggestRecordingNaming } from '@/lib/zoom/ai-naming'
@@ -16,24 +17,6 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 
 // Two hours in ms — after this long holding, send the email even without a transcript
 const HOLD_TIMEOUT_MS = 2 * 60 * 60 * 1000
-
-async function getZoomAccessToken(): Promise<string | null> {
-  try {
-    const res = await fetch(
-      `https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${process.env.ZOOM_ACCOUNT_ID}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${Buffer.from(`${process.env.ZOOM_CLIENT_ID}:${process.env.ZOOM_CLIENT_SECRET}`).toString('base64')}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      }
-    )
-    if (!res.ok) return null
-    const { access_token } = await res.json()
-    return access_token || null
-  } catch { return null }
-}
 
 // Fetch a VTT transcript for a meeting if Zoom has generated one yet.
 // Returns the transcript text, or '' if not available.
@@ -174,6 +157,31 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      // Details the webhook's own email used to carry. They are rebuilt here so the
+      // one remaining email still reports attendance, whether the video reached
+      // OneDrive, and which part of a split recording this is.
+      const { count: attendeeCount } = await supabaseAdmin
+        .from('zoom_meeting_participants')
+        .select('id', { count: 'exact', head: true })
+        .eq('zoom_recording_job_id', job.id)
+
+      let segmentLabel = ''
+      if (job.meeting_id) {
+        const { data: siblings } = await supabaseAdmin
+          .from('zoom_recording_jobs')
+          .select('id, start_time')
+          .eq('meeting_id', job.meeting_id)
+          .order('start_time', { ascending: true })
+        if (siblings && siblings.length > 1) {
+          const index = siblings.findIndex(s => s.id === job.id)
+          if (index >= 0) segmentLabel = `Part ${index + 1}`
+        }
+      }
+
+      const oneDriveNote = job.onedrive_url
+        ? `<p style="font-size:13px;color:#4a7c59;">Video saved to OneDrive. Zoom recording will be deleted after you confirm upload to SharePoint.</p>`
+        : `<p style="font-size:13px;color:#c0392b;">OneDrive upload failed. Zoom recording still available for ~24 hours.</p>`
+
       // Build and send the email
       const confirmUrl = `${process.env.NEXT_PUBLIC_APP_URL}/admin/recordings/${job.id}`
       const dateStr = job.start_time
@@ -189,10 +197,12 @@ export async function GET(request: NextRequest) {
         `<p class="email-greeting">New Zoom recording ready for review.</p>
         <div class="email-section">
           <h3>Recording Details</h3>
-          <p><strong>Meeting:</strong> ${job.meeting_title}</p>
+          <p><strong>Meeting:</strong> ${job.meeting_title}${segmentLabel ? ` (${segmentLabel})` : ''}</p>
           <p><strong>Date:</strong> ${dateStr}</p>
           <p><strong>Suggested Title:</strong> ${suggestedTitle}</p>
           <p><strong>Suggested Folder:</strong> ${suggestedFolder}</p>
+          <p><strong>Attendees captured:</strong> ${attendeeCount || 0}</p>
+          ${oneDriveNote}
           ${transcriptNote}
         </div>
         ${emailButton('Review & Upload to SharePoint', confirmUrl)}
@@ -203,7 +213,7 @@ export async function GET(request: NextRequest) {
       await resend.emails.send({
         from: 'Collective Notifications <notifications@coachingbrokeragetools.com>',
         to: notifyEmail,
-        subject: `New Recording Ready: ${suggestedTitle || job.meeting_title}`,
+        subject: `New Recording Ready: ${suggestedTitle || job.meeting_title}${segmentLabel ? ` (${segmentLabel})` : ''}`,
         html: notifyHtml,
       })
 
