@@ -383,9 +383,26 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     return null
   }
 
+  // Links that only mean anything to a licensed agent: their own deals, their
+  // onboarding checklist, their fees, their checks and their flyers. An
+  // unlicensed staff account such as a team assistant has none of these, so the
+  // links are hidden rather than opening an empty page.
+  const licensedAgentOnlyHrefs = [
+    '/transactions',
+    '/agent/checklist',
+    '/agent/fees',
+    '/admin/checks',
+    '/agent/flyer',
+  ]
+
   const getAgentItems = (): NavItem[] => {
     if (isReferral) return referralAgentNav
     if (user?.full_nav_access) return agentNav
+    // Strict false only. A missing field leaves the nav untouched, so an agent
+    // never loses links because a payload arrived without is_licensed_agent.
+    if (user?.is_licensed_agent === false) {
+      return restrictedAgentNav.filter(item => !licensedAgentOnlyHrefs.includes(item.href))
+    }
     return restrictedAgentNav
   }
 

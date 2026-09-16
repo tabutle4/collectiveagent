@@ -13,6 +13,7 @@ interface User {
   office?: string
   commission_plan?: string
   full_nav_access?: boolean
+  is_licensed_agent?: boolean
   status?: string
   is_active?: boolean
   headshot_url?: string
