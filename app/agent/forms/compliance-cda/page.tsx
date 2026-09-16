@@ -92,8 +92,9 @@ export default function ComplianceCdaForm() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [onBehalfAgent, setOnBehalfAgent] = useState<AgentOption | null>(null)
-  const ADMIN_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
-  const isAdmin = ADMIN_ROLES.includes(String(user?.role || '').toLowerCase())
+  // Filing on another agent's behalf is permission gated, not role gated, so
+  // office support and assistants can be granted it without a staff role.
+  const [canFileForAgents, setCanFileForAgents] = useState(false)
   const [agentTeam, setAgentTeam] = useState<{ team_name: string } | null>(null)
   const [mode, setMode] = useState<Mode>('compliance')
   const [submitting, setSubmitting] = useState(false)
@@ -170,6 +171,9 @@ export default function ComplianceCdaForm() {
       if (!res.ok) { router.push('/auth/login'); return }
       const data = await res.json()
       setUser(data.user)
+      setCanFileForAgents(
+        Array.isArray(data.permissions) && data.permissions.includes('can_submit_forms_for_agents')
+      )
       if (data.user?.division?.length) {
         setField('flyer_display_type', 'division')
         // One division on file: preselect it so the agent has nothing to do.
@@ -228,7 +232,7 @@ export default function ComplianceCdaForm() {
     if (!addressSearch.trim()) return
     setSearching(true); setSearchDone(false)
     try {
-      const behalfParam = isAdmin && onBehalfAgent ? `&on_behalf_of_agent_id=${onBehalfAgent.id}` : ''
+      const behalfParam = canFileForAgents && onBehalfAgent ? `&on_behalf_of_agent_id=${onBehalfAgent.id}` : ''
       const url = `/api/agent/forms/compliance-cda?address=${encodeURIComponent(addressSearch)}&mode=${mode}${behalfParam}`
       const res = await fetch(url)
       const data = await res.json()
@@ -306,7 +310,7 @@ export default function ComplianceCdaForm() {
         }))
       }
     } catch { setSearchDone(true) } finally { setSearching(false) }
-  }, [addressSearch, mode, isAdmin, onBehalfAgent])
+  }, [addressSearch, mode, canFileForAgents, onBehalfAgent])
 
   // Look the address up while it is being typed, rather than only when the
   // Search button is pressed.
@@ -371,7 +375,7 @@ export default function ComplianceCdaForm() {
     let cancelled = false
     const t = setTimeout(async () => {
       try {
-        const behalfParam = isAdmin && onBehalfAgent ? `&on_behalf_of_agent_id=${onBehalfAgent.id}` : ''
+        const behalfParam = canFileForAgents && onBehalfAgent ? `&on_behalf_of_agent_id=${onBehalfAgent.id}` : ''
         const res = await fetch(`/api/agent/forms/compliance-cda?client_name=${encodeURIComponent(lookupTerm)}${behalfParam}`)
         const data = await res.json()
         if (cancelled) return
@@ -392,7 +396,7 @@ export default function ComplianceCdaForm() {
     // would re-run this effect every time the lookup sets it and fire a second
     // identical request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lookupTerm, mode, attachTo, confirmedNewDeal, isAdmin, onBehalfAgent])
+  }, [lookupTerm, mode, attachTo, confirmedNewDeal, canFileForAgents, onBehalfAgent])
 
   // ── Commission Summary (everything that affects the commission) ──────────
   // Percent bases: BTSA and rebate = % of the SALES PRICE (commission basis
@@ -653,7 +657,7 @@ export default function ComplianceCdaForm() {
       }
     }
 
-    if (isAdmin && onBehalfAgent) {
+    if (canFileForAgents && onBehalfAgent) {
       payload = { ...payload, on_behalf_of_agent_id: onBehalfAgent.id }
     }
 
@@ -716,7 +720,7 @@ export default function ComplianceCdaForm() {
       <h1 className="page-title mb-2">COMPLIANCE &amp; CDA</h1>
       <p className="text-xs text-luxury-gray-3 mb-6">Select the type of submission below.</p>
 
-      {isAdmin && (
+      {canFileForAgents && (
         <div className="container-card mb-6 border-luxury-accent/30">
           <p className="text-sm font-medium text-luxury-gray-1 mb-1">Submitting on behalf of an agent</p>
           <p className="text-xs text-luxury-gray-3 mb-3">

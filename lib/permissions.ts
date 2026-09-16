@@ -91,6 +91,7 @@ export type PermissionCode =
   // Forms (existing in DB)
   | 'can_view_forms'
   | 'can_manage_forms'
+  | 'can_submit_forms_for_agents'
   // Onboarding (existing in DB)
   | 'can_view_onboarding'
   | 'can_manage_onboarding'
@@ -333,6 +334,7 @@ export async function getPermissionsObject(
     'can_manage_listings',
     // Forms
     'can_manage_forms',
+    'can_submit_forms_for_agents',
     // Onboarding
     'can_manage_onboarding',
     // Teams

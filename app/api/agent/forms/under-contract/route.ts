@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
+import { hasPermission } from '@/lib/permissions'
 import { supabaseAdmin } from '@/lib/supabase'
 import { autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { feeCodeFromRepresenting } from '@/lib/transactions/feeCode'
@@ -82,10 +83,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Office staff may submit on behalf of an agent. Verify server-side.
-    const STAFF_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
+    // Gated by permission rather than a hardcoded role list so the permissions
+    // UI (and per-user overrides) control who may file for someone else.
     if (on_behalf_of_agent_id) {
-      const submitterRole = String(auth.user.role || '').toLowerCase()
-      if (!STAFF_ROLES.includes(submitterRole)) {
+      if (!(await hasPermission(auth.user.id, 'can_submit_forms_for_agents'))) {
         return NextResponse.json({ error: 'Not permitted to submit on behalf of another agent' }, { status: 403 })
       }
       const { data: targetAgent } = await supabaseAdmin

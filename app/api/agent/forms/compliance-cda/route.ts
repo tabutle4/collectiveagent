@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
+import { hasPermission } from '@/lib/permissions'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getEmailLayout } from '@/lib/email/layout'
 import { buildFormAnswersHtml } from '@/lib/form-fields'
@@ -204,10 +205,9 @@ export async function GET(request: NextRequest) {
   const mode = searchParams.get('mode')
   const onBehalfOfAgentId = searchParams.get('on_behalf_of_agent_id')
   // Office staff may look up an agent's transactions when filing on their behalf.
-  // Verify staff server-side; otherwise fall back to the caller's own id.
-  const STAFF_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
+  // Verify server-side by permission; otherwise fall back to the caller's own id.
   const lookupAgentId =
-    onBehalfOfAgentId && STAFF_ROLES.includes(String(auth.user.role || '').toLowerCase())
+    onBehalfOfAgentId && (await hasPermission(auth.user.id, 'can_submit_forms_for_agents'))
       ? onBehalfOfAgentId
       : auth.user.id
   // As-you-type retainer lookup. The form asks on every change to the client
@@ -266,15 +266,14 @@ export async function POST(request: NextRequest) {
     const { submission_mode, on_behalf_of_agent_id } = body
     if (!submission_mode) return NextResponse.json({ error: 'submission_mode is required' }, { status: 400 })
 
-    // Office staff may submit on behalf of an agent. Verify the submitter is
-    // staff server-side before honoring the selected agent (never trust the client).
-    const STAFF_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
+    // Office staff may submit on behalf of an agent. Verify the submitter holds
+    // the permission server-side before honoring the selected agent (never trust
+    // the client). Permission rather than role so per-user overrides apply.
     let agentId = auth.user.id
     let agentEmail = auth.user.email
     let agentName = `${auth.user.first_name} ${auth.user.last_name}`
     if (on_behalf_of_agent_id) {
-      const submitterRole = String(auth.user.role || '').toLowerCase()
-      if (!STAFF_ROLES.includes(submitterRole)) {
+      if (!(await hasPermission(auth.user.id, 'can_submit_forms_for_agents'))) {
         return NextResponse.json({ error: 'Not permitted to submit on behalf of another agent' }, { status: 403 })
       }
       // Confirm the target is a real licensed agent

@@ -34,8 +34,9 @@ export default function UnderContractForm() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [onBehalfAgent, setOnBehalfAgent] = useState<AgentOption | null>(null)
-  const ADMIN_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
-  const isAdmin = ADMIN_ROLES.includes(String(user?.role || '').toLowerCase())
+  // Filing on another agent's behalf is permission gated, not role gated, so
+  // office support and assistants can be granted it without a staff role.
+  const [canFileForAgents, setCanFileForAgents] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [duplicateMatches, setDuplicateMatches] = useState<any[]>([])
   const [confirmedNewDeal, setConfirmedNewDeal] = useState(false)
@@ -68,6 +69,9 @@ export default function UnderContractForm() {
       if (!res.ok) { router.push('/auth/login'); return }
       const data = await res.json()
       setUser(data.user)
+      setCanFileForAgents(
+        Array.isArray(data.permissions) && data.permissions.includes('can_submit_forms_for_agents')
+      )
       const u = data.user
       if (u) {
         setForm(prev => ({
@@ -123,7 +127,7 @@ export default function UnderContractForm() {
     try {
       const payload = {
         ...form,
-        on_behalf_of_agent_id: isAdmin && onBehalfAgent ? onBehalfAgent.id : null,
+        on_behalf_of_agent_id: canFileForAgents && onBehalfAgent ? onBehalfAgent.id : null,
         add_transaction_coordination: form.add_transaction_coordination === 'yes',
         confirm_new_deal: confirmedNewDeal,
       }
@@ -184,7 +188,7 @@ export default function UnderContractForm() {
 
       <div className="container-card space-y-8">
 
-        {isAdmin && (
+        {canFileForAgents && (
           <section className="border border-luxury-accent/30 rounded p-4">
             <p className="text-sm font-medium text-luxury-gray-1 mb-1">Submitting on behalf of an agent</p>
             <p className="text-xs text-luxury-gray-3 mb-3">
