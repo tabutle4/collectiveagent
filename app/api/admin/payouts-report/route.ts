@@ -4,7 +4,7 @@ import { requirePermission } from '@/lib/api-auth'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 import { getCentralDateString } from '@/lib/timezone'
 import { SIDE_MODES_FILTER, pickSideSubmissions, deriveSideStatus, expectedSides } from '@/lib/compliance/derive'
-import { officeNetState, CUTOVER_DATE } from '@/lib/payouts/ledger'
+import { officeNetState } from '@/lib/payouts/ledger'
 import { computeAutoHolds, computePayloadPending, isNotCleared, type HoldCheck } from '@/lib/payouts/holds'
 import { fetchChecklistProgress } from '@/lib/payouts/checklist'
 
@@ -50,7 +50,20 @@ export async function GET(request: NextRequest) {
   if (auth.error) return auth.error
 
   try {
-    // Checks in the payouts account, received on or after the cutover.
+    // Every check in the payouts account, whatever date it arrived.
+    //
+    // There is deliberately NO cutover filter here. The cutover is a LEDGER
+    // boundary: the balance opens at the bank figure rather than being
+    // reconstructed from history. It is not a filter on who we owe. An agent
+    // who has not been paid is owed the money regardless of when the check
+    // landed, and a liability that drops off this screen on a date boundary
+    // makes the Bottom Line understate what we owe.
+    //
+    // This was got wrong once. A `received_date >= CUTOVER_DATE` filter here
+    // hid 2409 Park Oaks Drive (check 2025-05-27, $850 still recorded against
+    // the agent) and moved the Bottom Line by that amount with no
+    // corresponding change in the bank. Date-scoping belongs on the ledger and
+    // on the recompute scope, never on the list of people we owe.
     //
     // The stored `agents_paid` flag is deliberately NOT a filter here. It is
     // derived on edit and has drifted badly: 252 of 289 in-scope checks carried
@@ -69,7 +82,6 @@ export async function GET(request: NextRequest) {
         filters: [
           { type: 'not', column: 'transaction_id', value: null },
           { type: 'eq', column: 'funds_destination', value: 'payouts' },
-          { type: 'gte', column: 'received_date', value: CUTOVER_DATE },
         ],
         orderBy: { column: 'cleared_date', ascending: false },
       }
@@ -87,7 +99,6 @@ export async function GET(request: NextRequest) {
         filters: [
           { type: 'is', column: 'transaction_id', value: null },
           { type: 'eq', column: 'funds_destination', value: 'payouts' },
-          { type: 'gte', column: 'received_date', value: CUTOVER_DATE },
         ],
         orderBy: { column: 'cleared_date', ascending: false },
       }
@@ -606,7 +617,6 @@ export async function GET(request: NextRequest) {
       unswept_office_net: Math.round(unsweptOfficeNet * 100) / 100,
       unswept_deals: unsweptDeals.sort((a, b) => b.amount - a.amount),
       office_net_unknown: officeNetUnknown,
-      report_from_date: CUTOVER_DATE,
     })
   } catch (error: any) {
     console.error('Payouts report error:', error)
