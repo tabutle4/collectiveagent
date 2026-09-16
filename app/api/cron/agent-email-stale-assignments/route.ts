@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { insertSystemNote } from '@/lib/agent-email'
+import { requireCronSecret } from '@/lib/api-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -27,10 +28,8 @@ export const maxDuration = 60
 //
 // Runs hourly (see vercel.json). Authenticated with CRON_SECRET only.
 export async function GET(request: NextRequest) {
-  const auth = request.headers.get('authorization')
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronSecret(request)
+  if (denied) return denied
 
   try {
     const cutoffIso = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()

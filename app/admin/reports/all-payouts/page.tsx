@@ -20,6 +20,7 @@ interface PayoutRow {
   transaction_id: string | null
   agent_id: string | null
   is_lease: boolean
+  office_net_state?: 'paid_at_closing' | 'not_swept' | 'swept'
 }
 
 interface PendingByType {
@@ -38,6 +39,12 @@ interface CountByType {
   brokerage_net: number
 }
 
+interface OfficeNetTotals {
+  paid_at_closing: number
+  not_swept: number
+  swept: number
+}
+
 export default function AllPayoutsPage() {
   const router = useRouter()
   const currentYear = new Date().getFullYear()
@@ -45,6 +52,9 @@ export default function AllPayoutsPage() {
   const [rows, setRows] = useState<PayoutRow[]>([])
   const [pendingByType, setPendingByType] = useState<PendingByType>({ agent: 0, external: 0, pm_fee: 0, landlord: 0, brokerage_net: 0 })
   const [countByType, setCountByType] = useState<CountByType>({ agent: 0, external: 0, pm_fee: 0, landlord: 0, brokerage_net: 0 })
+  const [officeNet, setOfficeNet] = useState<OfficeNetTotals>({ paid_at_closing: 0, not_swept: 0, swept: 0 })
+  const [officeNetCount, setOfficeNetCount] = useState<OfficeNetTotals>({ paid_at_closing: 0, not_swept: 0, swept: 0 })
+  const [officeNetFilter, setOfficeNetFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -81,7 +91,7 @@ export default function AllPayoutsPage() {
   useEffect(() => {
     const t = setTimeout(() => loadData(), 300)
     return () => clearTimeout(t)
-  }, [search, statusFilter, typeFilter, yearFilter, fromDate, toDate])
+  }, [search, statusFilter, typeFilter, yearFilter, fromDate, toDate, officeNetFilter])
 
   const loadData = async () => {
     setLoading(true)
@@ -93,12 +103,15 @@ export default function AllPayoutsPage() {
       if (yearFilter) params.set('year', yearFilter)
       if (fromDate) params.set('from', fromDate)
       if (toDate) params.set('to', toDate)
+      if (officeNetFilter) params.set('office_net_state', officeNetFilter)
 
       const res = await fetch(`/api/admin/all-payouts?${params}`)
       const data = await res.json()
       setRows(data.rows || [])
       setPendingByType(data.pendingByType || { agent: 0, external: 0, pm_fee: 0, landlord: 0, brokerage_net: 0 })
       setCountByType(data.countByType || { agent: 0, external: 0, pm_fee: 0, landlord: 0, brokerage_net: 0 })
+      setOfficeNet(data.officeNet || { paid_at_closing: 0, not_swept: 0, swept: 0 })
+      setOfficeNetCount(data.officeNetCount || { paid_at_closing: 0, not_swept: 0, swept: 0 })
     } catch (err) {
       console.error('Error loading payouts:', err)
     } finally {
@@ -175,9 +188,21 @@ export default function AllPayoutsPage() {
       case 'external': return <span className="text-xs text-purple-700 bg-purple-50 px-2 py-0.5 rounded">External</span>
       case 'pm_fee': return <span className="text-xs text-teal-700 bg-teal-50 px-2 py-0.5 rounded">PM Fee</span>
       case 'landlord': return <span className="text-xs text-orange-700 bg-orange-50 px-2 py-0.5 rounded">Landlord</span>
-      case 'brokerage_net': return <span className="text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">CRC Brokerage</span>
+      case 'brokerage_net': return <span className="text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Our Share</span>
       default: return <span className="text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded">{type}</span>
     }
+  }
+
+  // Where our share of a deal actually sits. Only meaningful on our own rows.
+  const getOfficeNetBadge = (row: PayoutRow) => {
+    if (row.type !== 'brokerage_net' || !row.office_net_state) return null
+    if (row.office_net_state === 'not_swept') {
+      return <span className="text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Ready to move</span>
+    }
+    if (row.office_net_state === 'swept') {
+      return <span className="text-xs text-luxury-gray-2 bg-luxury-gray-5/40 px-2 py-0.5 rounded">Moved</span>
+    }
+    return <span className="text-xs text-luxury-gray-2 bg-luxury-gray-5/40 px-2 py-0.5 rounded">Paid at closing</span>
   }
 
   const handleMarkPaid = async () => {
@@ -298,6 +323,50 @@ export default function AllPayoutsPage() {
           </button>
         </div>
 
+        {/* Our share of every deal, split by where the money actually is.
+            Kept out of Total Pending on purpose: this is money the brokerage
+            has earned, not money it owes anyone, and folding it in would
+            overstate what has to go out the door. */}
+        <div className="mb-6">
+          <p className="text-xs text-luxury-gray-3 uppercase tracking-wide mb-2">
+            Our share ({currentYear}) - not part of Total Pending
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <button
+              onClick={() => setOfficeNetFilter(officeNetFilter === 'not_swept' ? '' : 'not_swept')}
+              className={`container-card text-left transition-all ${officeNetFilter === 'not_swept' ? 'ring-2 ring-emerald-500' : 'hover:shadow-md'}`}
+            >
+              <p className="text-xs text-emerald-600 uppercase tracking-wide">Ready to move</p>
+              <p className="text-xl font-semibold text-luxury-gray-1">{formatCurrency(officeNet.not_swept)}</p>
+              <p className="text-xs text-luxury-gray-3">
+                {officeNetCount.not_swept} deals, still in the payouts account
+              </p>
+            </button>
+
+            <button
+              onClick={() => setOfficeNetFilter(officeNetFilter === 'swept' ? '' : 'swept')}
+              className={`container-card text-left transition-all ${officeNetFilter === 'swept' ? 'ring-2 ring-luxury-accent' : 'hover:shadow-md'}`}
+            >
+              <p className="text-xs text-luxury-gray-3 uppercase tracking-wide">Already moved</p>
+              <p className="text-xl font-semibold text-luxury-gray-1">{formatCurrency(officeNet.swept)}</p>
+              <p className="text-xs text-luxury-gray-3">
+                {officeNetCount.swept} deals, in the income account
+              </p>
+            </button>
+
+            <button
+              onClick={() => setOfficeNetFilter(officeNetFilter === 'paid_at_closing' ? '' : 'paid_at_closing')}
+              className={`container-card text-left transition-all ${officeNetFilter === 'paid_at_closing' ? 'ring-2 ring-luxury-accent' : 'hover:shadow-md'}`}
+            >
+              <p className="text-xs text-luxury-gray-3 uppercase tracking-wide">Paid at closing</p>
+              <p className="text-xl font-semibold text-luxury-gray-1">{formatCurrency(officeNet.paid_at_closing)}</p>
+              <p className="text-xs text-luxury-gray-3">
+                {officeNetCount.paid_at_closing} deals, never came through this account
+              </p>
+            </button>
+          </div>
+        </div>
+
         {/* Filters */}
         <div className="container-card mb-6">
           <div className="flex flex-wrap gap-4 items-end">
@@ -349,7 +418,7 @@ export default function AllPayoutsPage() {
               />
             </div>
 
-            {(search || statusFilter || typeFilter || fromDate || toDate) && (
+            {(search || statusFilter || typeFilter || fromDate || toDate || officeNetFilter) && (
               <button
                 onClick={() => {
                   setSearch('')
@@ -357,6 +426,7 @@ export default function AllPayoutsPage() {
                   setTypeFilter('')
                   setFromDate('')
                   setToDate('')
+                  setOfficeNetFilter('')
                 }}
                 className="btn btn-secondary flex items-center gap-1"
               >
@@ -391,6 +461,7 @@ export default function AllPayoutsPage() {
                     </div>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                       {getTypeBadge(row.type)}
+                      {getOfficeNetBadge(row)}
                       {getStatusBadge(row.payment_status, row)}
                       {row.payment_date && <span className="text-luxury-gray-3">{formatDate(row.payment_date)}</span>}
                       {row.payment_method && <span className="text-luxury-gray-3 uppercase">{row.payment_method}</span>}
@@ -422,7 +493,12 @@ export default function AllPayoutsPage() {
                   <tbody>
                     {rows.map((row) => (
                       <tr key={`${row.type}-${row.id}`} className="tr-luxury">
-                        <td className="py-3 px-4">{getTypeBadge(row.type)}</td>
+                        <td className="py-3 px-4">
+                          <div className="flex flex-wrap items-center gap-1">
+                            {getTypeBadge(row.type)}
+                            {getOfficeNetBadge(row)}
+                          </div>
+                        </td>
                         <td className="py-3 px-4 font-medium text-luxury-gray-1">{row.payee}</td>
                         <td className="py-3 px-4 text-luxury-gray-2 max-w-[200px] truncate">{row.address}</td>
                         <td className="py-3 px-4 text-luxury-gray-3">{row.transaction_type}</td>

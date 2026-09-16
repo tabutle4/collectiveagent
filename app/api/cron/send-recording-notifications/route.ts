@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { Resend } from 'resend'
 import { getEmailLayout, emailButton, emailSignature } from '@/lib/email/layout'
+import { requireCronSecret } from '@/lib/api-auth'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -64,10 +65,8 @@ async function fetchTranscriptIfReady(meetingId: string, zoomToken: string): Pro
 }
 
 export async function GET(request: NextRequest) {
-  const auth = request.headers.get('authorization')
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronSecret(request)
+  if (denied) return denied
 
   try {
     // Find jobs still awaiting their notification: held, not yet sent, still pending upload.

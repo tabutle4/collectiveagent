@@ -38,6 +38,14 @@ export type PermissionCode =
   | 'can_view_checks'
   | 'can_manage_checks'
   | 'can_process_payouts'
+  // Payouts account: sweep, ledger, reconciliation, recurring bills
+  | 'can_view_sweeps'
+  | 'can_manage_sweeps'
+  | 'can_view_ledger'
+  | 'can_manage_ledger'
+  | 'can_view_reconciliation'
+  | 'can_manage_reconciliation'
+  | 'can_manage_recurring_bills'
   // 1099
   | 'can_view_1099_data'
   | 'can_generate_1099_reports'
@@ -292,6 +300,14 @@ export async function getPermissionsObject(
     'can_view_checks',
     'can_manage_checks',
     'can_process_payouts',
+    // Payouts account: sweep, ledger, reconciliation, recurring bills
+    'can_view_sweeps',
+    'can_manage_sweeps',
+    'can_view_ledger',
+    'can_manage_ledger',
+    'can_view_reconciliation',
+    'can_manage_reconciliation',
+    'can_manage_recurring_bills',
     // 1099
     'can_view_1099_data',
     'can_generate_1099_reports',

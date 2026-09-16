@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { reconcileSubscriptions } from '@/lib/graph-mail-subscriptions'
+import { requireCronSecret } from '@/lib/api-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,10 +14,8 @@ export const dynamic = 'force-dynamic'
 //
 // Authenticated with CRON_SECRET only (no user session).
 export async function GET(request: NextRequest) {
-  const auth = request.headers.get('authorization')
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronSecret(request)
+  if (denied) return denied
 
   try {
     const report = await reconcileSubscriptions()

@@ -49,7 +49,7 @@ import LowCommissionFlagPanel from '@/components/transactions/LowCommissionFlagP
 import AddAgentModal from '@/components/transactions/AddAgentModal'
 import AgentBillingPanel from '@/components/transactions/AgentBillingPanel'
 import AgentCardFinancials, { OverridableField } from '@/components/transactions/AgentCardFinancials'
-import { AGENT_ROLE_OPTIONS, SIDE_OPTIONS, PAYMENT_METHOD_OPTIONS, CONTACT_TYPES } from '@/lib/transactions/constants'
+import { AGENT_ROLE_OPTIONS, SIDE_OPTIONS, CONTACT_TYPES, PAYMENT_METHOD_OPTIONS, paymentMethodLabel } from '@/lib/transactions/constants'
 import { getTransactionTypeLabel } from '@/lib/transactions/transactionTypes'
 import { FIELD_GROUPS, hasValue } from '@/lib/compliance/fieldGroups'
 
@@ -112,17 +112,6 @@ const fmtName = (u: any) =>
   u
     ? `${u.preferred_first_name || u.first_name || ''} ${u.preferred_last_name || u.last_name || ''}`.trim()
     : ''
-
-// Payment method label, from the one list the check and brokerage forms
-// already use. The stored column has mixed casing in live data - 264 rows
-// read "ACH" and 7 read "ach", 11 read "Zelle" - so the lookup is
-// case-insensitive, and anything the list does not cover falls back to the
-// stored value rather than rendering blank.
-const paymentMethodLabel = (m: string | null | undefined) => {
-  if (!m) return ''
-  const hit = PAYMENT_METHOD_OPTIONS.find(o => o.value === String(m).toLowerCase())
-  return hit ? hit.label : m
-}
 
 
 const isLease = (txnType: string | null) => {
@@ -2316,7 +2305,7 @@ export default function AdminTransactionDetailPage() {
     open: false,
     agent: null,
     paymentDate: new Date().toISOString().split('T')[0],
-    paymentMethod: 'ACH',
+    paymentMethod: 'ach',
     paymentReference: '',
     fundingSource: 'crc',
     countsTowardProgress: true,
@@ -3506,7 +3495,7 @@ export default function AdminTransactionDetailPage() {
       open: true,
       agent,
       paymentDate: new Date().toISOString().split('T')[0],
-      paymentMethod: 'ACH',
+      paymentMethod: 'ach',
       paymentReference: '',
       fundingSource: 'crc',
       countsTowardProgress: defaultCountsToward,
@@ -7166,10 +7155,12 @@ export default function AdminTransactionDetailPage() {
                     }
                     className="input-luxury text-xs w-full"
                   >
-                    <option value="ACH">ACH</option>
-                    <option value="check">Check</option>
-                    <option value="Zelle">Zelle</option>
-                    <option value="wire">Wire</option>
+                    {/* Was four hardcoded options in three different
+                        casings, writing ACH and Zelle uppercase while check
+                        and wire went lowercase. One list now. */}
+                    {PAYMENT_METHOD_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>

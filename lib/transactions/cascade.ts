@@ -616,6 +616,23 @@ export async function recomputeOfficeNet(transactionId: string): Promise<void> {
     )
     const ecommissionUncovered = Math.max(0, ecommissionDebtsTotal - ecommissionExternalTotal)
 
+    // The mirror case, and a real one: an eCommission external payout row with
+    // no agent debt behind it. externalTotal subtracts it, nothing adds it
+    // back, and office_net comes out low by that amount with nothing on any
+    // screen to say why. It is not corrected here, because adding money back
+    // that no debt supports would invent income; the deal's inputs are wrong
+    // and a person has to fix them. Logged with the id and the amount so the
+    // deal can be found.
+    const ecommissionUnbacked =
+      Math.round(Math.max(0, ecommissionExternalTotal - ecommissionDebtsTotal) * 100) / 100
+    if (ecommissionUnbacked > 0) {
+      console.warn(
+        `[cascade] Transaction ${transactionId}: eCommission external payout of ` +
+          `${ecommissionUnbacked.toFixed(2)} has no matching agent debt staged. ` +
+          `office_net is understated by that amount until the debt is added.`
+      )
+    }
+
     const officeNet =
       Math.round(
         (brokerageSplitTotal +

@@ -409,15 +409,81 @@ export const AGENT_ROLE_OPTIONS = [
   { value: 'momentum_partner', label: 'Momentum Partner' },
 ]
 
-// ===== Payment method options (used on payouts and brokerage payments) =====
+// ===== Payment methods =====
+//
+// One list. There were two, and they disagreed: this file offered check,
+// zelle, ach, wire and payload, while the check entry form offered check,
+// zelle, payload and eCommission. So an ACH deposit could not be recorded at
+// all, which live data confirms (zero checks carry method 'ach' while ACH
+// deposits do happen), and an eCommission check rendered with no label on the
+// transaction page because the label lookup read this list.
+//
+// Direction is the reason the two lists ever diverged, so it is a property
+// here rather than a second list.
+//
+// eCommission is the odd one, and it is not really a method at all. eCommission
+// advances money to an agent; at closing Collective Realty Co. withholds that
+// amount from the agent's commission and pays eCommission back on the agent's
+// behalf. So eCommission is a payee, and the way they are actually paid is ACH
+// or check.
+//
+// It stays on the incoming list because that is where it is used, and removing
+// it would erase the only trace of something real. On the four checks carrying
+// it, the agent's share went to eCommission rather than to the agent, usually
+// for an advance taken against a different deal. None of those four has an
+// eCommission debt staged or an eCommission payee row, so that dropdown is the
+// sole record that the money did not reach the agent. The proper home is a
+// debt row plus an external payee row, which nine other deals do have; until
+// that is enforced, do not treat this value as describing how a check arrived.
+//
+// Everything else genuinely goes both ways.
+//
+// Values are lowercase. Stored data is not: 299 agent payment rows read 'ACH'
+// and 11 read 'Zelle', so every read goes through normalizePaymentMethod or
+// paymentMethodLabel rather than comparing raw strings.
 
-export const PAYMENT_METHOD_OPTIONS = [
-  { value: 'check',   label: 'Check' },
-  { value: 'zelle',   label: 'Zelle' },
-  { value: 'ach',     label: 'ACH' },
-  { value: 'wire',    label: 'Wire' },
-  { value: 'payload', label: 'Payload' },
-]
+export const PAYMENT_METHODS = [
+  { value: 'check',       label: 'Check',       incoming: true, outgoing: true },
+  { value: 'zelle',       label: 'Zelle',       incoming: true, outgoing: true },
+  { value: 'ach',         label: 'ACH',         incoming: true, outgoing: true },
+  { value: 'wire',        label: 'Wire',        incoming: true, outgoing: true },
+  { value: 'payload',     label: 'Payload',     incoming: true, outgoing: true },
+  { value: 'ecommission', label: 'eCommission', incoming: true, outgoing: false },
+] as const
+
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number]['value']
+
+/** Money going out: agent payouts, external brokerages, landlords, PM fees. */
+export const PAYMENT_METHOD_OPTIONS = PAYMENT_METHODS
+  .filter(m => m.outgoing)
+  .map(m => ({ value: m.value as string, label: m.label as string }))
+
+/** Money coming in: checks received. */
+export const INCOMING_PAYMENT_METHOD_OPTIONS = PAYMENT_METHODS
+  .filter(m => m.incoming)
+  .map(m => ({ value: m.value as string, label: m.label as string }))
+
+/**
+ * Stored value to canonical lowercase value, or null if it is not a method we
+ * know. Case-insensitive because the stored data is mixed case.
+ */
+export function normalizePaymentMethod(m: string | null | undefined): PaymentMethod | null {
+  if (!m) return null
+  const lower = String(m).toLowerCase()
+  const hit = PAYMENT_METHODS.find(o => o.value === lower)
+  return hit ? hit.value : null
+}
+
+/**
+ * What a person reads. Anything the list does not cover falls back to the
+ * stored value rather than rendering blank, so an unrecognised method is
+ * visible rather than silently missing.
+ */
+export function paymentMethodLabel(m: string | null | undefined): string {
+  if (!m) return ''
+  const hit = PAYMENT_METHODS.find(o => o.value === String(m).toLowerCase())
+  return hit ? hit.label : m
+}
 
 // ===== Federal ID type options (for external brokerage 1099 reporting) =====
 

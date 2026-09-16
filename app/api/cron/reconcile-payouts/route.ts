@@ -5,6 +5,7 @@ import { getEmailLayout } from '@/lib/email/layout'
 import { payoutStatus } from '@/lib/payload/processPayout'
 import { markAgentPaid } from '@/lib/transactions/markPaid'
 import { MATH_TOLERANCE } from '@/lib/transactions/funding'
+import { requireCronSecret } from '@/lib/api-auth'
 
 export const dynamic = 'force-dynamic'
 // One sequential Payload call per row in scope. Pass A is the payouts still in
@@ -119,10 +120,8 @@ const esc = (v: any) =>
 // The only write this route makes is through markAgentPaid(). No money math
 // is duplicated here.
 export async function GET(request: NextRequest) {
-  const auth = request.headers.get('authorization')
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronSecret(request)
+  if (denied) return denied
 
   try {
     let apiCalls = 0
@@ -278,9 +277,11 @@ export async function GET(request: NextRequest) {
           transactionId: row.transaction_id as string,
           internalAgentId: row.id,
           paymentDate: settled,
-          // Preserve what Process Payout wrote ('ACH') rather than
-          // overwriting it. markAgentPaid coerces a falsy value to null.
-          paymentMethod: row.payment_method || 'ACH',
+          // Preserve what Process Payout wrote rather than overwriting it.
+          // markAgentPaid coerces a falsy value to null. The fallback is
+          // lowercase to match the one vocabulary; it used to read 'ACH' and
+          // so re-seeded the drift on every row Process Payout had missed.
+          paymentMethod: row.payment_method || 'ach',
           paymentReference: row.payment_reference,
           // Preserve the row's existing funding source. markAgentPaid
           // defaults a falsy value to 'crc'.

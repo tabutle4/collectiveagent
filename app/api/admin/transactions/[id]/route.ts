@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { FUNDS_DESTINATIONS } from '@/lib/payouts/ledger'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
@@ -1177,6 +1178,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // get the same empty-to-null treatment the date fields already get.
       const NUMERIC_FIELDS = ['check_amount', 'brokerage_amount', 'hold_amount']
       const cleanUpdates: any = { ...updates }
+
+      // funds_destination decides whether this money is in the payouts account
+      // at all, which decides whether it can be swept and whether it counts
+      // toward that account's balance. A value outside the three the database
+      // allows would be rejected by the CHECK constraint as a 500; refusing it
+      // here says what is wrong instead.
+      if ('funds_destination' in cleanUpdates) {
+        if (!FUNDS_DESTINATIONS.includes(cleanUpdates.funds_destination)) {
+          return NextResponse.json(
+            { error: 'That is not a place money can land' },
+            { status: 400 }
+          )
+        }
+      }
       for (const f of DATE_FIELDS) {
         if (cleanUpdates[f] === '') cleanUpdates[f] = null
       }

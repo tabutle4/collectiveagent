@@ -468,6 +468,8 @@ CREATE TABLE public.transactions (
   buying_side_commission numeric,
   office_gross numeric,
   office_net numeric,
+  office_net_swept_at timestamp with time zone,
+  office_net_swept_amount numeric,
   funding_status text,
   check_clear_date date,
   goal_paydate date,
@@ -1112,6 +1114,7 @@ CREATE TABLE public.checks_received (
   hold_amount numeric DEFAULT 0,
   payload_transaction_id text,
   payload_payment_link_id text,
+  funds_destination text NOT NULL DEFAULT 'payouts'::text CHECK (funds_destination = ANY (ARRAY['payouts'::text, 'income'::text, 'title_direct'::text])),
   CONSTRAINT checks_received_pkey PRIMARY KEY (id),
   CONSTRAINT checks_received_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES public.transactions(id),
   CONSTRAINT checks_received_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES public.users(id)
@@ -1726,7 +1729,7 @@ CREATE TABLE public.brokerage_ledger (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   entry_date date NOT NULL,
-  entry_type text NOT NULL CHECK (entry_type = ANY (ARRAY['income'::text, 'expense'::text])),
+  entry_type text NOT NULL CHECK (entry_type = ANY (ARRAY['income'::text, 'expense'::text, 'transfer'::text])),
   category text NOT NULL,
   subcategory text,
   description text NOT NULL,
@@ -1739,12 +1742,32 @@ CREATE TABLE public.brokerage_ledger (
   reconciled_at timestamp with time zone,
   reconciled_by uuid,
   external_source text,
-  external_id text,
+  external_id text UNIQUE,
   notes text,
+  parent_entry_id uuid,
+  payment_method text,
+  recorded_by uuid,
+  account text NOT NULL DEFAULT 'payouts'::text,
   CONSTRAINT brokerage_ledger_pkey PRIMARY KEY (id),
   CONSTRAINT brokerage_ledger_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES public.users(id),
   CONSTRAINT brokerage_ledger_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES public.transactions(id),
-  CONSTRAINT brokerage_ledger_reconciled_by_fkey FOREIGN KEY (reconciled_by) REFERENCES public.users(id)
+  CONSTRAINT brokerage_ledger_reconciled_by_fkey FOREIGN KEY (reconciled_by) REFERENCES public.users(id),
+  CONSTRAINT brokerage_ledger_parent_entry_id_fkey FOREIGN KEY (parent_entry_id) REFERENCES public.brokerage_ledger(id) ON DELETE CASCADE,
+  CONSTRAINT brokerage_ledger_recorded_by_fkey FOREIGN KEY (recorded_by) REFERENCES public.users(id)
+);
+-- What the sweep screen was warning about, per deal, at the moment someone
+-- confirmed a transfer. A deal with no rows here was fully ready. Recomputed
+-- server side at confirmation, never sent by the browser.
+CREATE TABLE public.sweep_warnings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone DEFAULT now(),
+  ledger_entry_id uuid NOT NULL,
+  transaction_id uuid,
+  property_address text,
+  warning text NOT NULL,
+  CONSTRAINT sweep_warnings_pkey PRIMARY KEY (id),
+  CONSTRAINT sweep_warnings_ledger_entry_id_fkey FOREIGN KEY (ledger_entry_id) REFERENCES public.brokerage_ledger(id) ON DELETE CASCADE,
+  CONSTRAINT sweep_warnings_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES public.transactions(id)
 );
 CREATE TABLE public.payout_expenses (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -1752,7 +1775,48 @@ CREATE TABLE public.payout_expenses (
   updated_at timestamp with time zone DEFAULT now(),
   description text NOT NULL,
   amount numeric,
-  CONSTRAINT payout_expenses_pkey PRIMARY KEY (id)
+  category text,
+  status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'released'::text])),
+  released_at timestamp with time zone,
+  released_by uuid,
+  CONSTRAINT payout_expenses_pkey PRIMARY KEY (id),
+  CONSTRAINT payout_expenses_released_by_fkey FOREIGN KEY (released_by) REFERENCES public.users(id)
+);
+-- Bills paid out of the payouts account on a schedule. The sweep reserves
+-- against these so the account is never swept below what is already owed.
+CREATE TABLE public.recurring_bills (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  name text NOT NULL,
+  amount numeric NOT NULL,
+  days integer[] DEFAULT '{}'::integer[],
+  last_day_of_month boolean NOT NULL DEFAULT false,
+  window_start_day integer,
+  window_end_day integer,
+  shift_earlier_for_nonbusiness boolean NOT NULL DEFAULT false,
+  account text NOT NULL DEFAULT 'payouts'::text,
+  active boolean NOT NULL DEFAULT true,
+  notes text,
+  CONSTRAINT recurring_bills_pkey PRIMARY KEY (id)
+);
+-- Point-in-time record of where the payouts account stood when a period was
+-- closed. Written by the reconciliation save and the nightly snapshot cron.
+-- Present in the live database but missing from this file until now.
+CREATE TABLE public.payout_report_snapshots (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  taken_at timestamp with time zone NOT NULL DEFAULT now(),
+  taken_by uuid,
+  bank_balance numeric DEFAULT 0,
+  funds_on_hold numeric DEFAULT 0,
+  payload_pending numeric DEFAULT 0,
+  grand_total numeric DEFAULT 0,
+  difference numeric DEFAULT 0,
+  lines jsonb NOT NULL DEFAULT '{}'::jsonb,
+  taken_for_date date,
+  source text,
+  CONSTRAINT payout_report_snapshots_pkey PRIMARY KEY (id),
+  CONSTRAINT payout_report_snapshots_source_date_key UNIQUE (source, taken_for_date)
 );
 CREATE TABLE public.pm_fee_payouts (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

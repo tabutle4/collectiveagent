@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
+import { PAYMENT_METHOD_OPTIONS } from '@/lib/transactions/constants'
 
 const fmt$ = (n: any): string =>
   new Intl.NumberFormat('en-US', {
@@ -34,9 +35,9 @@ export default function MarkPaidPanel({
   const [paymentDate, setPaymentDate] = useState(() =>
     new Date().toISOString().slice(0, 10)
   )
-  const [paymentMethod, setPaymentMethod] = useState('ACH')
+  const [paymentMethod, setPaymentMethod] = useState('ach')
   const [paymentRef, setPaymentRef] = useState('')
-  const [fundingSource, setFundingSource] = useState('CRC')
+  const [fundingSource, setFundingSource] = useState('crc')
   const [debts, setDebts] = useState<any[]>([])
   const [selectedDebts, setSelectedDebts] = useState<Record<string, boolean>>({})
   const [countsProgress, setCountsProgress] = useState(() => isLease !== true)
@@ -126,10 +127,12 @@ export default function MarkPaidPanel({
             value={paymentMethod}
             onChange={(e) => setPaymentMethod(e.target.value)}
           >
-            <option value="ACH">ACH</option>
-            <option value="Check">Check</option>
-            <option value="Zelle">Zelle</option>
-            <option value="Wire">Wire</option>
+            {/* The one list, not a fourth copy of it. This hardcoded ACH,
+                Check, Zelle and Wire in that casing, so every payout marked
+                here re-seeded the casing drift the moment it was normalised. */}
+            {PAYMENT_METHOD_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
           </select>
         </div>
         <div>
@@ -149,9 +152,16 @@ export default function MarkPaidPanel({
             value={fundingSource}
             onChange={(e) => setFundingSource(e.target.value)}
           >
-            <option value="CRC">CRC</option>
-            <option value="RC">RC</option>
-            <option value="Title">Title</option>
+            {/* Values match what funding_source actually holds: crc and
+                title_direct. This wrote 'CRC', 'RC' and 'Title', none of
+                which the column uses, and 'CRC' also truncated the company
+                name. No row in the database has ever carried 'RC', so it is
+                kept here with the value the column would need rather than
+                being dropped, in case Referral Collective starts funding
+                payouts. */}
+            <option value="crc">Collective Realty Co.</option>
+            <option value="rc">Referral Collective</option>
+            <option value="title_direct">Title</option>
           </select>
         </div>
       </div>

@@ -3,16 +3,15 @@ import { createClient } from '@/lib/supabase/server'
 import { fetchAllRows } from '@/lib/supabase'
 import { voidStalePaymentLink } from '@/lib/payload/voidTenantPaymentLink'
 import { firstChargeableDay } from '@/lib/pm/lateFeeSchedule'
+import { requireCronSecret } from '@/lib/api-auth'
 
 // GET - Apply late fees to overdue rent invoices
 // Runs daily via Vercel cron
 // Schedule: 0 11 * * * (6:00 AM CT / 11:00 AM UTC)
 export async function GET(request: NextRequest) {
   // Verify cron secret
-  const auth = request.headers.get('authorization')
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronSecret(request)
+  if (denied) return denied
 
   try {
     const supabase = createClient()

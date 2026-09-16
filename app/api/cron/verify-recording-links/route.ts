@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { getGraphToken } from '@/lib/microsoft-graph'
 import { Resend } from 'resend'
 import { getEmailLayout, emailButton, emailSignature } from '@/lib/email/layout'
+import { requireCronSecret } from '@/lib/api-auth'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const SHAREPOINT_SITE = 'collectiverealtyco.sharepoint.com:/sites/agenttrainingcenter:'
@@ -62,10 +63,8 @@ async function renameAndBack(token: string, driveId: string, itemId: string, fin
 }
 
 export async function GET(request: NextRequest) {
-  const auth = request.headers.get('authorization')
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronSecret(request)
+  if (denied) return denied
 
   try {
     const { data: pending, error } = await supabaseAdmin

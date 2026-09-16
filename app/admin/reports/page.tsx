@@ -1,10 +1,18 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { BarChart3, Trophy, FileText, Users, Wallet, DollarSign } from 'lucide-react'
+import { BarChart3, Trophy, FileText, Users, Wallet, DollarSign, BookOpen, Scale } from 'lucide-react'
 import { useAuth } from '@/lib/context/AuthContext'
 
-const REPORTS = [
+const REPORTS: {
+  id: string
+  icon: any
+  title: string
+  description: string
+  href: string
+  active: boolean
+  permission?: string
+}[] = [
   {
     id: 'quarterly',
     icon: BarChart3,
@@ -28,6 +36,24 @@ const REPORTS = [
     description: 'All agent and brokerage payments',
     href: '/admin/reports/all-payouts',
     active: true,
+  },
+  {
+    id: 'money-movement',
+    icon: BookOpen,
+    title: 'Money Movement',
+    description: 'Every deposit, payment and transfer in the payouts account',
+    href: '/admin/reports/money-movement',
+    active: true,
+    permission: 'can_view_ledger',
+  },
+  {
+    id: 'reconciliation',
+    icon: Scale,
+    title: 'Bank Reconciliation',
+    description: 'Tie the statement to the app, one pot at a time',
+    href: '/admin/reports/reconciliation',
+    active: true,
+    permission: 'can_view_reconciliation',
   },
   {
     id: 'agent-production',
@@ -57,10 +83,21 @@ const REPORTS = [
 
 export default function ReportsPage() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, hasPermission } = useAuth()
 
-  // Only operations and broker can access reports
-  const canAccess = user?.role === 'operations' || user?.role === 'broker'
+  // Which cards this person may see. A card with no permission of its own is
+  // one of the older reports, still gated the way it always was.
+  const visibleReports = REPORTS.filter(r => !r.permission || hasPermission(r.permission))
+
+  // Reaching this index means having at least one report to reach.
+  //
+  // This used to read user?.role === 'operations' || 'broker', which is the
+  // hardcoded role check the house rules forbid: it ignores per-user
+  // permission overrides, so granting someone can_view_ledger through the
+  // permissions UI gave them a page they still could not open. Support and TC
+  // hold the new view permissions and were locked out by it.
+  const legacyReportAccess = user?.role === 'operations' || user?.role === 'broker'
+  const canAccess = legacyReportAccess || visibleReports.some(r => !!r.permission)
 
   if (!canAccess) {
     return (
@@ -68,7 +105,7 @@ export default function ReportsPage() {
         <div className="container-card max-w-md mx-auto text-center py-12">
           <h1 className="text-xl font-semibold text-luxury-gray-1 mb-2">Access Denied</h1>
           <p className="text-luxury-gray-3">
-            Reports are only available to operations and broker roles.
+            You do not have permission to view any reports.
           </p>
         </div>
       </div>
@@ -85,7 +122,7 @@ export default function ReportsPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-1 bg-luxury-gray-5/20">
-        {REPORTS.map(report => {
+        {(legacyReportAccess ? visibleReports : visibleReports.filter(r => !!r.permission)).map(report => {
           const Icon = report.icon
           return (
             <div

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { Resend } from 'resend'
 import { buildCanvaAccessEmail } from '@/lib/email/canvaAccessEmail'
+import { requireCronSecret } from '@/lib/api-auth'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -9,10 +10,8 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 // login. Runs daily; the canva_access_email_sent_at flag makes it send once and
 // self-heal if a run is missed. Credentials are pulled from company_settings.
 export async function GET(request: NextRequest) {
-  const auth = request.headers.get('authorization')
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronSecret(request)
+  if (denied) return denied
 
   try {
     const { data: companySettings } = await supabaseAdmin

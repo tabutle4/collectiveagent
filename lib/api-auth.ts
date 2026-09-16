@@ -17,6 +17,10 @@
  *   // Permission-based auth
  *   const auth = await requirePermission(request, 'can_manage_checks')
  *   if (auth.error) return auth.error
+ *
+ *   // Vercel cron routes, which carry no user session
+ *   const denied = requireCronSecret(request)
+ *   if (denied) return denied
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -238,4 +242,35 @@ export function canManageAgent(auth: AuthResult, targetAgentId: string): boolean
   // Otherwise need manage permission
   if (auth.permissions.has('can_manage_agents')) return true
   return false
+}
+
+/**
+ * Authenticate a Vercel cron invocation. Returns a 401 response to return, or
+ * null when the request is genuine.
+ *
+ * The guard on CRON_SECRET being set at all is the point of this helper, and
+ * it is why every cron route should call it rather than comparing inline. The
+ * inline form all 19 routes used was:
+ *
+ *     if (auth !== `Bearer ${process.env.CRON_SECRET}`) return 401
+ *
+ * If CRON_SECRET is ever unset or misspelled in the environment, that template
+ * evaluates to the literal string 'Bearer undefined', and anyone who sends
+ * that header is authenticated. The failure is silent: the crons keep working,
+ * so nothing looks wrong. Vercel's own documented example includes the missing
+ * clause for exactly this reason.
+ *
+ * Vercel sends the header as `Authorization: Bearer $CRON_SECRET`.
+ * https://vercel.com/docs/cron-jobs/manage-cron-jobs
+ */
+export function requireCronSecret(request: NextRequest): NextResponse | null {
+  const expected = process.env.CRON_SECRET
+  if (!expected) {
+    console.error('CRON_SECRET is not set. Refusing every cron request.')
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  if (request.headers.get('authorization') !== `Bearer ${expected}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  return null
 }

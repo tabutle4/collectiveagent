@@ -1,11 +1,7 @@
 'use client'
 
-const PAYMENT_METHOD_OPTIONS = [
-  { value: 'check', label: 'Check' },
-  { value: 'zelle', label: 'Zelle' },
-  { value: 'payload', label: 'Payload' },
-  { value: 'ecommission', label: 'eCommission' },
-] as const
+import { INCOMING_PAYMENT_METHOD_OPTIONS } from '@/lib/transactions/constants'
+import { FUNDS_DESTINATIONS, fundsDestinationLabel } from '@/lib/payouts/ledger'
 
 const COMPLIANCE_STATUS_OPTIONS = [
   { value: 'not_submitted', label: 'Not Requested' },
@@ -26,6 +22,7 @@ export interface CheckFieldsValue {
   brokerage_amount?: number | string | null
   hold_amount?: number | string | null
   payment_method?: string | null
+  funds_destination?: string | null
   status?: string | null
   compliance_status?: string | null
   crc_transferred?: boolean | null
@@ -149,8 +146,20 @@ export default function CheckFieldsForm({ value, onChange }: Props) {
             value={value.payment_method || 'check'}
             onChange={e => onChange('payment_method', e.target.value)}
           >
-            {PAYMENT_METHOD_OPTIONS.map(opt => (
+            {INCOMING_PAYMENT_METHOD_OPTIONS.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="field-label">Where It Landed</label>
+          <select
+            className="select-luxury text-xs"
+            value={value.funds_destination || 'payouts'}
+            onChange={e => onChange('funds_destination', e.target.value)}
+          >
+            {FUNDS_DESTINATIONS.map(d => (
+              <option key={d} value={d}>{fundsDestinationLabel(d)}</option>
             ))}
           </select>
         </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { sendCalendarReminderEmail } from '@/lib/email'
+import { requireCronSecret } from '@/lib/api-auth'
 
 const GROUP_ID = process.env.MICROSOFT_GROUP_ID!
 const TENANT_ID = process.env.MICROSOFT_TENANT_ID!
@@ -38,10 +39,8 @@ function formatEventTime(dateTimeStr: string): string {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = request.headers.get('authorization')
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronSecret(request)
+  if (denied) return denied
 
   try {
     // Clean up log entries older than 14 days

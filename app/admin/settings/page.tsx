@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/context/AuthContext'
+import RecurringBillsSettings from '@/components/admin/RecurringBillsSettings'
 import { 
   Building2, 
   DollarSign, 
@@ -19,9 +20,10 @@ import {
   X,
   ShieldCheck,
   Mic,
+  Receipt,
 } from 'lucide-react'
 
-type Tab = 'brokerage' | 'offices' | 'standard' | 'referral' | 'coaching' | 'plans' | 'fees' | 'rules'
+type Tab = 'brokerage' | 'offices' | 'standard' | 'referral' | 'coaching' | 'plans' | 'fees' | 'rules' | 'bills'
 
 interface CompanySettings {
   // Brokerage
@@ -126,7 +128,7 @@ interface CommissionRule {
   is_active: boolean
 }
 
-const TABS: { id: Tab; label: string; icon: any }[] = [
+const TABS: { id: Tab; label: string; icon: any; permission?: string }[] = [
   { id: 'brokerage', label: 'Brokerage', icon: Building2 },
   { id: 'offices', label: 'Office Locations', icon: Building2 },
   { id: 'standard', label: 'Standard Agent', icon: Users },
@@ -135,6 +137,7 @@ const TABS: { id: Tab; label: string; icon: any }[] = [
   { id: 'plans', label: 'Commission Plans', icon: DollarSign },
   { id: 'fees', label: 'Processing Fees', icon: DollarSign },
   { id: 'rules', label: 'Commission Rules', icon: Settings2 },
+  { id: 'bills', label: 'Recurring Bills', icon: Receipt, permission: 'can_view_ledger' },
 ]
 
 export default function SettingsPage() {
@@ -427,7 +430,7 @@ export default function SettingsPage() {
           {/* Sidebar */}
           <div className="lg:w-64 flex-shrink-0">
             <div className="container-card p-2">
-              {TABS.map((tab) => {
+              {TABS.filter((tab) => !tab.permission || hasPermission(tab.permission)).map((tab) => {
                 const Icon = tab.icon
                 return (
                   <button
@@ -1748,6 +1751,10 @@ export default function SettingsPage() {
                   </div>
                 )}
               </div>
+            )}
+
+            {activeTab === 'bills' && (
+              <RecurringBillsSettings canManage={hasPermission('can_manage_recurring_bills')} />
             )}
           </div>
         </div>

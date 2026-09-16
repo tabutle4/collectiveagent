@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { Resend } from 'resend'
 import { getEmailLayout } from '@/lib/email/layout'
 import { payoutMethodCanReceiveCredit } from '@/lib/payload/processPayout'
+import { requireCronSecret } from '@/lib/api-auth'
 
 export const dynamic = 'force-dynamic'
 // Two or three Payload list calls total, not one per agent. The whole customer
@@ -146,10 +147,8 @@ function normEmail(s: any): string {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = request.headers.get('authorization')
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronSecret(request)
+  if (denied) return denied
 
   try {
     const { data: agents } = await supabaseAdmin

@@ -4,8 +4,13 @@ import { requirePermission } from '@/lib/api-auth'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 import { getCentralDateString } from '@/lib/timezone'
 import { SIDE_MODES_FILTER, pickSideSubmissions, deriveSideStatus, expectedSides } from '@/lib/compliance/derive'
+import { officeNetState, CUTOVER_DATE } from '@/lib/payouts/ledger'
+import { computeAutoHolds, computePayloadPending, isNotCleared, type HoldCheck } from '@/lib/payouts/holds'
+import { fetchChecklistProgress } from '@/lib/payouts/checklist'
 
 export const dynamic = 'force-dynamic'
+
+
 
 function isLeaseType(t: string | null): boolean {
   if (!t) return false
@@ -45,17 +50,26 @@ export async function GET(request: NextRequest) {
   if (auth.error) return auth.error
 
   try {
-    // Fetch all checks linked to transactions (batched)
+    // Checks in the payouts account, received on or after the cutover.
+    //
+    // The stored `agents_paid` flag is deliberately NOT a filter here. It is
+    // derived on edit and has drifted badly: 252 of 289 in-scope checks carried
+    // a stale value, and because it was this report's primary filter, every one
+    // of those deals was invisible on the screen the office works from. Paid is
+    // derived below from the agent and external rows, which are the records
+    // that actually get written when someone is paid.
     const checks = await fetchAllRows(
       'checks_received',
       `id, property_address, check_amount, brokerage_amount, hold_amount, check_from,
        received_date, cleared_date, deposited_date,
        compliance_complete_date, crc_transferred, agents_paid, status, notes,
-       transaction_id, agent_id, payment_method, payload_payment_link_id`,
+       transaction_id, agent_id, payment_method, payload_payment_link_id,
+       funds_destination`,
       {
         filters: [
           { type: 'not', column: 'transaction_id', value: null },
-          { type: 'eq', column: 'agents_paid', value: false },
+          { type: 'eq', column: 'funds_destination', value: 'payouts' },
+          { type: 'gte', column: 'received_date', value: CUTOVER_DATE },
         ],
         orderBy: { column: 'cleared_date', ascending: false },
       }
@@ -67,11 +81,13 @@ export async function GET(request: NextRequest) {
       `id, property_address, check_amount, brokerage_amount, hold_amount, check_from,
        received_date, cleared_date, deposited_date,
        compliance_complete_date, crc_transferred, agents_paid, status, notes,
-       transaction_id, agent_id, payment_method, payload_payment_link_id`,
+       transaction_id, agent_id, payment_method, payload_payment_link_id,
+       funds_destination`,
       {
         filters: [
           { type: 'is', column: 'transaction_id', value: null },
-          { type: 'eq', column: 'agents_paid', value: false },
+          { type: 'eq', column: 'funds_destination', value: 'payouts' },
+          { type: 'gte', column: 'received_date', value: CUTOVER_DATE },
         ],
         orderBy: { column: 'cleared_date', ascending: false },
       }
@@ -87,23 +103,31 @@ export async function GET(request: NextRequest) {
     let transactions: any[] = []
 
     if (txnIds.length > 0) {
-      const [agentsRes, externalRes, txnRes] = await Promise.all([
-        supabaseAdmin
-          .from('transaction_internal_agents')
-          .select('id, transaction_id, agent_id, agent_role, agent_net, payment_status, payment_date, payment_method')
-          .in('transaction_id', txnIds),
-        supabaseAdmin
-          .from('transaction_external_brokerages')
-          .select('transaction_id, brokerage_name, agent_name, commission_amount, payment_status, payment_date')
-          .in('transaction_id', txnIds),
-        supabaseAdmin
-          .from('transactions')
-          .select('id, property_address, compliance_status, transaction_type, office_net, office_gross, is_intermediary')
-          .in('id', txnIds),
+      // fetchAllRows, not a raw select. An .in() list does not lift PostgREST's
+      // 1,000-row cap, and removing the stale agents_paid filter above widened
+      // what these cover: the agent query returns 412 rows today against 304
+      // deals, and grows with every deal. A truncated page here is not an
+      // error, it is a payouts report that silently stops showing some agents.
+      const [agents, externals, txns] = await Promise.all([
+        fetchAllRows(
+          'transaction_internal_agents',
+          'id, transaction_id, agent_id, agent_role, agent_net, payment_status, payment_date, payment_method',
+          { filters: [{ type: 'in', column: 'transaction_id', value: txnIds }] }
+        ),
+        fetchAllRows(
+          'transaction_external_brokerages',
+          'transaction_id, brokerage_name, agent_name, commission_amount, payment_status, payment_date',
+          { filters: [{ type: 'in', column: 'transaction_id', value: txnIds }] }
+        ),
+        fetchAllRows(
+          'transactions',
+          'id, property_address, compliance_status, transaction_type, office_net, office_gross, is_intermediary, office_net_swept_at, office_net_swept_amount, closing_date',
+          { filters: [{ type: 'in', column: 'id', value: txnIds }] }
+        ),
       ])
-      internalAgents = agentsRes.data || []
-      externalBrokerages = externalRes.data || []
-      transactions = txnRes.data || []
+      internalAgents = agents || []
+      externalBrokerages = externals || []
+      transactions = txns || []
     }
 
     // Compliance is per side: each agent's compliance submission holds that
@@ -113,6 +137,12 @@ export async function GET(request: NextRequest) {
     const sideStatusesByTxn: Record<string, string[]> = {}
     const sidesByTxn: Record<string, any[]> = {}
     if (txnIds.length) {
+      // Deliberately still a raw select, not fetchAllRows. The mode filter is
+      // a PostgREST filter string on a JSON path, and .in() on a JSON path is
+      // not provably the same query. This is the compliance side derivation,
+      // which is a hard rule: it is not re-implemented or rephrased. 380 rows
+      // today against a 1,000 cap, so there is room; revisit before there is
+      // not, and change it by testing the query, not by assuming.
       const { data: sideSubs } = await supabaseAdmin
         .from('agent_form_submissions')
         .select('transaction_id, agent_id, submitted_at, status, data')
@@ -144,10 +174,11 @@ export async function GET(request: NextRequest) {
     const tiaIds = internalAgents.map(a => a.id).filter(Boolean)
     const stagedByTia: Record<string, { debts: number; credits: number }> = {}
     if (tiaIds.length > 0) {
-      const { data: stagedRecords } = await supabaseAdmin
-        .from('agent_debts')
-        .select('record_type, amount_owed, amount_remaining, offset_transaction_agent_id, status')
-        .in('offset_transaction_agent_id', tiaIds)
+      const stagedRecords = await fetchAllRows<any>(
+        'agent_debts',
+        'record_type, amount_owed, amount_remaining, offset_transaction_agent_id, status',
+        { filters: [{ type: 'in', column: 'offset_transaction_agent_id', value: tiaIds }] }
+      )
       for (const r of stagedRecords || []) {
         const key = r.offset_transaction_agent_id
         if (!key) continue
@@ -188,41 +219,14 @@ export async function GET(request: NextRequest) {
     // Build txn lookup
     const txnMap = Object.fromEntries(transactions.map(t => [t.id, t]))
 
-    // Checklist completeness per transaction, for the payouts report indicator.
-    // Sales use the 'cda' checklist, leases use the 'payouts' checklist; complete
-    // = every active item on the transaction's template has a completion row.
-    // Same rule the compliance tracker uses, so both surfaces agree.
-    const checklistCompleteByTxn: Record<string, boolean> = {}
-    if (txnIds.length) {
-      const { data: templates } = await supabaseAdmin
-        .from('checklist_templates')
-        .select('id, slug')
-        .in('slug', ['cda', 'payouts'])
-      const cdaTemplateId = (templates || []).find((t: any) => t.slug === 'cda')?.id || null
-      const payoutTemplateId = (templates || []).find((t: any) => t.slug === 'payouts')?.id || null
-      const { data: itemRows } = await supabaseAdmin
-        .from('checklist_items')
-        .select('id, checklist_template_id')
-        .eq('is_active', true)
-        .in('checklist_template_id', [cdaTemplateId, payoutTemplateId].filter(Boolean))
-      const cdaItemIds = (itemRows || []).filter((i: any) => i.checklist_template_id === cdaTemplateId).map((i: any) => i.id)
-      const payoutItemIds = (itemRows || []).filter((i: any) => i.checklist_template_id === payoutTemplateId).map((i: any) => i.id)
-      const completions = await fetchAllRows(
-        'checklist_completions',
-        'transaction_id, checklist_item_id',
-        { filters: [{ type: 'in', column: 'transaction_id', value: txnIds }] }
-      )
-      const doneByTxn: Record<string, Set<string>> = {}
-      for (const c of completions as any[]) {
-        if (!doneByTxn[c.transaction_id]) doneByTxn[c.transaction_id] = new Set()
-        doneByTxn[c.transaction_id].add(c.checklist_item_id)
-      }
-      for (const t of transactions) {
-        const required = isLeaseType(t.transaction_type) ? payoutItemIds : cdaItemIds
-        const done = doneByTxn[t.id] || new Set<string>()
-        checklistCompleteByTxn[t.id] = required.length > 0 && required.every((iid: string) => done.has(iid))
-      }
-    }
+    // Checklist progress per transaction. Extracted to lib/payouts/checklist
+    // so the sweep asks the same question the same way; two surfaces
+    // disagreeing about whether a deal is ready is the class of bug this
+    // build exists to remove. Counts as well as a boolean, because Needs
+    // Attention says "Checklist 6 of 8" rather than just "not done".
+    const checklistByTxn = await fetchChecklistProgress(
+      transactions.map((t: any) => ({ id: t.id, transaction_type: t.transaction_type }))
+    )
 
     // Multi-check support: office net and payouts belong to the transaction, not
     // to each check. Pick one anchor check per transaction (earliest received,
@@ -240,6 +244,25 @@ export async function GET(request: NextRequest) {
         String(a.id).localeCompare(String(b.id))
       )
       anchorCheckId[txnId] = ordered[0].id
+    }
+
+    // Central date, not UTC: after about 7pm Texas time UTC has already rolled
+    // to tomorrow, which would treat a check clearing tomorrow as cleared.
+    const today = getCentralDateString()
+
+    // Paid, derived per deal rather than read off the stored flag, and keyed by
+    // transaction so a funding-only sibling check answers the same as its
+    // anchor. A deal is paid when every agent row and every outside brokerage
+    // row on it says paid. A deal with no payees at all cannot be derived, so
+    // those keep the stored flag instead of being called paid.
+    const derivedPaidByTxn: Record<string, boolean> = {}
+    for (const txnId of txnIds as string[]) {
+      const agentsOn = internalAgents.filter(a => a.transaction_id === txnId)
+      const externalsOn = externalBrokerages.filter(e => e.transaction_id === txnId)
+      if (agentsOn.length + externalsOn.length === 0) continue
+      derivedPaidByTxn[txnId] =
+        agentsOn.every(a => a.payment_status === 'paid') &&
+        externalsOn.every(e => e.payment_status === 'paid')
     }
 
     // Role sort priority — primary agent first
@@ -348,6 +371,20 @@ export async function GET(request: NextRequest) {
       // Standalone check with direct agent
       const standaloneAgentName = check.agent_id ? agentNames[check.agent_id] : null
 
+      const checklistProgress = check.transaction_id
+        ? (checklistByTxn[check.transaction_id] || { done: 0, required: 0, complete: false })
+        : { done: 0, required: 0, complete: false }
+
+      // Every check funding this deal has to have cleared, not just this one.
+      const dealChecks = check.transaction_id
+        ? (txnCheckGroups[check.transaction_id] || [check])
+        : [check]
+      const fundsCleared = dealChecks.every(c => !isNotCleared(c as HoldCheck, today))
+
+      const derivedPaid = check.transaction_id && derivedPaidByTxn[check.transaction_id] !== undefined
+        ? derivedPaidByTxn[check.transaction_id]
+        : !!check.agents_paid
+
       return {
         check_id: check.id,
         transaction_id: check.transaction_id,
@@ -359,11 +396,15 @@ export async function GET(request: NextRequest) {
         // e.g. a retainer), because such a transaction has no office_net to
         // show. A commission deal (office_gross > 0) whose office_net has not
         // been computed yet shows 0 rather than falling back to the check.
+        // A commission deal whose office net has not been computed sends null,
+        // not zero. A confident $0.00 next to a real deal reads as "we made
+        // nothing on this", which is a different and wrong claim; null renders
+        // as Unknown and puts the deal on a list someone has to clear.
         crc_amount: check.transaction_id
           ? (isAnchor
               ? (txn?.office_net != null
                   ? Number(txn.office_net)
-                  : ((Number(txn?.office_gross) || 0) > 0 ? 0 : (check.brokerage_amount || 0)))
+                  : ((Number(txn?.office_gross) || 0) > 0 ? null : (check.brokerage_amount || 0)))
               : 0)
           : (check.brokerage_amount || 0),
         is_anchor: isAnchor,
@@ -383,9 +424,22 @@ export async function GET(request: NextRequest) {
         compliance_status: complianceStatus,
         sides_complete: sidesComplete,
         sides_expected: sidesExpected,
-        checklist_complete: check.transaction_id ? (checklistCompleteByTxn[check.transaction_id] || false) : false,
+        checklist_complete: checklistProgress.complete,
+        checklist_done: checklistProgress.done,
+        checklist_required: checklistProgress.required,
+        // Funds cleared is a property of the whole deal, not of this one check.
+        // A deal funded by two checks is not cleared until both are.
+        funds_cleared: fundsCleared,
+        office_net_state: officeNetState({
+          hasPayoutsCheck: true,
+          sweptAt: txn?.office_net_swept_at ?? null,
+        }),
+        office_net_swept_at: txn?.office_net_swept_at ?? null,
+        office_net_swept_amount: txn?.office_net_swept_amount ?? null,
         crc_transferred: check.crc_transferred || false,
-        agents_paid: check.agents_paid || false,
+        // Derived, never the stored column. See the fetch above.
+        agents_paid: derivedPaid,
+        agents_paid_stored: check.agents_paid || false,
         status: check.status,
         notes: check.notes,
       }
@@ -399,10 +453,15 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
 
     // Also In Payouts list (batched)
+    // Active earmarks only. A released one is kept as history rather than
+    // deleted, but it no longer holds anything back.
     const expenses = await fetchAllRows(
       'payout_expenses',
       '*',
-      { orderBy: { column: 'created_at', ascending: false } }
+      {
+        filters: [{ type: 'eq', column: 'status', value: 'active' }],
+        orderBy: { column: 'created_at', ascending: false },
+      }
     )
 
     // Pending PM agent referral fees (payee_type = 'agent', status = 'pending').
@@ -496,75 +555,58 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Auto-calculate pending Payload: checks where payment_method = 'payload' and not yet cleared
-    // A cleared_date in the future still counts as pending. Use Central date,
-    // not UTC: after ~7pm Texas time UTC has already rolled to tomorrow, which
-    // would wrongly treat a check clearing tomorrow as already cleared.
-    const today = getCentralDateString()
-    // Rejected checks (ACH returned via Payload) never land, so they count
-    // neither as pending payload nor as bank holds.
-    const notCleared = (c: any) => (!c.cleared_date || c.cleared_date > today) && c.status !== 'rejected'
-    const pendingPayloadChecks = allChecks.filter(c => c.payment_method === 'payload' && notCleared(c))
+    // Money still sitting at Payload and money the bank has not released.
+    // Both come from lib/payouts/holds so the payouts report, the sweep and
+    // the reconciliation screen can never disagree about the same dollar.
+    const payload = await computePayloadPending(allChecks as HoldCheck[], settings, today)
+    const holds = computeAutoHolds(allChecks as HoldCheck[], today)
 
-    // Split by source pay link so the report can break Pending Payload down.
-    const commissionLinkId = settings?.payload_commission_link_id || null
-    const retainerLinkId   = settings?.payload_retainer_link_id || null
-    const sumChecks = (list: any[]) => list.reduce((sum, c) => sum + (parseFloat(c.check_amount) || 0), 0)
-    const commissionLinkTotal = commissionLinkId
-      ? sumChecks(pendingPayloadChecks.filter(c => c.payload_payment_link_id === commissionLinkId))
-      : 0
-    const retainerLinkTotal = retainerLinkId
-      ? sumChecks(pendingPayloadChecks.filter(c => c.payload_payment_link_id === retainerLinkId))
-      : 0
-    const otherPayloadTotal = sumChecks(pendingPayloadChecks.filter(c =>
-      c.payload_payment_link_id !== commissionLinkId && c.payload_payment_link_id !== retainerLinkId
-    ))
+    // Deals still to pay, after the derived paid flag. This is what the three
+    // sections on the report are drawn from.
+    const activeRows = rows.filter(r => !r.agents_paid)
 
-    // PM rent in flight: tenant invoices paid via Payload whose funds have not
-    // settled yet (funds_cleared_at stamped by the daily funding-sync cron).
-    const pendingRentInvoices = await fetchAllRows(
-      'tenant_invoices',
-      'id, paid_amount, total_amount, payment_method, status, funds_cleared_at',
-      {
-        filters: [
-          { type: 'eq', column: 'payment_method', value: 'payload' },
-          { type: 'eq', column: 'status', value: 'paid' },
-          { type: 'is', column: 'funds_cleared_at', value: null },
-        ],
+    // Our share that is still in the payouts account: computed on deals whose
+    // money is here and has not been moved, counted once per deal rather than
+    // once per check. A deal whose office net has not been computed contributes
+    // nothing and is listed instead, because a null is not a zero.
+    const seenTxn = new Set<string>()
+    let unsweptOfficeNet = 0
+    const unsweptDeals: { transaction_id: string; address: string; amount: number }[] = []
+    const officeNetUnknown: { transaction_id: string; address: string }[] = []
+    for (const r of activeRows) {
+      if (!r.transaction_id || !r.is_anchor) continue
+      if (seenTxn.has(r.transaction_id)) continue
+      seenTxn.add(r.transaction_id)
+      if (r.office_net_state !== 'not_swept') continue
+      if (r.crc_amount === null) {
+        officeNetUnknown.push({ transaction_id: r.transaction_id, address: r.address })
+        continue
       }
-    )
-    const pmRentTotal = pendingRentInvoices.reduce(
-      (sum, inv) => sum + (parseFloat(inv.paid_amount ?? inv.total_amount) || 0), 0
-    )
-
-    const pendingPayloadTotal = commissionLinkTotal + retainerLinkTotal + otherPayloadTotal + pmRentTotal
-
-    // Auto bank holds: per-check hold_amount for checks that have not cleared.
-    // Payload-method checks are excluded (they are counted in Pending Payload).
-    const holdRows = allChecks
-      .filter(c => c.payment_method !== 'payload' && notCleared(c) && (parseFloat(c.hold_amount) || 0) > 0)
-      .map(c => ({
-        check_id: c.id,
-        label: c.property_address || c.check_from || 'Check',
-        amount: parseFloat(c.hold_amount) || 0,
-      }))
-    const autoHoldsTotal = holdRows.reduce((sum, h) => sum + h.amount, 0)
+      const amount = Number(r.crc_amount) || 0
+      if (amount <= 0) continue
+      unsweptOfficeNet += amount
+      unsweptDeals.push({ transaction_id: r.transaction_id, address: r.address, amount })
+    }
 
     return NextResponse.json({
-      rows,
+      rows: activeRows,
       settings: settings || {},
       expenses,
       pm_fees: pmFees,
       landlord_payouts: landlordPayouts,
-      pending_payload_total: pendingPayloadTotal,
+      pending_payload_total: payload.total,
       payload_breakdown: {
-        commission_link: commissionLinkTotal,
-        retainer_link: retainerLinkTotal,
-        pm_rent: pmRentTotal,
-        other: otherPayloadTotal,
+        commission_link: payload.commission_link,
+        retainer_link: payload.retainer_link,
+        pm_rent: payload.pm_rent,
+        other: payload.other,
       },
-      hold_rows: holdRows,
-      auto_holds_total: autoHoldsTotal,
+      hold_rows: holds.lines,
+      auto_holds_total: holds.total,
+      unswept_office_net: Math.round(unsweptOfficeNet * 100) / 100,
+      unswept_deals: unsweptDeals.sort((a, b) => b.amount - a.amount),
+      office_net_unknown: officeNetUnknown,
+      report_from_date: CUTOVER_DATE,
     })
   } catch (error: any) {
     console.error('Payouts report error:', error)

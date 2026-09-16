@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAgentInvoice } from '@/lib/payload/agentInvoice'
+import { requireCronSecret } from '@/lib/api-auth'
 
 // The loop is sequential over every eligible agent and now makes one more
 // Payload round trip each, to read the new invoice back. Matching the app's
@@ -25,10 +26,8 @@ function isInvoiceForTargetMonth(inv: any, monthName: string, year: number): boo
 }
 
 export async function GET(request: NextRequest) {
-  const auth = request.headers.get('authorization')
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronSecret(request)
+  if (denied) return denied
 
   try {
     const supabase = createClient()

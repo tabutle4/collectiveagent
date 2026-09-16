@@ -4,14 +4,17 @@ import { getListingById } from '@/lib/db/listings'
 import { getLatestListingReport } from '@/lib/microsoft-graph'
 import { sendWeeklyReportEmail } from '@/lib/email/send'
 import { createClient } from '@/lib/supabase/server'
+import { requireCronSecret } from '@/lib/api-auth'
 
 export async function GET(request: NextRequest) {
+  // Auth first, before anything else and outside the try. It was inside the
+  // try before, which worked, but a handler whose first statement is not the
+  // auth check is one refactor away from doing work before authenticating.
+  const denied = requireCronSecret(request)
+  if (denied) return denied
+
   let cronExecutionId: string | undefined
   try {
-    const authHeader = request.headers.get('authorization')
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
     const supabase = createClient()
 
     // Auto-send disabled - use manual send button in listing coordination instead

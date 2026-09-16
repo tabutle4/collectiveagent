@@ -541,7 +541,11 @@ export async function processPayout({
   await supabaseAdmin
     .from('transaction_internal_agents')
     .update({
-      payment_method: 'ACH',
+      // Lowercase, matching the one vocabulary in lib/transactions/constants.ts.
+      // This line wrote 'ACH' and is the busiest writer of the column, so it
+      // put the casing drift back the day after any normalisation: most
+      // business days run a Payload payout.
+      payment_method: 'ach',
       payment_reference: payoutData?.id || null,
       updated_at: new Date().toISOString(),
     })

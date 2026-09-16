@@ -5,6 +5,7 @@ import { computeCommission } from '@/lib/transactions/math'
 import { AGENT_ROLE_OPTIONS } from '@/lib/transactions/constants'
 import { sideCategory } from '@/lib/transactions/sides'
 import { qualifyingCountForAgent, dealWouldQualifyForAgent } from '@/lib/transactions/qualifyingCount'
+import { paymentMethodLabel } from '@/lib/transactions/constants'
 
 const formatRole = (role: string | null | undefined): string => {
   if (!role) return 'Agent'
@@ -587,7 +588,10 @@ export async function GET(
       commission_pct: commissionPct,
       role: roleLabel,
       payment_date: fmtDate(baseTia.payment_date),
-      payment_method: baseTia.payment_method || 'ACH',
+      // Label, not the stored value. Rendering it raw printed "via ACH" only
+      // because the column happened to hold uppercase; once the casing is
+      // normalised the same line reads "via ach" on an agent's statement.
+      payment_method: paymentMethodLabel(baseTia.payment_method) || 'ACH',
       agent_basis: fmt$(agentBasis),
       // Brokermint-style commission calculation
       base_commission: fmt$(baseCommission),

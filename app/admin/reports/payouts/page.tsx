@@ -1,11 +1,20 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { RefreshCw, Plus, Trash2, Save, ChevronDown, ChevronUp, ExternalLink, Check, X, ArrowRightLeft } from 'lucide-react'
+import { RefreshCw, Plus, Trash2, Save, ChevronDown, ChevronUp, ExternalLink, Check, X, ArrowRightLeft, CalendarDays } from 'lucide-react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/context/AuthContext'
 import MarkPaidPanelModal from '@/components/transactions/MarkPaidPanelModal'
 import MoveCheckModal from '@/components/checks/MoveCheckModal'
+import SweepDialog from '@/components/payouts/SweepDialog'
+import DayView from '@/components/payouts/DayView'
+import { PAYMENT_METHOD_OPTIONS } from '@/lib/transactions/constants'
+import {
+  type SweepGates,
+  payoutBucket,
+  waitingOn,
+  CLEARED_VERIFIED_EMPTY,
+} from '@/lib/payouts/sweep'
 
 // Types
 
@@ -32,7 +41,10 @@ interface PayoutRow {
   check_id: string
   transaction_id: string | null
   address: string
-  crc_amount: number
+  // Null means the deal's office net has not been computed. A null is not a
+  // zero: "$0.00" reads as "we made nothing on this", which is a different
+  // and wrong claim, so a null renders as Unknown.
+  crc_amount: number | null
   check_amount: number
   agents: AgentRow[]
   externals: ExternalRow[]
@@ -43,9 +55,17 @@ interface PayoutRow {
   sides_complete: number | null
   sides_expected: number | null
   checklist_complete: boolean
+  checklist_done: number
+  checklist_required: number
+  funds_cleared: boolean
+  office_net_state: 'paid_at_closing' | 'not_swept' | 'swept'
+  office_net_swept_at: string | null
+  office_net_swept_amount: number | null
   pay_by_date: string | null
   crc_transferred: boolean
+  /** Derived from the agent and external rows, not the stored column. */
   agents_paid: boolean
+  agents_paid_stored: boolean
   status: string
   notes: string | null
   is_anchor?: boolean
@@ -126,6 +146,27 @@ function sidesBadge(row: PayoutRow, className = '') {
   )
 }
 
+// The gates a deal has to pass, in the shape lib/payouts/sweep expects. The
+// sweep dialog and this report must never answer "is this deal ready" two
+// different ways, so both read the same function.
+//
+// A deal that filed no compliance sides sends null counts: its status came
+// from the stored date instead. Treat that as one side, complete or not
+// according to the status already shown in the Compliance column, rather than
+// counting zero sides and burying the deal in Needs Attention.
+function gatesFor(row: PayoutRow): SweepGates {
+  const filedSides = row.sides_expected !== null && row.sides_complete !== null
+  return {
+    fundsCleared: row.funds_cleared,
+    checklistDone: row.checklist_done,
+    checklistRequired: row.checklist_required,
+    sidesComplete: filedSides
+      ? (row.sides_complete as number)
+      : (row.compliance_status === 'complete' || row.compliance_status === 'approved' ? 1 : 0),
+    sidesExpected: filedSides ? (row.sides_expected as number) : 1,
+  }
+}
+
 function agentNames(row: PayoutRow): string {
   // Only show names of unpaid agents
   const names = row.agents.filter(a => a.payment_status !== 'paid').map(a => a.name.split(' ')[0].toLowerCase())
@@ -197,9 +238,10 @@ function groupByTransaction(rows: PayoutRow[]): PayoutRow[] {
 
 // Mobile card - clean stacked layout
 
-function PayoutCard({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid, onMoveCheck }: { 
-  row: PayoutRow; 
+function PayoutCard({ row, dateKey, showWaitingOn, onMarkAgentPaid, onMarkExternalPaid, onMoveCheck }: {
+  row: PayoutRow
   dateKey: 'cleared_date' | 'received_date'
+  showWaitingOn?: boolean
   onMarkAgentPaid?: (tiaId: string, checkId: string) => void
   onMarkExternalPaid?: (externalId: string, checkId: string) => void
   onMoveCheck?: (row: PayoutRow) => void
@@ -208,6 +250,7 @@ function PayoutCard({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid, onMoveC
   const dateVal = dateKey === 'cleared_date' ? row.cleared_date : (row.cleared_date || row.received_date)
   const total = unpaidAgentTotal(row)
   const notes = cleanNotes(row.notes)
+  const waiting = showWaitingOn ? waitingOn(gatesFor(row)) : []
 
   return (
     <div className="container-card rounded-lg overflow-hidden">
@@ -229,8 +272,10 @@ function PayoutCard({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid, onMoveC
         <div className="text-right flex-shrink-0 ml-2">
           <p className="text-xs text-luxury-gray-3">{fmt(row.check_amount)} check</p>
           <p className="text-sm font-semibold text-luxury-gray-1">{total > 0 ? fmt(total) : '-'}</p>
-          {row.crc_amount > 0 && (
-            <p className="text-xs text-luxury-gray-3 mt-0.5">+{fmt(row.crc_amount)} CRC</p>
+          {row.crc_amount === null ? (
+            <p className="text-xs text-amber-700 mt-0.5">Our share unknown</p>
+          ) : row.crc_amount > 0 && (
+            <p className="text-xs text-luxury-gray-3 mt-0.5">+{fmt(row.crc_amount)} our share</p>
           )}
         </div>
       </div>
@@ -302,6 +347,15 @@ function PayoutCard({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid, onMoveC
         </span>
       </div>
 
+      {/* Why this deal is sitting here, in the order a person would fix it. */}
+      {showWaitingOn && waiting.length > 0 && (
+        <div className="px-4 pb-2 flex flex-wrap gap-1">
+          {waiting.map(w => (
+            <span key={w} className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded">{w}</span>
+          ))}
+        </div>
+      )}
+
       {/* Notes - only if present */}
       {notes && (
         <div className="px-4 pb-2">
@@ -327,9 +381,10 @@ function PayoutCard({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid, onMoveC
 
 // Desktop table row - all columns visible, table scrolls horizontally if needed
 
-function PayoutTableRow({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid, onMoveCheck }: { 
-  row: PayoutRow; 
+function PayoutTableRow({ row, dateKey, showWaitingOn, onMarkAgentPaid, onMarkExternalPaid, onMoveCheck }: {
+  row: PayoutRow
   dateKey: 'cleared_date' | 'received_date'
+  showWaitingOn?: boolean
   onMarkAgentPaid?: (tiaId: string, checkId: string) => void
   onMarkExternalPaid?: (externalId: string, checkId: string) => void
   onMoveCheck?: (row: PayoutRow) => void
@@ -343,6 +398,7 @@ function PayoutTableRow({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid, onM
   const ext = externals[0]
   const { label, cls } = complianceLabel(row.compliance_status)
   const dateVal = dateKey === 'cleared_date' ? row.cleared_date : (row.cleared_date || row.received_date)
+  const waiting = showWaitingOn ? waitingOn(gatesFor(row)) : []
 
   const renderAgentCell = (agent: AgentRow | undefined) => {
     if (!agent) return <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">-</td>
@@ -397,7 +453,11 @@ function PayoutTableRow({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid, onM
         ) : <span className="truncate block">{row.address}</span>}
       </td>
       <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">{row.check_amount > 0 ? fmt(row.check_amount) : '-'}</td>
-      <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">{row.crc_amount > 0 ? fmt(row.crc_amount) : '-'}</td>
+      <td className="py-2 px-2 text-xs text-right whitespace-nowrap">
+        {row.crc_amount === null
+          ? <span className="text-amber-700">Unknown</span>
+          : <span className="text-luxury-gray-2">{row.crc_amount > 0 ? fmt(row.crc_amount) : '-'}</span>}
+      </td>
       {renderAgentCell(a1)}
       {renderAgentCell(a2)}
       {renderAgentCell(a3)}
@@ -414,11 +474,19 @@ function PayoutTableRow({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid, onM
       <td className="py-2 px-2 text-xs text-luxury-gray-3 whitespace-nowrap">{fmtDate(row.pay_by_date)}</td>
       <td className="py-2 px-2 text-xs whitespace-nowrap">
         <span className={`font-medium ${row.checklist_complete ? 'text-green-700' : 'text-luxury-gray-3'}`}>
-          {row.checklist_complete ? '✓ done' : 'pending'}
+          {row.checklist_complete
+            ? '✓ done'
+            : row.checklist_required > 0
+              ? `${row.checklist_done} of ${row.checklist_required}`
+              : 'pending'}
         </span>
       </td>
-      <td className="py-2 px-2 text-xs text-luxury-gray-3 max-w-[130px]">
-        <span className="truncate block">{cleanNotes(row.notes) || '-'}</span>
+      <td className="py-2 px-2 text-xs text-luxury-gray-3 max-w-[160px]">
+        {showWaitingOn && waiting.length > 0 ? (
+          <span className="text-amber-700 block" title={waiting.join(', ')}>{waiting.join(', ')}</span>
+        ) : (
+          <span className="truncate block">{cleanNotes(row.notes) || '-'}</span>
+        )}
       </td>
       <td className="py-2 px-2 text-xs whitespace-nowrap">
         {onMoveCheck && (
@@ -441,8 +509,11 @@ function PayoutTableRow({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid, onM
 type SortKey = 'date' | 'compliance' | 'pay_by' | null
 type SortDir = 'asc' | 'desc'
 
-function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, onMarkAgentPaid, onMarkExternalPaid, onMoveCheck }: {
+function PayoutsTable({ rows, title, subtitle, emptyMessage, showWaitingOn, collapsed, onToggle, dateLabel, dateKey, onMarkAgentPaid, onMarkExternalPaid, onMoveCheck }: {
   rows: PayoutRow[]; title: string; collapsed: boolean; onToggle: () => void
+  subtitle?: string
+  emptyMessage?: string
+  showWaitingOn?: boolean
   dateLabel: string; dateKey: 'cleared_date' | 'received_date'
   onMarkAgentPaid?: (tiaId: string, checkId: string) => void
   onMarkExternalPaid?: (externalId: string, checkId: string) => void
@@ -471,7 +542,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
   const displayRows = groupByTransaction(orderedRows)
   const txnCount = new Set(rows.map(r => r.transaction_id || `c:${r.check_id}`)).size
   const checkTotal = rows.reduce((s, r) => s + r.check_amount, 0)
-  const crcTotal  = rows.reduce((s, r) => s + r.crc_amount, 0)
+  const crcTotal  = rows.reduce((s, r) => s + (r.crc_amount ?? 0), 0)
   const agentTot  = rows.reduce((s, r) => s + unpaidAgentTotal(r), 0)
   const a1Tot     = rows.reduce((s, r) => s + (r.agents[0] && r.agents[0].payment_status !== 'paid' ? r.agents[0].amount : 0), 0)
   const a2Tot     = rows.reduce((s, r) => s + (r.agents[1] && r.agents[1].payment_status !== 'paid' ? r.agents[1].amount : 0), 0)
@@ -482,13 +553,16 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
     <div className="container-card mb-5">
       <button className="w-full flex items-center justify-between" onClick={onToggle}>
         <div className="flex items-center gap-3">
-          <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">{title}</h2>
+          <div className="text-left">
+            <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">{title}</h2>
+            {subtitle && <p className="text-xs text-luxury-gray-3 normal-case">{subtitle}</p>}
+          </div>
           <span className="text-xs text-luxury-gray-3">({rows.length})</span>
         </div>
         <div className="flex items-center gap-4">
           <span className="text-xs text-luxury-gray-2">Checks: <span className="font-semibold text-luxury-gray-1">{fmt(checkTotal)}</span></span>
           <span className="text-xs text-luxury-gray-2">Agents: <span className="font-semibold text-luxury-gray-1">{fmt(agentTot)}</span></span>
-          <span className="text-xs text-luxury-gray-2">CRC: <span className="font-semibold text-luxury-gray-1">{fmt(crcTotal)}</span></span>
+          <span className="text-xs text-luxury-gray-2">Our share: <span className="font-semibold text-luxury-gray-1">{fmt(crcTotal)}</span></span>
           {collapsed ? <ChevronDown size={14} className="text-luxury-gray-3" /> : <ChevronUp size={14} className="text-luxury-gray-3" />}
         </div>
       </button>
@@ -499,9 +573,9 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
           {/* Mobile and tablet: card layout (below lg) */}
           <div className="lg:hidden space-y-2">
             {displayRows.length === 0 ? (
-              <p className="text-xs text-luxury-gray-3 text-center py-4">No records</p>
+              <p className="text-xs text-luxury-gray-3 text-center py-4">{emptyMessage || 'No records'}</p>
             ) : (
-              displayRows.map(row => <PayoutCard key={row.check_id} row={row} dateKey={dateKey} onMarkAgentPaid={onMarkAgentPaid} onMarkExternalPaid={onMarkExternalPaid} onMoveCheck={onMoveCheck} />)
+              displayRows.map(row => <PayoutCard key={row.check_id} row={row} dateKey={dateKey} showWaitingOn={showWaitingOn} onMarkAgentPaid={onMarkAgentPaid} onMarkExternalPaid={onMarkExternalPaid} onMoveCheck={onMoveCheck} />)
             )}
             {rows.length > 0 && (
               <div className="container-card rounded-lg flex items-center justify-between px-4 py-2 mt-1">
@@ -518,7 +592,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
                 <tr className="border-b border-luxury-gray-5/50">
                   <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Address</th>
                   <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">Check</th>
-                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">CRC</th>
+                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">Our Share</th>
                   <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">Agent 1</th>
                   <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">Agent 2</th>
                   <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">Agent 3</th>
@@ -544,15 +618,15 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
                     Pay By {sortKey === 'pay_by' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
                   </th>
                   <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Checklist</th>
-                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Notes</th>
+                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">{showWaitingOn ? 'Waiting On' : 'Notes'}</th>
                   <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Move</th>
                 </tr>
               </thead>
               <tbody>
                 {displayRows.length === 0 ? (
-                  <tr><td colSpan={15} className="py-6 text-center text-xs text-luxury-gray-3">No records</td></tr>
+                  <tr><td colSpan={15} className="py-6 text-center text-xs text-luxury-gray-3">{emptyMessage || 'No records'}</td></tr>
                 ) : (
-                  displayRows.map(row => <PayoutTableRow key={row.check_id} row={row} dateKey={dateKey} onMarkAgentPaid={onMarkAgentPaid} onMarkExternalPaid={onMarkExternalPaid} onMoveCheck={onMoveCheck} />)
+                  displayRows.map(row => <PayoutTableRow key={row.check_id} row={row} dateKey={dateKey} showWaitingOn={showWaitingOn} onMarkAgentPaid={onMarkAgentPaid} onMarkExternalPaid={onMarkExternalPaid} onMoveCheck={onMoveCheck} />)
                 )}
               </tbody>
               {rows.length > 0 && (
@@ -582,7 +656,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
 // Main
 
 export default function PayoutsReportPage() {
-  const { user } = useAuth()
+  const { user, hasPermission } = useAuth()
   const [rows, setRows] = useState<PayoutRow[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [pmFees, setPmFees] = useState<PMFee[]>([])
@@ -590,7 +664,18 @@ export default function PayoutsReportPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [paidCollapsed, setPaidCollapsed] = useState(false)
-  const [holdCollapsed, setHoldCollapsed] = useState(false)
+  const [verifiedCollapsed, setVerifiedCollapsed] = useState(false)
+  const [attentionCollapsed, setAttentionCollapsed] = useState(false)
+  const [sweepOpen, setSweepOpen] = useState(false)
+  const [dayViewOpen, setDayViewOpen] = useState(false)
+  const [unsweptOfficeNet, setUnsweptOfficeNet] = useState(0)
+  const [officeNetUnknown, setOfficeNetUnknown] = useState<{ transaction_id: string; address: string }[]>([])
+  // Re-deriving office net across the in-scope deals. The route existed with
+  // no caller at all, and the cutover depends on it: sweeping transfers
+  // whatever office_net says, so a deal last edited under older commission
+  // math moves the wrong amount. It batches, so this loops the cursor.
+  const [recomputing, setRecomputing] = useState(false)
+  const [recomputeResult, setRecomputeResult] = useState<string | null>(null)
   const [expCollapsed, setExpCollapsed] = useState(false)
   const [pmFeesCollapsed, setPmFeesCollapsed] = useState(false)
   const [landlordCollapsed, setLandlordCollapsed] = useState(false)
@@ -621,7 +706,7 @@ export default function PayoutsReportPage() {
     externalId: string; name: string; amount: number; isLease: boolean
   } | null>(null)
   const [externalMarkPaidDate, setExternalMarkPaidDate] = useState('')
-  const [externalMarkPaidMethod, setExternalMarkPaidMethod] = useState('ACH')
+  const [externalMarkPaidMethod, setExternalMarkPaidMethod] = useState('ach')
   const [externalMarkPaidRef, setExternalMarkPaidRef] = useState('')
   const [externalSaving, setExternalSaving] = useState(false)
 
@@ -655,6 +740,8 @@ export default function PayoutsReportPage() {
       setBankHoldRows(json.hold_rows || [])
       setAutoHoldsTotal(json.auto_holds_total || 0)
       setBalanceUpdatedAt(json.settings?.bank_balance_updated_at || null)
+      setUnsweptOfficeNet(json.unswept_office_net || 0)
+      setOfficeNetUnknown(json.office_net_unknown || [])
     } catch (err: any) {
       setError(err.message || 'Failed to load payouts')
     } finally {
@@ -675,11 +762,27 @@ export default function PayoutsReportPage() {
   const isSettledSibling = (r: PayoutRow) =>
     r.is_anchor === false && settledTxnIds.has(r.transaction_id)
 
-  const paidRows = rows.filter(r => !isSettledSibling(r) && r.crc_transferred && !r.agents_paid && !allAgentsPaid(r))
-  const holdRows = rows.filter(r => !isSettledSibling(r) && !r.crc_transferred && !r.agents_paid && !allAgentsPaid(r))
+  // Three sections, from lib/payouts/sweep so the sweep dialog and this report
+  // can never put the same deal in two places.
+  //
+  // Paid Most Recently is the checks the office has marked processed. Of the
+  // rest, a deal belongs in Cleared and Verified when its funds have cleared,
+  // its checklist is done and at least one compliance side is signed off: a
+  // deal with one of two sides verified sits here with its fraction showing
+  // rather than being buried. Everything else is Needs Attention, and each row
+  // there says what it is waiting on.
+  const activeRows = rows.filter(r => !isSettledSibling(r) && !r.agents_paid && !allAgentsPaid(r))
+  const bucketOf = (r: PayoutRow) =>
+    payoutBucket({ crcTransferred: r.crc_transferred, gates: gatesFor(r) })
 
-  const paidAgentTotal   = paidRows.reduce((s, r) => s + unpaidAgentTotal(r), 0)
-  const holdAgentTotal   = holdRows.reduce((s, r) => s + unpaidAgentTotal(r), 0)
+  const paidRows      = activeRows.filter(r => bucketOf(r) === 'paid_recently')
+  const verifiedRows  = activeRows.filter(r => bucketOf(r) === 'cleared_verified')
+  const attentionRows = activeRows.filter(r => bucketOf(r) === 'needs_attention')
+
+  const paidAgentTotal      = paidRows.reduce((s, r) => s + unpaidAgentTotal(r), 0)
+  const verifiedAgentTotal  = verifiedRows.reduce((s, r) => s + unpaidAgentTotal(r), 0)
+  const attentionAgentTotal = attentionRows.reduce((s, r) => s + unpaidAgentTotal(r), 0)
+  const holdAgentTotal      = verifiedAgentTotal + attentionAgentTotal
   const expensesTotal    = expenses.reduce((s, e) => s + (e.amount || 0), 0)
   const pmFeesTotal      = pmFees.reduce((s, f) => s + f.amount, 0)
   const landlordTotal    = landlordPayouts.reduce((s, l) => s + l.amount, 0)
@@ -724,6 +827,58 @@ export default function PayoutsReportPage() {
     setAddingExp(false)
   }
 
+  // Release keeps the item as history and stops it holding money back.
+  // Delete removes it entirely, which loses the reason the account read short.
+  const runRecompute = async () => {
+    if (recomputing) return
+    setRecomputing(true)
+    setRecomputeResult(null)
+    try {
+      let cursor: string | null = null
+      let scanned = 0
+      let changed = 0
+      // Bounded so a bug upstream cannot spin here forever. The in-scope
+      // population is a few hundred deals against a default batch of 25.
+      for (let batch = 0; batch < 200; batch++) {
+        const res: Response = await fetch('/api/admin/transactions/recompute-office-net', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cursor }),
+        })
+        const json: any = await res.json()
+        if (!res.ok) throw new Error(json.error || 'Recompute failed')
+        // Keys match what the route actually returns: processed and changed,
+        // both numbers, plus next_cursor.
+        scanned += json.processed ?? 0
+        changed += json.changed ?? 0
+        cursor = json.next_cursor ?? null
+        if (!cursor) break
+      }
+      setRecomputeResult(
+        `Checked ${scanned} deal${scanned === 1 ? '' : 's'}. ${changed} had a different share than before.`
+      )
+      load()
+    } catch (e: any) {
+      setRecomputeResult(e.message)
+    } finally {
+      setRecomputing(false)
+    }
+  }
+
+  const releaseExpense = async (id: string) => {
+    const res = await fetch('/api/admin/payout-expenses', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, action: 'release' }),
+    })
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}))
+      alert(json.error || 'Could not release that item')
+      return
+    }
+    load()
+  }
+
   const deleteExpense = async (id: string) => {
     setExpenses(prev => prev.filter(e => e.id !== id))
     await fetch('/api/admin/payout-expenses', {
@@ -762,7 +917,7 @@ export default function PayoutsReportPage() {
     if (!ext) return
     setExternalMarkPaid({ externalId, name: ext.name, amount: ext.amount, isLease: ext.is_lease })
     setExternalMarkPaidDate(new Date().toISOString().split('T')[0])
-    setExternalMarkPaidMethod('ACH')
+    setExternalMarkPaidMethod('ach')
     setExternalMarkPaidRef('')
   }
 
@@ -865,17 +1020,65 @@ export default function PayoutsReportPage() {
           <Link href="/admin/reports/all-payouts" className="text-xs text-luxury-accent hover:underline">
             View All Payouts →
           </Link>
+          <Link href="/admin/reports/money-movement" className="text-xs text-luxury-accent hover:underline">
+            Money Movement →
+          </Link>
+          <Link href="/admin/reports/reconciliation" className="text-xs text-luxury-accent hover:underline">
+            Bank Reconciliation →
+          </Link>
         </div>
-        <button onClick={load} className="btn btn-secondary text-xs flex items-center gap-1.5">
-          <RefreshCw size={13} /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setDayViewOpen(true)} className="btn btn-secondary text-xs flex items-center gap-1.5">
+            <CalendarDays size={13} /> What happened today
+          </button>
+          <button onClick={load} className="btn btn-secondary text-xs flex items-center gap-1.5">
+            <RefreshCw size={13} /> Refresh
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col">
 
         <div className="order-2 lg:order-1">
-          <PayoutsTable rows={paidRows} title="Paid Most Recently" collapsed={paidCollapsed} onToggle={() => setPaidCollapsed(v => !v)} dateLabel="Paid" dateKey="cleared_date" onMarkAgentPaid={openAgentMarkPaid} onMarkExternalPaid={openExternalMarkPaid} onMoveCheck={openMoveCheck} />
-          <PayoutsTable rows={holdRows} title="On Hold" collapsed={holdCollapsed} onToggle={() => setHoldCollapsed(v => !v)} dateLabel="Cleared" dateKey="cleared_date" onMarkAgentPaid={openAgentMarkPaid} onMarkExternalPaid={openExternalMarkPaid} onMoveCheck={openMoveCheck} />
+          <PayoutsTable
+            rows={paidRows}
+            title="Paid Most Recently"
+            subtitle="Checks marked processed"
+            collapsed={paidCollapsed}
+            onToggle={() => setPaidCollapsed(v => !v)}
+            dateLabel="Paid"
+            dateKey="cleared_date"
+            onMarkAgentPaid={openAgentMarkPaid}
+            onMarkExternalPaid={openExternalMarkPaid}
+            onMoveCheck={openMoveCheck}
+          />
+          <PayoutsTable
+            rows={verifiedRows}
+            title="Cleared and Verified"
+            subtitle="Funds cleared, checklist done, compliance signed off"
+            emptyMessage={CLEARED_VERIFIED_EMPTY}
+            collapsed={verifiedCollapsed}
+            onToggle={() => setVerifiedCollapsed(v => !v)}
+            dateLabel="Cleared"
+            dateKey="cleared_date"
+            onMarkAgentPaid={openAgentMarkPaid}
+            onMarkExternalPaid={openExternalMarkPaid}
+            onMoveCheck={openMoveCheck}
+          />
+          <PayoutsTable
+            rows={attentionRows}
+            title="Needs Attention"
+            subtitle="Not ready to pay yet"
+            emptyMessage="Nothing is stuck."
+            showWaitingOn
+            collapsed={attentionCollapsed}
+            onToggle={() => setAttentionCollapsed(v => !v)}
+            dateLabel="Cleared"
+            dateKey="cleared_date"
+            onMarkAgentPaid={openAgentMarkPaid}
+            onMarkExternalPaid={openExternalMarkPaid}
+            onMoveCheck={openMoveCheck}
+          />
         </div>
 
         {/* Landlord Disbursements */}
@@ -1023,6 +1226,15 @@ export default function PayoutsReportPage() {
                     <div className="flex items-center gap-3">
                       {exp.amount != null && (
                         <span className="text-sm font-medium text-luxury-gray-1">{fmt(exp.amount)}</span>
+                      )}
+                      {hasPermission('can_manage_ledger') && (
+                        <button
+                          onClick={() => releaseExpense(exp.id)}
+                          className="text-xs px-2 py-1 rounded border border-luxury-gray-5 text-luxury-gray-2 hover:bg-luxury-gray-5/40 transition-colors"
+                          title="Stop holding this money back"
+                        >
+                          Release
+                        </button>
                       )}
                       <button onClick={() => deleteExpense(exp.id)} className="text-luxury-gray-4 hover:text-red-500 transition-colors">
                         <Trash2 size={13} />
@@ -1172,6 +1384,54 @@ export default function PayoutsReportPage() {
                 <span className={`font-bold whitespace-nowrap ${difference < 0 ? 'text-red-600' : 'text-green-700'}`}>{fmt(difference)}</span>
               </div>
             </div>
+
+            {/* Our share, still sitting in this account. Deliberately below
+                What's left rather than inside the waterfall: it is not an
+                obligation, it is money waiting to be collected, and putting it
+                in the subtractions above would say the brokerage owes it. */}
+            <div className="border-t border-luxury-gray-5/50 mt-3 pt-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm text-luxury-gray-2">Our share still in this account</p>
+                  <p className="text-xs text-luxury-gray-3">Not yet moved to the income account</p>
+                </div>
+                <span className="text-base font-bold text-luxury-accent whitespace-nowrap">{fmt(unsweptOfficeNet)}</span>
+              </div>
+              {officeNetUnknown.length > 0 && (
+                <p className="text-xs text-amber-700 mt-2">
+                  {officeNetUnknown.length} deal{officeNetUnknown.length === 1 ? '' : 's'} still
+                  {officeNetUnknown.length === 1 ? ' has' : ' have'} no share worked out, so
+                  {officeNetUnknown.length === 1 ? ' it is' : ' they are'} not counted here.
+                </p>
+              )}
+              {/* This page is gated on can_manage_checks, which support and tc
+                  also hold, but moving money and releasing earmarks are gated
+                  on can_manage_sweeps and can_manage_ledger, which they do not.
+                  Without this they saw live buttons that 403 on click. */}
+              {hasPermission('can_manage_sweeps') && recomputeResult && (
+                <p className="text-xs text-luxury-gray-3 mt-2">{recomputeResult}</p>
+              )}
+              {hasPermission('can_manage_sweeps') && (
+                <button
+                  onClick={runRecompute}
+                  disabled={recomputing}
+                  className="btn btn-secondary text-xs px-4 flex items-center gap-1.5 mt-3 disabled:opacity-50"
+                  title="Re-derive every deal's share through the app's own commission function"
+                >
+                  {recomputing ? <RefreshCw size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                  Recheck our share on every deal
+                </button>
+              )}
+              {hasPermission('can_manage_sweeps') && (
+                <button
+                  onClick={() => setSweepOpen(true)}
+                  disabled={unsweptOfficeNet <= 0}
+                  className="btn btn-primary text-xs px-4 flex items-center gap-1.5 mt-3 disabled:opacity-50"
+                >
+                  <ArrowRightLeft size={12} /> Move our share to income
+                </button>
+              )}
+            </div>
           </div>
 
         </div>
@@ -1179,6 +1439,15 @@ export default function PayoutsReportPage() {
         </div>
 
       </div>
+
+      {sweepOpen && (
+        <SweepDialog
+          onClose={() => setSweepOpen(false)}
+          onSwept={() => { setSweepOpen(false); load() }}
+        />
+      )}
+
+      {dayViewOpen && <DayView onClose={() => setDayViewOpen(false)} />}
 
       {/* Agent Mark Paid Modal */}
       {agentMarkPaid && (
@@ -1212,10 +1481,9 @@ export default function PayoutsReportPage() {
                 <div>
                   <label className="field-label">Method</label>
                   <select className="select-luxury text-xs" value={externalMarkPaidMethod} onChange={e => setExternalMarkPaidMethod(e.target.value)}>
-                    <option value="ACH">ACH</option>
-                    <option value="Check">Check</option>
-                    <option value="Zelle">Zelle</option>
-                    <option value="Wire">Wire</option>
+                    {PAYMENT_METHOD_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
                   </select>
                 </div>
                 <div className="col-span-2">

@@ -3,6 +3,7 @@ import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { getActiveAdmins, preferredDisplayName } from '@/lib/agent-email'
 import { writeInAppNotification, sendNotificationEmail } from '@/lib/agent-email-notifications'
 import { escapeHtml } from '@/lib/agent-email-send'
+import { requireCronSecret } from '@/lib/api-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -28,10 +29,8 @@ export const maxDuration = 120
 //
 // Authenticated with CRON_SECRET only.
 export async function GET(request: NextRequest) {
-  const auth = request.headers.get('authorization')
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronSecret(request)
+  if (denied) return denied
 
   try {
     const now = Date.now()

@@ -4,6 +4,7 @@ import { Resend } from 'resend'
 import { getEmailLayout } from '@/lib/email/layout'
 import { escapeHtml } from '@/lib/agent-email-send'
 import { preferredDisplayName } from '@/lib/agent-email'
+import { requireCronSecret } from '@/lib/api-auth'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -315,10 +316,8 @@ ${rows
 }
 
 export async function GET(request: NextRequest) {
-  const auth = request.headers.get('authorization')
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronSecret(request)
+  if (denied) return denied
 
   // Declared outside the try so the failure path can still reach the inbox.
   let reportRecipients: string[] = [FALLBACK_REPORT_EMAIL]

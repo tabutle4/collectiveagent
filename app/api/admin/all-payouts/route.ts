@@ -6,6 +6,7 @@ import {
   isLeaseTransactionType,
 } from '@/lib/transactions/transactionTypes'
 import { effectiveAgentNet } from '@/lib/transactions/funding'
+import { officeNetState, type OfficeNetState } from '@/lib/payouts/ledger'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,6 +66,14 @@ interface PayoutRow {
   transaction_id: string | null
   agent_id: string | null
   is_lease: boolean
+  /**
+   * Only set on brokerage_net rows. Our share of a deal is in one of three
+   * places, and calling all three "completed" was the old lie: money title
+   * paid direct never touched the payouts account, money already swept is in
+   * the income account, and money still sitting in the payouts account has
+   * not been collected yet even though the deal closed.
+   */
+  office_net_state?: OfficeNetState
 }
 
 export async function GET(request: NextRequest) {
@@ -135,11 +144,29 @@ export async function GET(request: NextRequest) {
     // at closing, not pending against a future payment.
     const brokerageTransactions = await fetchAllRows(
       'transactions',
-      'id, property_address, transaction_type, closed_date, office_net',
+      'id, property_address, transaction_type, closed_date, office_net, office_net_swept_at',
       {
         filters: [{ type: 'gte', column: 'office_net', value: 0.01 }],
         orderBy: { column: 'closed_date', ascending: false, nullsFirst: false },
       }
+    )
+
+    // Which deals had money land in the payouts account at all. A deal title
+    // paid direct was never sweepable, so it must not read as money waiting to
+    // be moved: without this distinction 906 deals and $1.18m show up as
+    // outstanding on a screen whose whole job is to say what is outstanding.
+    const payoutsChecks = await fetchAllRows<{ transaction_id: string | null }>(
+      'checks_received',
+      'transaction_id',
+      {
+        filters: [
+          { type: 'eq', column: 'funds_destination', value: 'payouts' },
+          { type: 'not', column: 'transaction_id', value: null },
+        ],
+      }
+    )
+    const dealsWithPayoutsMoney = new Set(
+      (payoutsChecks || []).map(c => c.transaction_id).filter(Boolean) as string[]
     )
 
     // Get agent names for internal agents (sales/lease side)
@@ -293,9 +320,10 @@ export async function GET(request: NextRequest) {
     })
 
     const brokerageRows: PayoutRow[] = brokerageTransactions.map((t: any) => {
-      // Brokerage net is realized at closing - always shown as completed
-      // since it's already in the CRC bank account by the time the
-      // transaction has a closed_date.
+      const state = officeNetState({
+        hasPayoutsCheck: dealsWithPayoutsMoney.has(t.id),
+        sweptAt: t.office_net_swept_at ?? null,
+      })
       return {
         id:               t.id,
         type:             'brokerage_net',
@@ -304,12 +332,16 @@ export async function GET(request: NextRequest) {
         address:          t.property_address || '',
         transaction_type: friendlyType(t.transaction_type),
         amount:           Number(t.office_net || 0),
+        // Our own share is never a pending payout: nobody is waiting to be
+        // paid it. Not swept is reported on its own tile instead, so it can
+        // never inflate what the brokerage owes other people.
         payment_status:   'completed',
-        payment_date:     t.closed_date || null,
+        payment_date:     state === 'swept' ? (t.office_net_swept_at || t.closed_date || null) : (t.closed_date || null),
         payment_method:   'retained',
         transaction_id:   t.id,
         agent_id:         null,
         is_lease:         false,
+        office_net_state: state,
       }
     })
 
@@ -335,6 +367,20 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Our share, split three ways. Deliberately outside pendingByType: this is
+    // money the brokerage already earned, not money it owes, and adding it to
+    // Total Pending would overstate what has to go out the door.
+    const officeNet = { paid_at_closing: 0, not_swept: 0, swept: 0 }
+    const officeNetCount = { paid_at_closing: 0, not_swept: 0, swept: 0 }
+    for (const r of brokerageRows) {
+      const state = r.office_net_state
+      if (!state) continue
+      officeNet[state] += r.amount
+      officeNetCount[state] += 1
+    }
+    const round = (n: number) => Math.round(n * 100) / 100
+    for (const k of Object.keys(officeNet) as OfficeNetState[]) officeNet[k] = round(officeNet[k])
+
     // Apply filters to the displayed rows
     let rows = allRows
     if (type)   rows = rows.filter(r => r.type === type)
@@ -345,6 +391,8 @@ export async function GET(request: NextRequest) {
         r.payee.toLowerCase().includes(search)
       )
     }
+    const officeNetFilter = searchParams.get('office_net_state') || ''
+    if (officeNetFilter) rows = rows.filter(r => r.office_net_state === officeNetFilter)
     if (from) rows = rows.filter(r => r.payment_date && r.payment_date >= from)
     if (to)   rows = rows.filter(r => r.payment_date && r.payment_date <= to)
 
@@ -356,7 +404,7 @@ export async function GET(request: NextRequest) {
       return b.payment_date.localeCompare(a.payment_date)
     })
 
-    return NextResponse.json({ rows, pendingByType, countByType })
+    return NextResponse.json({ rows, pendingByType, countByType, officeNet, officeNetCount })
   } catch (error: any) {
     console.error('All payouts error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
