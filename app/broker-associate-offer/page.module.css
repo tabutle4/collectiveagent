@@ -396,6 +396,45 @@
   margin: 0 0 6px;
 }
 
+/*
+ * Jump menu under the opening section. Wraps rather than side scrolls, so no
+ * link is ever hidden off the edge of a phone.
+ */
+.jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 22px;
+  row-gap: 9px;
+  border-top: 1px solid var(--hair);
+  border-bottom: 1px solid var(--hair);
+  padding: 13px 0;
+  margin: 0 0 38px;
+}
+
+.jump a {
+  font-family: var(--font-offer-mono), ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--slate);
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 2px;
+  transition: color 0.12s;
+}
+
+.jump a:hover,
+.jump a:focus-visible {
+  color: var(--gold);
+  border-bottom-color: var(--gold);
+}
+
+/* Anchor targets should not land flush against the top of the viewport. */
+.page [id] {
+  scroll-margin-top: 20px;
+}
+
 /* Tablet and up. The only widening rule in the file. */
 @media (min-width: 840px) {
   .wrap {

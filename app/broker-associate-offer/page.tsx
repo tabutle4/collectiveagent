@@ -76,11 +76,17 @@ export default async function BrokerAssociateOfferPage() {
           </p>
         </section>
 
-        <hr className={styles.rule} />
+        <nav className={styles.jump} aria-label="On this page">
+          <a href="#option-one">Broker Associate Plan</a>
+          <a href="#option-two">Broker in a Box</a>
+          <a href="#overhead">Team 10 Overhead</a>
+          <a href="#difference">The Honest Difference</a>
+          <a href="#next">What&apos;s Next</a>
+        </nav>
 
         <div className={styles.opts}>
           {/* OPTION ONE */}
-          <div className={styles.opt}>
+          <div className={styles.opt} id="option-one">
             <div className={styles.optHead}>
               <span className={styles.optNum}>Option one</span>
               <p className={styles.optName}>Broker Associate Plan</p>
@@ -100,7 +106,7 @@ export default async function BrokerAssociateOfferPage() {
                   <span className={styles.figKey}>Your leases</span>
                 </div>
                 <div className={styles.fig}>
-                  <span className={styles.figValue}>85/15</span>
+                  <span className={styles.figValue}>90/10</span>
                   <span className={styles.figKey}>Your team</span>
                 </div>
                 <div className={styles.fig}>
@@ -111,9 +117,9 @@ export default async function BrokerAssociateOfferPage() {
 
               <div className={styles.pull}>
                 <span>
-                  <strong>The 85 is yours to carve.</strong> On every deal your agents close, eighty
-                  five percent comes to your team and you decide how it splits between you and the
-                  agent. Collective Realty Co. takes fifteen and nothing else.
+                  <strong>The 90 is yours to carve.</strong> On every deal your agents close,
+                  ninety percent comes to your team and you decide how it splits between you and the
+                  agent. Collective Realty Co. takes ten, and that ten is your overhead.
                 </span>
               </div>
 
@@ -127,8 +133,8 @@ export default async function BrokerAssociateOfferPage() {
                     <strong>95/5 on every lease you personally close.</strong> No cap.
                   </li>
                   <li>
-                    <strong>85/15 on your team&apos;s production.</strong> Sales and leases both.
-                    You carve your share out of the 85.
+                    <strong>90/10 on your team&apos;s production.</strong> Sales and leases both.
+                    You carve your share out of the 90, and the 10 is your overhead.
                   </li>
                   <li>Processing fees stay exactly as they are today. Nothing new added.</li>
                   <li>
@@ -281,7 +287,7 @@ export default async function BrokerAssociateOfferPage() {
           </div>
 
           {/* OPTION TWO */}
-          <div className={`${styles.opt} ${styles.optDark}`}>
+          <div className={`${styles.opt} ${styles.optDark}`} id="option-two">
             <div className={styles.optHead}>
               <span className={styles.optNum}>Option two</span>
               <p className={styles.optName}>Broker in a Box</p>
@@ -505,7 +511,127 @@ export default async function BrokerAssociateOfferPage() {
 
         <hr className={styles.ruleAfterOpts} />
 
-        <section className={styles.section}>
+        <section className={styles.section} id="overhead">
+          <p className={styles.eyebrow}>What the 10 covers</p>
+          <h2 className={styles.h2}>
+            The ten is your overhead, and it is the cheaper way to buy it
+          </h2>
+          <p>
+            The ten percent is not a fee for access. It is the cost of running a brokerage, and
+            under option one you are buying it wholesale instead of assembling it yourself.
+            Everything below is priced for what you would actually be standing up: you and the five
+            agents on your team, at the volume that team closed in the last twelve months, at
+            published 2026 rates.
+          </p>
+          <div className={styles.two}>
+            <div className={styles.grp}>
+              <span className={styles.grpTitle}>
+                What you pay sponsored by Collective Realty Co.
+              </span>
+              <ul className={`${styles.list} ${styles.plain}`}>
+                <li>
+                  <strong>Your broker license, $217 every two years.</strong> You pay this in either
+                  scenario. TREC charges no separate fee for the associated broker designation.
+                </li>
+                <li>
+                  <strong>$799 a year for errors and omissions,</strong> taken once from your first
+                  sale of the year.
+                </li>
+                <li>
+                  <strong>The 10 on your team&apos;s production.</strong> That is the whole of it,
+                  and it covers all six of you. It scales with what the team produces, so a slow
+                  quarter costs you almost nothing.
+                </li>
+              </ul>
+            </div>
+            <div className={styles.grp}>
+              <span className={styles.grpTitle}>
+                What the same overhead costs with your team at your own firm
+              </span>
+              <ul className={styles.list}>
+                <li>
+                  <strong>
+                    Firm errors and omissions covering all six license holders, up to $2,000 a year
+                    for a small brokerage.
+                  </strong>{' '}
+                  Your real number is a quote, not a lookup. What changes is not only the price:
+                  today your $799 buys you a seat on our policy, and there you are the named
+                  insured, holding the deductible and the claims history for all six.
+                </li>
+                <li>
+                  <strong>General liability, roughly $400 a year.</strong>
+                </li>
+                <li>
+                  <strong>
+                    A second broker license for the company, $235 to open and $217 every two years
+                  </strong>{' '}
+                  after, on top of the $217 for your own. Texas requires any business entity that
+                  receives commission on behalf of its license holders to hold its own broker
+                  license, with you named as its designated broker (Occupations Code 1101.355). You
+                  could skip it by operating as a sole proprietor in your own name, but then you are
+                  personally on the hook for everything the firm does, which is the reason to form
+                  the company in the first place.
+                </li>
+                <li>
+                  <strong>Entity formation, $300</strong> to file in Texas, plus a registered agent
+                  every year after that.
+                </li>
+                <li>
+                  <strong>The MLS broker of record slot, $85 a month.</strong> HAR bills the broker
+                  of record $85 where a regular subscriber pays $35, so the same MLS costs $600 a
+                  year more once it is your name on the participation.
+                </li>
+                <li>
+                  <strong>Coordination and compliance on 109 files.</strong> That is what your six
+                  closed in the last twelve months. Contract to close runs $340 to $500 a file
+                  outsourced, and an in house coordinator runs about $69,100 fully loaded. Today
+                  this is done for you on every one of those files.
+                </li>
+                <li>
+                  <strong>Office space, if you want one.</strong> Class B in Houston averaged $22.13
+                  a square foot. Room for six is roughly 1,200 square feet, about $26,500 a year
+                  before utilities. Home based is the cheaper start, and it is why the lean range
+                  below exists.
+                </li>
+                <li>
+                  <strong>Six seats instead of one firm account</strong> on transaction management,
+                  e-signature, email and storage.
+                </li>
+                <li>
+                  <strong>Four years of records</strong> on every one of those files, kept and
+                  produceable on demand under TREC Rule 535.2.
+                </li>
+                <li>
+                  <strong>
+                    Written policies, supervision, advertising compliance and a trust account,
+                  </strong>{' '}
+                  plus final responsibility for six license holders, yourself included.
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div className={styles.pull}>
+            <span>
+              <strong>Coordination is the line that decides this, not insurance.</strong> At 109
+              files a year, contract to close alone is $37,000 to $54,500 outsourced, or one full
+              time coordinator. Everything else on the list sits on top of that, and standing the
+              firm up costs $10,000 to $25,000 lean before any of it. None of it scales down in the
+              months nobody closes.
+            </span>
+          </div>
+          <p className={styles.foot}>
+            Figures are published rates: the TREC fee schedule effective December 2025, HAR&apos;s
+            current MLS subscription pricing, Houston Class B average asking rent, published firm
+            errors and omissions ranges by commission income, and published transaction coordination
+            rates. File count is your team&apos;s closed and check received transactions over the
+            last twelve months. Your own quotes will land where they land. Sources are listed with
+            this page.
+          </p>
+        </section>
+
+        <hr className={styles.rule} />
+
+        <section className={styles.section} id="difference">
           <p className={styles.eyebrow}>The honest difference</p>
           <h2 className={styles.h2}>One question, two answers</h2>
           <p>
@@ -528,7 +654,8 @@ export default async function BrokerAssociateOfferPage() {
                 </li>
                 <li>
                   <strong>We carry</strong> compliance, payouts, errors and omissions, systems,
-                  1099s, and final responsibility for every license holder.
+                  1099s, and final responsibility for every license holder. That is what the 10
+                  buys.
                 </li>
                 <li>
                   <strong>On a slow month</strong> almost nothing is owed, because the annual fee
@@ -563,7 +690,7 @@ export default async function BrokerAssociateOfferPage() {
 
         <hr className={styles.rule} />
 
-        <section className={styles.section}>
+        <section className={styles.section} id="next">
           <p className={styles.eyebrow}>Next</p>
           <h2 className={styles.h2}>Take the time you need</h2>
           <div className={styles.two}>
