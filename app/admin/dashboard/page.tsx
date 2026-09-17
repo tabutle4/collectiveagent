@@ -77,7 +77,7 @@ export default function AdminDashboard() {
   const [needsAttention, setNeedsAttention] = useState({ complianceRequested: 0, cdaNeeded: 0, brokerApprovalPending: 0, eligibleForPayout: 0 })
   const [allTransactions, setAllTransactions] = useState<any[]>([])
   const [allAgentRows, setAllAgentRows] = useState<any[]>([])
-  const [leaseTypes, setLeaseTypes] = useState<string[]>([])
+  const [complianceRequestTxnIds, setComplianceRequestTxnIds] = useState<string[]>([])
 
   const canViewFinancials = hasPermission('can_view_dashboard_financials')
 
@@ -106,10 +106,7 @@ export default function AdminDashboard() {
       setAllTransactions(data.transactions || [])
       setAllAgentRows(data.agentRows || [])
       setNeedsAttention(data.needsAttention || { complianceRequested: 0, cdaNeeded: 0, brokerApprovalPending: 0, eligibleForPayout: 0 })
-      const leaseNames = (data.processingFeeTypes || [])
-        .filter((t: any) => t.is_lease)
-        .map((t: any) => t.name)
-      setLeaseTypes(leaseNames)
+      setComplianceRequestTxnIds(data.complianceRequestTxnIds || [])
     } catch (error) {
       console.error('Error fetching transactions:', error)
     }
@@ -157,7 +154,7 @@ export default function AdminDashboard() {
       <ProductionCharts
         transactions={allTransactions}
         agentRows={allAgentRows}
-        leaseTypes={leaseTypes}
+        complianceRequestTxnIds={complianceRequestTxnIds}
         canViewFinancials={canViewFinancials}
       />
 

@@ -12,11 +12,30 @@
  * Data comes in as props rather than being fetched here, because the ops page
  * already holds it from /api/dashboard/transactions. Financial donuts are
  * gated by the caller on can_view_dashboard_financials, unchanged.
+ *
+ * Which deals count, and for how much, is NOT decided here. That lives in
+ * lib/reporting/production.ts, shared with the quarterly report, because this
+ * component and that report used to decide it separately and disagree: the
+ * charts counted cancelled leases and counted agent rows where the report
+ * counted the units column. On 2026 to date the two views were $465,380 and
+ * 22 units apart on the same day.
  */
 
 import { useState, useMemo } from 'react'
 import { TrendingUp, DollarSign, Hash } from 'lucide-react'
-import { getTransactionTypeCategory } from '@/lib/transactions/transactionTypes'
+import {
+  getTransactionTypeCategory,
+  isLeaseTransactionType,
+} from '@/lib/transactions/transactionTypes'
+import {
+  PRODUCTION_ROLES,
+  countsTowardProduction,
+  hasComplianceRequest,
+  productionDate,
+  productionToday,
+  productionUnits,
+  productionVolume,
+} from '@/lib/reporting/production'
 
 type DateRange =
   | 'ytd'
@@ -321,12 +340,17 @@ export function MultiSegmentDonut({
 export default function ProductionCharts({
   transactions,
   agentRows,
-  leaseTypes,
+  complianceRequestTxnIds,
   canViewFinancials,
 }: {
   transactions: any[]
   agentRows: any[]
-  leaseTypes: string[]
+  /**
+   * Deals an agent has filed a compliance request against, from
+   * /api/dashboard/transactions. A lease counts as production only with one
+   * of these behind it, or with the imported status on a Brokermint deal.
+   */
+  complianceRequestTxnIds: string[]
   canViewFinancials: boolean
 }) {
   const [dateRange, setDateRange] = useState<DateRange>('ytd')
@@ -354,31 +378,28 @@ export default function ProductionCharts({
       agentRowsByTxn[row.transaction_id].push(row)
     })
 
+    const requestIds = new Set(complianceRequestTxnIds || [])
+    const today = productionToday()
+
     allTransactions.forEach(t => {
-      const isLease =
-        leaseTypes.some(lt => t.transaction_type?.toLowerCase().includes(lt.toLowerCase())) ||
-        t.transaction_type?.toLowerCase().includes('tenant') ||
-        t.transaction_type?.toLowerCase().includes('landlord') ||
-        t.transaction_type?.toLowerCase().includes('lease')
+      const isLease = isLeaseTransactionType(t.transaction_type)
       if (txnFilter === 'sales' && isLease) return
       if (txnFilter === 'leases' && !isLease) return
 
-      // Use move_in_date for leases, fall back to closing_date
-      const dateStr = isLease ? (t.move_in_date || t.closing_date) : t.closing_date
+      if (
+        !countsTowardProduction(t, {
+          complianceRequested: hasComplianceRequest(t, requestIds),
+          today,
+          projection: isFuture,
+        })
+      ) {
+        return
+      }
+
+      const dateStr = productionDate(t)
       if (!dateStr) return
       const txnDate = new Date(dateStr)
       if (txnDate < start || txnDate > end) return
-
-      // For leases: count if move_in_date is in the past (within range)
-      // For sales: require closed status
-      if (isLease) {
-  const today = new Date().toISOString().split('T')[0]
-  if (dateStr > today) return
-} else {
-        // Sales require closed status (unless looking at future projections)
-        if (!isFuture && t.status !== 'closed') return
-        if (isFuture && t.status === 'cancelled') return
-      }
 
       if (t.office_net) officeNet += parseFloat(t.office_net)
 
@@ -388,15 +409,18 @@ export default function ProductionCharts({
       const office = t.office_location || 'Unknown'
 
       const txnAgentRows = agentRowsByTxn[t.id] || []
-      const PRODUCTION_ROLES = ['primary_agent', 'listing_agent']
-      const productionRows = txnAgentRows.filter(a => PRODUCTION_ROLES.includes(a.agent_role))
-      // Units = count of primary+listing TIA rows (each buyer, seller, tenant, landlord = 1 unit)
-      units += productionRows.length
-      
+      const productionRows = txnAgentRows.filter((a: any) => PRODUCTION_ROLES.includes(a.agent_role))
+      // Units come from the units column, not the row count. An installment or
+      // retainer row sits in a production role with units 0 on purpose so it
+      // does not double-count the deal it hangs off.
+      productionRows.forEach((a: any) => {
+        units += productionUnits(a)
+      })
+
       // Sum sales_volume from production roles only (primary + listing, not co_agent/team_lead/etc)
       let txnVolume = 0
-      productionRows.forEach(a => {
-        txnVolume += parseFloat(a.sales_volume || 0)
+      productionRows.forEach((a: any) => {
+        txnVolume += productionVolume(a)
       })
       volume += txnVolume
       
@@ -411,8 +435,8 @@ export default function ProductionCharts({
         const officeNetShare = parseFloat(t.office_net || 0) / txnAgentRows.length
         // Units and volume only for production roles
         const isProduction = PRODUCTION_ROLES.includes(a.agent_role)
-        const volumeShare = isProduction ? parseFloat(a.sales_volume || 0) : 0
-        const unitShare = isProduction ? 1 : 0
+        const volumeShare = isProduction ? productionVolume(a) : 0
+        const unitShare = isProduction ? productionUnits(a) : 0
 
         if (a.team_name) {
           // Agent is on a team - bucket by team (gold)
@@ -440,7 +464,7 @@ export default function ProductionCharts({
       officeNetByTeam: officeTeam,
       officeNetByOffice: officeOffice,
     }
-  }, [dateRange, txnFilter, transactions, agentRows, leaseTypes])
+  }, [dateRange, txnFilter, transactions, agentRows, complianceRequestTxnIds])
 
   const {
     metrics,

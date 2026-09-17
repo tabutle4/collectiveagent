@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
 import { needsAttentionCounts } from '@/lib/dashboard/needsAttention'
+import { fetchComplianceRequestTxnIds } from '@/lib/reporting/complianceRequests'
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,7 +11,7 @@ export async function GET(request: NextRequest) {
     const auth = await requirePermission(request, 'can_view_all_transactions')
     if (auth.error) return auth.error
 
-    const [transactions, agentRows, typesRes, teamsRes] = await Promise.all([
+    const [transactions, agentRows, teamsRes, complianceRequestIds] = await Promise.all([
       fetchAllRows(
         'transactions',
         'id, status, transaction_type, sales_price, monthly_rent, lease_term, closing_date, move_in_date, office_net, office_location, compliance_status, cda_status'
@@ -19,11 +20,14 @@ export async function GET(request: NextRequest) {
         'transaction_internal_agents',
         'transaction_id, agent_id, agent_role, agent_net, sales_volume, payment_status'
       ),
-      supabaseAdmin.from('processing_fee_types').select('name, is_lease').eq('is_active', true),
       supabaseAdmin
         .from('team_member_agreements')
         .select('agent_id, team:teams(team_name)')
         .is('end_date', null),
+      // Which deals have a compliance request behind them. The charts need it
+      // to qualify leases, and it is loaded here rather than in the component
+      // so the client never has to read the submissions table.
+      fetchComplianceRequestTxnIds(),
     ])
 
     // Build agent_id -> team_name lookup
@@ -56,7 +60,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       transactions,
       agentRows: enrichedAgentRows,
-      processingFeeTypes: typesRes.data || [],
+      complianceRequestTxnIds: Array.from(complianceRequestIds),
       needsAttention: {
         complianceRequested: needsAttention.complianceRequested,
         cdaNeeded: needsAttention.cdaNeeded,

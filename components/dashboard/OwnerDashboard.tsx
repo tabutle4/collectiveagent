@@ -69,7 +69,7 @@ export default function OwnerDashboard({
   const [chartData, setChartData] = useState<{
     transactions: any[]
     agentRows: any[]
-    leaseTypes: string[]
+    complianceRequestTxnIds: string[]
   } | null>(null)
   // Courtney's own links, from users.dashboard_links.
   const [links, setLinks] = useState<DashboardLink[]>([])
@@ -95,9 +95,7 @@ export default function OwnerDashboard({
         setChartData({
           transactions: d.transactions || [],
           agentRows: d.agentRows || [],
-          leaseTypes: (d.processingFeeTypes || [])
-            .filter((t: any) => t.is_lease)
-            .map((t: any) => t.name),
+          complianceRequestTxnIds: d.complianceRequestTxnIds || [],
         })
       })
       .catch(() => {})
@@ -457,7 +455,7 @@ export default function OwnerDashboard({
           <ProductionCharts
             transactions={chartData.transactions}
             agentRows={chartData.agentRows}
-            leaseTypes={chartData.leaseTypes}
+            complianceRequestTxnIds={chartData.complianceRequestTxnIds}
             canViewFinancials={canViewFinancials}
           />
         </div>

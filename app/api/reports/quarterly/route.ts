@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
+import { fetchAllRows } from '@/lib/supabase'
 import { requireRole } from '@/lib/api-auth'
+import {
+  PRODUCTION_ROLES,
+  PRODUCER_ROLES,
+  countsTowardProduction,
+  hasComplianceRequest,
+  productionDate,
+  productionToday,
+  productionUnits,
+  productionVolume,
+} from '@/lib/reporting/production'
+import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
+import { fetchComplianceRequestTxnIds } from '@/lib/reporting/complianceRequests'
 
 // Referral Collective is a separate entity (an LFRO under TREC), not a
 // Collective Realty Co. office. This report covers CRC only, so RC agents are
@@ -84,7 +96,7 @@ export async function GET(request: NextRequest) {
       // for sales (require closed) vs leases (just need move_in_date in past)
       fetchAllRows(
         'transactions',
-        'id, transaction_type, sales_price, monthly_rent, lease_term, closing_date, closed_date, move_in_date, office_location, status',
+        'id, transaction_type, sales_price, monthly_rent, lease_term, closing_date, move_in_date, office_location, status, compliance_status',
         {
           filters: [{ type: 'neq', column: 'status', value: 'cancelled' }],
         }
@@ -145,36 +157,23 @@ export async function GET(request: NextRequest) {
       ),
     ])
 
-    // Helper to check if transaction is a lease
-    const isLeaseType = (txnType: string | null) => {
-      const t = (txnType || '').toLowerCase()
-      return t.includes('tenant') || t.includes('landlord') || t.includes('lease')
-    }
+    // Which deals count, and for how much, is defined once in
+    // lib/reporting/production.ts and shared with the dashboard charts. This
+    // report and those charts used to decide it separately and disagree.
+    const complianceRequestIds = await fetchComplianceRequestTxnIds()
+    const today = productionToday()
 
-    // Filter transactions to only those in quarter range
-    // For sales: use closed_date if available, otherwise closing_date, require closed status
-    // For leases: use move_in_date, just needs to be in the past within range
     const qualifiedTransactionIds = new Set(
       transactions
+        .filter(t =>
+          countsTowardProduction(t, {
+            complianceRequested: hasComplianceRequest(t, complianceRequestIds),
+            today,
+          })
+        )
         .filter(t => {
-          const isLease = isLeaseType(t.transaction_type)
-          let dateField: string | null = null
-          
-          if (isLease) {
-            // Use move_in_date; fall back to closing_date if not set (never use closed_date for leases)
-            dateField = t.move_in_date || t.closing_date
-            if (!dateField) return false
-            const moveInDate = new Date(dateField)
-            if (moveInDate > now) return false
-          } else {
-            // Sales require closed status
-            if (t.status !== 'closed') return false
-            // For sales, use closing_date only (never closed_date)
-            dateField = t.closing_date
-          }
-          
-          if (!dateField) return false
-          return dateField >= startDateStr && dateField <= endDateStr
+          const dateField = productionDate(t)
+          return !!dateField && dateField >= startDateStr && dateField <= endDateStr
         })
         .map(t => t.id)
     )
@@ -196,7 +195,6 @@ export async function GET(request: NextRequest) {
     // (co_agent, team_lead, referral_agent, momentum_partner do not add units or volume)
     // Installment/retainer rows have sales_volume=0 and units=0 by construction,
     // so they contribute nothing to totals here without needing a special filter.
-    const PRODUCTION_ROLES = ['primary_agent', 'listing_agent']
     const relevantAgentRows = allRelevantRows.filter(ia => PRODUCTION_ROLES.includes(ia.agent_role))
 
     // Build agent -> team lookup
@@ -210,10 +208,8 @@ export async function GET(request: NextRequest) {
     let totalUnits = 0
     let totalAgentNet = 0
     relevantAgentRows.forEach(row => {
-      totalVolume += parseFloat(row.sales_volume || '0')
-      // units: existing TIA rows default to 1 (legacy). Installment rows
-      // set this to 0 explicitly so they don't double-count.
-      totalUnits += row.units != null ? parseFloat(row.units || '0') : 1
+      totalVolume += productionVolume(row)
+      totalUnits += productionUnits(row)
     })
     // Agent net includes all payees (co-agents, team leads, etc.).
     // Retainer rows are handled separately below, by payment date.
@@ -257,7 +253,6 @@ export async function GET(request: NextRequest) {
       office: string 
     }> = {}
 
-    const PRODUCER_ROLES = ['primary_agent', 'listing_agent', 'co_agent']
     allRelevantRows.forEach(row => {
       // Top producers: primary, listing, co_agent only
       if (!PRODUCER_ROLES.includes(row.agent_role)) return
@@ -276,12 +271,10 @@ export async function GET(request: NextRequest) {
         }
       }
       
-      const volume = parseFloat(row.sales_volume || '0')
-      // units: legacy rows default to 1. Installment rows set 0 to avoid
-      // double-counting.
-      const units = row.units != null ? parseFloat(row.units || '0') : 1
-      
-      const isLease = isLeaseType(txn.transaction_type)
+      const volume = productionVolume(row)
+      const units = productionUnits(row)
+
+      const isLease = isLeaseTransactionType(txn.transaction_type)
       
       if (isLease) {
         agentStats[agentId].leaseVolume += volume
