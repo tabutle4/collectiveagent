@@ -174,8 +174,8 @@ export default async function BrokerAssociateOfferPage() {
                     operations
                   </li>
                   <li>
-                    Coverage of your team by operations when you travel, up to 30 scheduled days a
-                    year
+                    Coverage of you and your team by the broker and operations when you are
+                    away, up to 30 scheduled days a year
                   </li>
                   <li>Two offices, Houston and Irving</li>
                 </ul>
@@ -186,14 +186,19 @@ export default async function BrokerAssociateOfferPage() {
                 <ul className={styles.list}>
                   <li>
                     <strong>First escalation for your team.</strong> Your agents bring their
-                    questions to you before they come to the firm. Agents outside your team continue
-                    to route to Courtney.
+                    questions to you before they come to the firm. Agents outside your team route
+                    to Courtney, except while you are covering the brokerage.
                   </li>
                   <li>
-                    <strong>Delegated supervisor for your team.</strong> The firm appoints you under
-                    TREC Rule 535.2. It comes with the six hour Broker Responsibility course in
-                    every continuing education cycle, and Courtney remains ultimately responsible
-                    for every sponsored license holder, as the rule requires.
+                    <strong>
+                      Delegated supervisor for your team, and for the brokerage while you are
+                      covering it.
+                    </strong>{' '}
+                    The firm appoints you under TREC Rule 535.2. Day to day the appointment covers
+                    your agents. During scheduled coverage it widens to every sponsored license
+                    holder, because there is no one else it can fall to. It comes with the six hour
+                    Broker Responsibility course in every continuing education cycle, and Courtney
+                    remains ultimately responsible throughout, as the rule requires.
                   </li>
                   <li>
                     <strong>Which means you go on their contracts.</strong> Your name and license
@@ -208,10 +213,12 @@ export default async function BrokerAssociateOfferPage() {
                   </li>
                   <li>
                     <strong>Coverage that runs both ways, up to 30 scheduled days a year each.</strong>{' '}
-                    You cover the broker on sales and leases when she is away. Operations covers
-                    your team when you travel. <strong>It applies to any absence of three days or
-                    more.</strong> Anything shorter is resolved by whoever is out rather than handed
-                    off. Scheduled in advance either direction, not on call, and not open ended.
+                    You cover the brokerage on sales and leases when the broker is away, which
+                    means every sponsored agent and not only your own. The broker and operations
+                    cover you and your team when you are away. <strong>It applies to any absence of
+                    three days or more.</strong> Anything shorter is resolved by whoever is out
+                    rather than handed off. Scheduled in advance in either direction, not on call,
+                    and not open ended.
                   </li>
                 </ul>
               </div>
@@ -646,11 +653,11 @@ export default async function BrokerAssociateOfferPage() {
                 <li>
                   <strong>You carry</strong> your own production, your team, their first escalations,
                   your name on their contracts, your training program, and up to 30 scheduled days
-                  covering the broker.
+                  covering the brokerage.
                 </li>
                 <li>
-                  <strong>You get covered too,</strong> up to 30 scheduled days a year, when you are
-                  away three days or more.
+                  <strong>You and your team get covered too,</strong> up to 30 scheduled days a
+                  year, by the broker and operations, when you are away three days or more.
                 </li>
                 <li>
                   <strong>We carry</strong> compliance, payouts, errors and omissions, systems,
