@@ -1378,8 +1378,8 @@ const checkout = new window.Payload.Checkout({
                     {paymentWaived ? 'Fee Waived' : 'Payment Complete'}
                   </h1>
                   <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">
-                    {paymentWaived 
-                      ? 'Your onboarding fee has been waived as part of the CRC agent conversion offer. Continue to review and sign your agreements.'
+                    {paymentWaived
+                      ? `Your fee has been fully covered${discountName ? ` by ${discountName}` : ''}. Continue to review and sign your agreements.`
                       : 'Your onboarding payment has been received. Continue to review and sign your agreements.'
                     }
                   </p>
