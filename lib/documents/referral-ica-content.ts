@@ -1,3 +1,5 @@
+import { RC_RETURN_REQUEST_DEADLINES } from '@/lib/constants'
+
 export interface ReferralICAFields {
   agentFirstName: string
   agentLastName: string
@@ -92,7 +94,7 @@ export function getReferralICAContent(fields: ReferralICAFields, settings: Refer
       },
       {
         heading: 'VI. Termination',
-        body: `Either Party to this Agreement may, at their own discretion, terminate the Agreement by providing the other Party ${settings.referral_termination_notice_days} days written notice via an email to the address provided.\n\na.) Resignation. In the event of the Referral Agent's resignation, all pending referrals that have not yet resulted in closed transactions will be forfeited, and no referral fee shall be paid.\n\nb.) Termination for Cause. The Brokerage may immediately terminate this Agreement without notice if the Referral Agent engages in any real estate activity beyond the scope permitted for LFRO referral agents, violates TREC rules, or engages in conduct detrimental to the Brokerage.\n\nc.) Refund Policy. Annual membership fees are non-refundable except in the case of Brokerage termination without cause within ${settings.referral_refund_period_days} days of payment, in which case a prorated refund may be issued.`,
+        body: `Either Party to this Agreement may, at their own discretion, terminate the Agreement by providing the other Party ${settings.referral_termination_notice_days} days written notice via an email to the address provided.\n\na.) Resignation. In the event of the Referral Agent's resignation, all pending referrals that have not yet resulted in closed transactions will be forfeited, and no referral fee shall be paid.\n\nb.) Termination for Cause. The Brokerage may immediately terminate this Agreement without notice if the Referral Agent engages in any real estate activity beyond the scope permitted for LFRO referral agents, violates TREC rules, or engages in conduct detrimental to the Brokerage.\n\nc.) Refund Policy. Annual membership fees are non-refundable except in the case of Brokerage termination without cause within ${settings.referral_refund_period_days} days of payment, in which case a prorated refund may be issued.\n\nd.) Returning to Collective Realty Co. A Referral Agent may return to Collective Realty Co. as a full-service agent on two occasions each year only. To do so, the Referral Agent must deliver written notice to the Brokerage in accordance with Section X, and the Brokerage must receive that notice on or before ${RC_RETURN_REQUEST_DEADLINES}. The change will take effect no sooner than ${settings.referral_termination_notice_days} days after the Brokerage receives the notice. Notice received after either date will be applied to the next available date. A Collective Realty Co. agent may move to Referral Collective at any time; this restriction applies only to returning.`,
       },
       {
         heading: 'VII. Referral Fees and Commissions',

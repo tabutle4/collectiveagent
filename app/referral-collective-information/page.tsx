@@ -6,6 +6,7 @@ import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import AuthFooter from '@/components/shared/AuthFooter'
 import CornerLines from '@/components/shared/CornerLines'
 import { Check, X, AlertTriangle, ArrowRight, Loader2 } from 'lucide-react'
+import { RC_RETURN_REQUEST_DEADLINES } from '@/lib/constants'
 
 interface PublicDiscount {
   name: string
@@ -25,6 +26,7 @@ export default function ReferralCollectiveInformationPage() {
     split_internal: number
     split_external: number
     brokerage_name: string
+    termination_notice_days: number
     discount_for_conversion: PublicDiscount | null
     discount_for_outside: PublicDiscount | null
   }>({
@@ -33,6 +35,7 @@ export default function ReferralCollectiveInformationPage() {
     split_internal: 90,
     split_external: 88,
     brokerage_name: 'Referral Collective',
+    termination_notice_days: 14,
     discount_for_conversion: null,
     discount_for_outside: null,
   })
@@ -402,6 +405,22 @@ export default function ReferralCollectiveInformationPage() {
           {/* Call to Action */}
           <div className="container-card mb-4">
             <p className="section-title text-center">Ready to Join?</p>
+
+            {/* Returning to Collective Realty Co. is limited to two deadlines a year */}
+            <div className="inner-card bg-chart-gold-1 border border-chart-gold-4 mt-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-chart-gold-9 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-luxury-gray-1 mb-1">Switching Back Is Limited</p>
+                  <p className="text-sm text-luxury-gray-2">
+                    You can switch to {referralSettings.brokerage_name} at any time. Switching back to Collective Realty Co.
+                    is only available twice a year: your written request must reach us by {RC_RETURN_REQUEST_DEADLINES},
+                    and the change takes effect at least {referralSettings.termination_notice_days} days after we receive it.
+                    Plan around those dates before you switch.
+                  </p>
+                </div>
+              </div>
+            </div>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-4">
               {isSignedIn ? (
                 <button

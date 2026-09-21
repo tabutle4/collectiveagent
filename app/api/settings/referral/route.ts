@@ -27,7 +27,8 @@ export async function GET() {
         referral_split_apartment,
         referral_split_internal,
         referral_split_external,
-        referral_brokerage_name
+        referral_brokerage_name,
+        referral_termination_notice_days
       `)
       .single()
 
@@ -56,6 +57,7 @@ export async function GET() {
         split_internal: settings?.referral_split_internal ?? 90,
         split_external: settings?.referral_split_external ?? 88,
         brokerage_name: settings?.referral_brokerage_name ?? 'Referral Collective',
+        termination_notice_days: Number(settings?.referral_termination_notice_days ?? 14),
         discount_for_conversion: publicShape(conversion),
         discount_for_outside: publicShape(outside),
       },
@@ -70,6 +72,7 @@ export async function GET() {
         split_internal: 90,
         split_external: 88,
         brokerage_name: 'Referral Collective',
+        termination_notice_days: 14,
         discount_for_conversion: null,
         discount_for_outside: null,
       },

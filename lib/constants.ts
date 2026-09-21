@@ -117,6 +117,18 @@ export type MLSType = (typeof MLS_TYPES)[number]
 // should import it from here.
 export const REFERRAL_COLLECTIVE_MLS_CHOICE = 'Referral Collective (No MLS)'
 
+/**
+ * An agent may move to Referral Collective at any time. Returning to
+ * Collective Realty Co. is limited to two request deadlines a year, and the
+ * change takes effect no sooner than company_settings.referral_termination_notice_days
+ * after the Brokerage receives the written notice.
+ *
+ * Stated in the Referral Collective ICA (VI. Termination, subsection d) and on
+ * the public Referral Collective information page. Both read this constant so
+ * the agreement and the page can never disagree.
+ */
+export const RC_RETURN_REQUEST_DEADLINES = 'January 1 or June 30'
+
 // ═══════════════════════════════════════════════════════════════════════════
 // PAGINATION & LIMITS
 // ═══════════════════════════════════════════════════════════════════════════
