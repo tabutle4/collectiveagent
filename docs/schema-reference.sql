@@ -1303,6 +1303,49 @@ CREATE TABLE public.onboarding_admin_task_completions (
   CONSTRAINT onboarding_admin_task_completions_task_id_fkey FOREIGN KEY (task_id) REFERENCES public.onboarding_admin_tasks(id),
   CONSTRAINT onboarding_admin_task_completions_completed_by_fkey FOREIGN KEY (completed_by) REFERENCES public.users(id)
 );
+-- Referral Collective membership discounts. Replaces the single promo that
+-- lived in company_settings.referral_conversion_discount /
+-- referral_conversion_free_until, which are kept for now but no longer read.
+-- audience:      all | crc_conversion | outside_only
+-- discount_type: amount (dollars) | percent (0-100)
+-- schedule_type: once (starts_on..ends_on) | monthly (start_day..end_day of
+--                every month) | yearly (start_month/start_day..end_month/end_day
+--                of every year). starts_on gates when a repeat begins,
+--                repeat_until when it stops. A start after an end wraps.
+-- Only one discount is ever applied to a fee, the largest applicable one.
+-- Resolution lives in lib/referralDiscounts.ts, used by both the pricing
+-- display and the Payload charge so the two cannot disagree.
+-- RLS is ENABLED with no policies; all access is via supabaseAdmin.
+-- See migrations/platform/referral_discounts.sql.
+CREATE TABLE public.referral_discounts (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  name text NOT NULL,
+  description text,
+  audience text NOT NULL DEFAULT 'all'::text,
+  discount_type text NOT NULL DEFAULT 'amount'::text,
+  amount numeric NOT NULL DEFAULT 0,
+  schedule_type text NOT NULL DEFAULT 'once'::text,
+  starts_on date,
+  ends_on date,
+  start_month integer,
+  start_day integer,
+  end_month integer,
+  end_day integer,
+  repeat_until date,
+  is_active boolean NOT NULL DEFAULT true,
+  CONSTRAINT referral_discounts_pkey PRIMARY KEY (id),
+  CONSTRAINT referral_discounts_audience_check CHECK (audience = ANY (ARRAY['all'::text, 'crc_conversion'::text, 'outside_only'::text])),
+  CONSTRAINT referral_discounts_type_check CHECK (discount_type = ANY (ARRAY['amount'::text, 'percent'::text])),
+  CONSTRAINT referral_discounts_schedule_check CHECK (schedule_type = ANY (ARRAY['once'::text, 'monthly'::text, 'yearly'::text])),
+  CONSTRAINT referral_discounts_amount_check CHECK (amount >= 0::numeric),
+  CONSTRAINT referral_discounts_percent_range_check CHECK (discount_type <> 'percent'::text OR amount <= 100::numeric),
+  CONSTRAINT referral_discounts_start_month_check CHECK (start_month IS NULL OR (start_month >= 1 AND start_month <= 12)),
+  CONSTRAINT referral_discounts_end_month_check CHECK (end_month IS NULL OR (end_month >= 1 AND end_month <= 12)),
+  CONSTRAINT referral_discounts_start_day_check CHECK (start_day IS NULL OR (start_day >= 1 AND start_day <= 31)),
+  CONSTRAINT referral_discounts_end_day_check CHECK (end_day IS NULL OR (end_day >= 1 AND end_day <= 31))
+);
 CREATE TABLE public.onboarding_sessions (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   created_at timestamp with time zone DEFAULT now(),
@@ -1325,7 +1368,8 @@ CREATE TABLE public.onboarding_sessions (
   w9_reference_id text,
   agent_signature_url text,
   payment_waived boolean DEFAULT false,
-  discount_amount integer DEFAULT 0,
+  discount_amount numeric DEFAULT 0,
+  discount_name text,
   previous_mls_choice text,
   CONSTRAINT onboarding_sessions_pkey PRIMARY KEY (id),
   CONSTRAINT onboarding_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)

@@ -21,7 +21,21 @@ import {
   ShieldCheck,
   Mic,
   Receipt,
+  ToggleLeft,
+  ToggleRight,
 } from 'lucide-react'
+import {
+  DISCOUNT_AUDIENCE_LABELS,
+  ReferralDiscount,
+  describeDiscountAmount,
+  describeDiscountSchedule,
+  isDiscountActiveOn,
+} from '@/lib/referralDiscounts'
+
+const MONTH_OPTIONS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
 
 type Tab = 'brokerage' | 'offices' | 'standard' | 'referral' | 'coaching' | 'plans' | 'fees' | 'rules' | 'bills'
 
@@ -168,6 +182,10 @@ export default function SettingsPage() {
   const [editingPlan, setEditingPlan] = useState<CommissionPlan | null>(null)
   const [editingRule, setEditingRule] = useState<CommissionRule | null>(null)
 
+  const [discounts, setDiscounts] = useState<ReferralDiscount[]>([])
+  const [editingDiscount, setEditingDiscount] = useState<ReferralDiscount | null>(null)
+  const [savingDiscount, setSavingDiscount] = useState(false)
+
   // Commission wiring instructions (firm-wide PDF, attached to title CDA emails)
   const [wiringStatus, setWiringStatus] = useState<{ filename: string | null; updated_at: string | null }>({ filename: null, updated_at: null })
   const [wiringBusy, setWiringBusy] = useState(false)
@@ -176,6 +194,7 @@ export default function SettingsPage() {
     fetchSettings()
     fetchProcessingFees()
     fetchWiringStatus()
+    fetchDiscounts()
   }, [])
 
   async function fetchWiringStatus() {
@@ -291,6 +310,81 @@ export default function SettingsPage() {
 
   async function toggleProcessingFeeActive(fee: any) {
     await saveProcessingFee({ ...fee, is_active: !fee.is_active })
+  }
+
+  async function fetchDiscounts() {
+    try {
+      const res = await fetch('/api/admin/settings/discounts')
+      const data = await res.json()
+      if (res.ok) setDiscounts(data.discounts || [])
+    } catch {
+      // Silent, the rest of the tab still renders
+    }
+  }
+
+  function blankDiscount(): ReferralDiscount {
+    return {
+      id: '',
+      name: '',
+      description: null,
+      audience: 'all',
+      discount_type: 'amount',
+      amount: 0,
+      schedule_type: 'once',
+      starts_on: null,
+      ends_on: null,
+      start_month: null,
+      start_day: null,
+      end_month: null,
+      end_day: null,
+      repeat_until: null,
+      is_active: true,
+    }
+  }
+
+  async function saveDiscount(discount: ReferralDiscount) {
+    setSavingDiscount(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const res = await fetch('/api/admin/settings/discounts', {
+        method: discount.id ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ discount }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to save discount')
+      await fetchDiscounts()
+      setEditingDiscount(null)
+      setSuccess('Discount saved')
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to save discount')
+    } finally {
+      setSavingDiscount(false)
+    }
+  }
+
+  async function toggleDiscountActive(discount: ReferralDiscount) {
+    await saveDiscount({ ...discount, is_active: !discount.is_active })
+  }
+
+  async function deleteDiscount(discountId: string) {
+    if (!confirm('Delete this discount? Switching it off instead keeps it here for next time.')) return
+
+    try {
+      const res = await fetch(`/api/admin/settings/discounts?id=${discountId}`, {
+        method: 'DELETE',
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to delete discount')
+      await fetchDiscounts()
+      setSuccess('Discount deleted')
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete discount')
+    }
   }
 
   async function saveSettings() {
@@ -1036,49 +1130,339 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  {/* CRC Agent Conversion Promotion */}
+                  {/* Referral Discounts */}
                   <div className="inner-card">
-                    <h3 className="text-sm font-semibold text-luxury-gray-1 mb-4">CRC Agent Conversion Promotion</h3>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div>
-                        <label className="field-label">Discount Amount ($)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="299"
-                          value={settings.referral_conversion_discount || 0}
-                          onChange={(e) => updateSetting('referral_conversion_discount', parseInt(e.target.value) || 0)}
-                          className="input-luxury"
-                          placeholder="0"
-                        />
-                        <p className="text-xs text-luxury-gray-3 mt-1">
-                          Discount off first year only. Set to 299 for free first year.
-                        </p>
-                      </div>
-                      <div>
-                        <label className="field-label">Promotion Ends</label>
-                        <input
-                          type="date"
-                          value={settings.referral_conversion_free_until ? settings.referral_conversion_free_until.split('T')[0] : ''}
-                          onChange={(e) => updateSetting('referral_conversion_free_until', e.target.value ? `${e.target.value}T23:59:59` : null)}
-                          className="input-luxury"
-                        />
-                        <p className="text-xs text-luxury-gray-3 mt-1">
-                          Leave blank to disable promotion.
-                        </p>
-                      </div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-semibold text-luxury-gray-1">Referral Discounts</h3>
+                      <button
+                        onClick={() => setEditingDiscount(blankDiscount())}
+                        className="btn btn-primary text-sm flex items-center gap-2"
+                      >
+                        <Plus size={14} />
+                        Add Discount
+                      </button>
                     </div>
-                    {settings.referral_conversion_free_until && new Date(settings.referral_conversion_free_until) > new Date() && settings.referral_conversion_discount > 0 && (
-                      <p className="text-xs text-green-600 mt-3 font-medium">
-                        ✓ Promotion active: ${settings.referral_conversion_discount} off first year (pay ${settings.referral_annual_fee - settings.referral_conversion_discount}) until {new Date(settings.referral_conversion_free_until).toLocaleDateString()}
-                      </p>
-                    )}
-                    {settings.referral_conversion_free_until && new Date(settings.referral_conversion_free_until) <= new Date() && (
-                      <p className="text-xs text-luxury-gray-3 mt-3">
-                        Promotion ended {new Date(settings.referral_conversion_free_until).toLocaleDateString()}
-                      </p>
+                    <p className="text-xs text-luxury-gray-3 mb-4">
+                      Discounts come off the ${settings.referral_annual_fee} annual membership. Only one is ever
+                      applied. When more than one is running, the largest wins. Switch a discount off to park it
+                      without losing the setup.
+                    </p>
+
+                    {discounts.length === 0 ? (
+                      <p className="text-xs text-luxury-gray-3">No discounts yet. Everyone pays the full annual fee.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {discounts.map((discount) => {
+                          const runningNow = isDiscountActiveOn(discount)
+                          return (
+                            <div key={discount.id} className={`inner-card ${!discount.is_active ? 'opacity-50' : ''}`}>
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="text-sm font-semibold text-luxury-gray-1">{discount.name}</h4>
+                                    <span className="text-xs text-luxury-gray-3 bg-luxury-gray-6 px-2 py-0.5 rounded">
+                                      {DISCOUNT_AUDIENCE_LABELS[discount.audience]}
+                                    </span>
+                                    <span className="text-xs text-luxury-gold bg-luxury-gold/10 px-2 py-0.5 rounded">
+                                      {describeDiscountAmount(discount)}
+                                    </span>
+                                    {runningNow && (
+                                      <span className="text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded">Running now</span>
+                                    )}
+                                    {!discount.is_active && (
+                                      <span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded">Off</span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-luxury-gray-3 mt-1">{describeDiscountSchedule(discount)}</p>
+                                  {discount.description && (
+                                    <p className="text-xs text-luxury-gray-2 mt-1">{discount.description}</p>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => toggleDiscountActive(discount)}
+                                    disabled={savingDiscount}
+                                    title={discount.is_active ? 'Switch off' : 'Switch on'}
+                                    className="p-1.5 text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
+                                  >
+                                    {discount.is_active
+                                      ? <ToggleRight size={16} className="text-green-500" />
+                                      : <ToggleLeft size={16} />}
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingDiscount(discount)}
+                                    className="p-1.5 text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
+                                  >
+                                    <Pencil size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => deleteDiscount(discount.id)}
+                                    className="p-1.5 text-luxury-gray-3 hover:text-red-600 transition-colors"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
                     )}
                   </div>
+
+                  {/* Discount Edit Modal */}
+                  {editingDiscount && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+                        <h3 className="text-lg font-semibold text-luxury-gray-1 mb-4">
+                          {editingDiscount.id ? 'Edit Discount' : 'Add Discount'}
+                        </h3>
+
+                        <div className="space-y-4">
+                          <div>
+                            <label className="field-label">Name</label>
+                            <input
+                              type="text"
+                              value={editingDiscount.name}
+                              onChange={(e) => setEditingDiscount({ ...editingDiscount, name: e.target.value })}
+                              className="input-luxury"
+                              placeholder="e.g. Spring Join Promo"
+                            />
+                            <p className="text-xs text-luxury-gray-3 mt-1">
+                              Agents see this name on the pricing page and at checkout.
+                            </p>
+                          </div>
+
+                          <div>
+                            <label className="field-label">Internal Note (optional)</label>
+                            <textarea
+                              value={editingDiscount.description || ''}
+                              onChange={(e) => setEditingDiscount({ ...editingDiscount, description: e.target.value })}
+                              className="input-luxury"
+                              rows={2}
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                              <label className="field-label">Applies To</label>
+                              <select
+                                value={editingDiscount.audience}
+                                onChange={(e) => setEditingDiscount({ ...editingDiscount, audience: e.target.value as ReferralDiscount['audience'] })}
+                                className="input-luxury"
+                              >
+                                <option value="all">Everyone joining RC</option>
+                                <option value="crc_conversion">CRC agents converting</option>
+                                <option value="outside_only">Outside agents only</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="field-label">Discount Type</label>
+                              <select
+                                value={editingDiscount.discount_type}
+                                onChange={(e) => setEditingDiscount({ ...editingDiscount, discount_type: e.target.value as ReferralDiscount['discount_type'] })}
+                                className="input-luxury"
+                              >
+                                <option value="amount">Dollars off</option>
+                                <option value="percent">Percent off</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="field-label">
+                                {editingDiscount.discount_type === 'percent' ? 'Percent Off (%)' : 'Amount Off ($)'}
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                max={editingDiscount.discount_type === 'percent' ? 100 : undefined}
+                                step={editingDiscount.discount_type === 'percent' ? 1 : 0.01}
+                                value={editingDiscount.amount}
+                                onChange={(e) => setEditingDiscount({ ...editingDiscount, amount: Number(e.target.value) || 0 })}
+                                className="input-luxury"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="field-label">Schedule</label>
+                            <select
+                              value={editingDiscount.schedule_type}
+                              onChange={(e) => setEditingDiscount({ ...editingDiscount, schedule_type: e.target.value as ReferralDiscount['schedule_type'] })}
+                              className="input-luxury"
+                            >
+                              <option value="once">One time, between two dates</option>
+                              <option value="monthly">Every month, between two days</option>
+                              <option value="yearly">Every year, between two dates</option>
+                            </select>
+                          </div>
+
+                          {editingDiscount.schedule_type === 'once' && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <label className="field-label">Starts On (optional)</label>
+                                <input
+                                  type="date"
+                                  value={editingDiscount.starts_on || ''}
+                                  onChange={(e) => setEditingDiscount({ ...editingDiscount, starts_on: e.target.value || null })}
+                                  className="input-luxury"
+                                />
+                                <p className="text-xs text-luxury-gray-3 mt-1">Blank means it starts right away.</p>
+                              </div>
+                              <div>
+                                <label className="field-label">Ends On (optional)</label>
+                                <input
+                                  type="date"
+                                  value={editingDiscount.ends_on || ''}
+                                  onChange={(e) => setEditingDiscount({ ...editingDiscount, ends_on: e.target.value || null })}
+                                  className="input-luxury"
+                                />
+                                <p className="text-xs text-luxury-gray-3 mt-1">Blank means it runs until you switch it off.</p>
+                              </div>
+                            </div>
+                          )}
+
+                          {editingDiscount.schedule_type === 'monthly' && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <label className="field-label">From Day of Month</label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="31"
+                                  value={editingDiscount.start_day ?? ''}
+                                  onChange={(e) => setEditingDiscount({ ...editingDiscount, start_day: e.target.value ? Number(e.target.value) : null })}
+                                  className="input-luxury"
+                                />
+                              </div>
+                              <div>
+                                <label className="field-label">To Day of Month</label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="31"
+                                  value={editingDiscount.end_day ?? ''}
+                                  onChange={(e) => setEditingDiscount({ ...editingDiscount, end_day: e.target.value ? Number(e.target.value) : null })}
+                                  className="input-luxury"
+                                />
+                                <p className="text-xs text-luxury-gray-3 mt-1">
+                                  Same day in both boxes runs it for that one day. A later day in the first box wraps
+                                  into the next month.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          {editingDiscount.schedule_type === 'yearly' && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <label className="field-label">From</label>
+                                <div className="flex gap-2">
+                                  <select
+                                    value={editingDiscount.start_month ?? ''}
+                                    onChange={(e) => setEditingDiscount({ ...editingDiscount, start_month: e.target.value ? Number(e.target.value) : null })}
+                                    className="input-luxury"
+                                  >
+                                    <option value="">Month</option>
+                                    {MONTH_OPTIONS.map((month, index) => (
+                                      <option key={month} value={index + 1}>{month}</option>
+                                    ))}
+                                  </select>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="31"
+                                    placeholder="Day"
+                                    value={editingDiscount.start_day ?? ''}
+                                    onChange={(e) => setEditingDiscount({ ...editingDiscount, start_day: e.target.value ? Number(e.target.value) : null })}
+                                    className="input-luxury"
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="field-label">To</label>
+                                <div className="flex gap-2">
+                                  <select
+                                    value={editingDiscount.end_month ?? ''}
+                                    onChange={(e) => setEditingDiscount({ ...editingDiscount, end_month: e.target.value ? Number(e.target.value) : null })}
+                                    className="input-luxury"
+                                  >
+                                    <option value="">Month</option>
+                                    {MONTH_OPTIONS.map((month, index) => (
+                                      <option key={month} value={index + 1}>{month}</option>
+                                    ))}
+                                  </select>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="31"
+                                    placeholder="Day"
+                                    value={editingDiscount.end_day ?? ''}
+                                    onChange={(e) => setEditingDiscount({ ...editingDiscount, end_day: e.target.value ? Number(e.target.value) : null })}
+                                    className="input-luxury"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {editingDiscount.schedule_type !== 'once' && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <label className="field-label">First Runs From (optional)</label>
+                                <input
+                                  type="date"
+                                  value={editingDiscount.starts_on || ''}
+                                  onChange={(e) => setEditingDiscount({ ...editingDiscount, starts_on: e.target.value || null })}
+                                  className="input-luxury"
+                                />
+                                <p className="text-xs text-luxury-gray-3 mt-1">Blank means it starts repeating right away.</p>
+                              </div>
+                              <div>
+                                <label className="field-label">Stop Repeating After (optional)</label>
+                                <input
+                                  type="date"
+                                  value={editingDiscount.repeat_until || ''}
+                                  onChange={(e) => setEditingDiscount({ ...editingDiscount, repeat_until: e.target.value || null })}
+                                  className="input-luxury"
+                                />
+                                <p className="text-xs text-luxury-gray-3 mt-1">Blank means it repeats until you switch it off.</p>
+                              </div>
+                            </div>
+                          )}
+
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={editingDiscount.is_active}
+                              onChange={(e) => setEditingDiscount({ ...editingDiscount, is_active: e.target.checked })}
+                              className="rounded"
+                            />
+                            <span className="text-sm text-luxury-gray-2">Switched on</span>
+                          </label>
+
+                          <p className="text-xs text-luxury-gray-3">
+                            {isDiscountActiveOn(editingDiscount)
+                              ? `Running today. A ${DISCOUNT_AUDIENCE_LABELS[editingDiscount.audience].toLowerCase()} membership would be $${Math.max(0, settings.referral_annual_fee - (editingDiscount.discount_type === 'percent' ? (settings.referral_annual_fee * editingDiscount.amount) / 100 : editingDiscount.amount)).toFixed(2)} instead of $${settings.referral_annual_fee}.`
+                              : 'Not running today with these settings.'}
+                          </p>
+                        </div>
+
+                        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-luxury-gray-5">
+                          <button onClick={() => setEditingDiscount(null)} className="btn btn-secondary">
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => saveDiscount(editingDiscount)}
+                            disabled={savingDiscount}
+                            className="btn btn-primary flex items-center gap-2"
+                          >
+                            {savingDiscount ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                            Save Discount
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                 </div>
               </div>

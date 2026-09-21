@@ -1,5 +1,12 @@
+/**
+ * The brokerage's business timezone. Every Central-time formatter here, and
+ * anything else that needs to know what "today" means for Collective Realty Co.,
+ * reads it from this one constant so it cannot drift between modules.
+ */
+export const CENTRAL_TIME_ZONE = 'America/Chicago'
+
 export function getCentralTime(): Date {
-  return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }))
+  return new Date(new Date().toLocaleString('en-US', { timeZone: CENTRAL_TIME_ZONE }))
 }
 
 export function formatCentralDate(date?: Date | string): string {
@@ -14,12 +21,12 @@ export function formatCentralDate(date?: Date | string): string {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
-    timeZone: 'America/Chicago',
+    timeZone: CENTRAL_TIME_ZONE,
   })
 }
 
 export function getCentralDateString(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }) // Returns YYYY-MM-DD
+  return new Date().toLocaleDateString('en-CA', { timeZone: CENTRAL_TIME_ZONE }) // Returns YYYY-MM-DD
 }
 
 /**

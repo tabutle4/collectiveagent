@@ -7,21 +7,42 @@ import AuthFooter from '@/components/shared/AuthFooter'
 import CornerLines from '@/components/shared/CornerLines'
 import { Check, X, AlertTriangle, ArrowRight, Loader2 } from 'lucide-react'
 
+interface PublicDiscount {
+  name: string
+  amount_off: number
+  final_price: number
+}
+
 export default function ReferralCollectiveInformationPage() {
   const router = useRouter()
   const [isSignedIn, setIsSignedIn] = useState(false)
   const [isAgent, setIsAgent] = useState(false)
   const [isConverting, setIsConverting] = useState(false)
   const [userName, setUserName] = useState('')
-  const [referralSettings, setReferralSettings] = useState({
+  const [referralSettings, setReferralSettings] = useState<{
+    annual_fee: number
+    split_apartment: number
+    split_internal: number
+    split_external: number
+    brokerage_name: string
+    discount_for_conversion: PublicDiscount | null
+    discount_for_outside: PublicDiscount | null
+  }>({
     annual_fee: 299,
     split_apartment: 85,
     split_internal: 90,
     split_external: 88,
     brokerage_name: 'Referral Collective',
-    promo_discount: 0,
-    promo_active: false,
+    discount_for_conversion: null,
+    discount_for_outside: null,
   })
+
+  // A signed-in CRC agent is priced as a conversion, everyone else as an
+  // agent joining from outside. Whichever it is, the payment route resolves
+  // the same discount from the same table, so this is what they will be billed.
+  const activeDiscount = isAgent
+    ? referralSettings.discount_for_conversion
+    : referralSettings.discount_for_outside
 
   // Fetch referral settings (includes promo info)
   useEffect(() => {
@@ -58,17 +79,12 @@ export default function ReferralCollectiveInformationPage() {
 
   // Handle conversion for signed-in agents
   async function handleConvertToReferral() {
-    const finalPrice = referralSettings.promo_active && referralSettings.promo_discount > 0 
-      ? Math.max(0, referralSettings.annual_fee - referralSettings.promo_discount)
-      : referralSettings.annual_fee
-    const priceText = finalPrice === 0 
-      ? 'free for the first year (promotional offer), then $' + referralSettings.annual_fee + '/year' 
-      : `$${finalPrice} for the first year, then $${referralSettings.annual_fee}/year`
-    const standardPriceText = `$${referralSettings.annual_fee}/year`
-    
-    const feeMessage = referralSettings.promo_active && referralSettings.promo_discount > 0
-      ? priceText
-      : standardPriceText
+    const conversionDiscount = referralSettings.discount_for_conversion
+    const feeMessage = conversionDiscount
+      ? (conversionDiscount.final_price === 0
+        ? `free for the first year (${conversionDiscount.name}), then $${referralSettings.annual_fee}/year`
+        : `$${conversionDiscount.final_price} for the first year, then $${referralSettings.annual_fee}/year`)
+      : `$${referralSettings.annual_fee}/year`
     
     if (!confirm(`This will convert your account to ${referralSettings.brokerage_name}. You will need to complete the referral onboarding process and sign the new ICA. The annual fee is ${feeMessage}. Your current monthly subscription will be cancelled. Continue?`)) {
       return
@@ -198,13 +214,13 @@ export default function ReferralCollectiveInformationPage() {
 
             {/* Annual Fee */}
             <div className="inner-card bg-chart-gold-1 border border-chart-gold-4 p-5">
-              {isAgent && referralSettings.promo_active && referralSettings.promo_discount > 0 ? (
+              {activeDiscount ? (
                 <div className="flex flex-col md:flex-row md:items-center gap-4">
                   <div className="flex items-baseline gap-3">
                     <span className="text-3xl font-bold text-chart-gold-9">
-                      {referralSettings.promo_discount >= referralSettings.annual_fee 
-                        ? 'FREE' 
-                        : `$${referralSettings.annual_fee - referralSettings.promo_discount}`}
+                      {activeDiscount.final_price === 0
+                        ? 'FREE'
+                        : `$${activeDiscount.final_price}`}
                     </span>
                     <span className="text-sm text-luxury-gray-3">
                       <span className="line-through">${referralSettings.annual_fee}</span>
@@ -213,7 +229,7 @@ export default function ReferralCollectiveInformationPage() {
                   </div>
                   <div className="flex-1">
                     <p className="text-sm text-luxury-gray-2">
-                      <strong className="text-luxury-gray-1">Limited time offer for CRC agents.</strong> Renews at ${referralSettings.annual_fee}/year. No monthly fees. No contracts.
+                      <strong className="text-luxury-gray-1">{activeDiscount.name}.</strong> Renews at ${referralSettings.annual_fee}/year. No monthly fees. No contracts.
                     </p>
                   </div>
                 </div>

@@ -482,6 +482,7 @@ export default function OnboardingPage() {
   const [paymentPaid, setPaymentPaid] = useState(false)
   const [paymentWaived, setPaymentWaived] = useState(false)
   const [discountAmount, setDiscountAmount] = useState(0)
+  const [discountName, setDiscountName] = useState('')
   const [isConversion, setIsConversion] = useState(false) // True if existing agent converting to referral
   const [step1Completed, setStep1Completed] = useState(false)
   const [completedSteps, setCompletedSteps] = useState<Record<number, boolean>>({})
@@ -639,7 +640,10 @@ export default function OnboardingPage() {
       if (data.session?.current_step > 1) setStep1Completed(true)
       if (data.session?.step_2_completed_at) setPaymentPaid(true)
       if (data.session?.payment_waived) setPaymentWaived(true)
-      if (data.session?.discount_amount) setDiscountAmount(data.session.discount_amount)
+      if (data.discount) {
+        setDiscountAmount(Number(data.discount.amount_off) || 0)
+        setDiscountName(data.discount.name || 'Promotion')
+      }
       if (data.session?.previous_mls_choice) setIsConversion(true)
       const s = data.session || {}
       setCompletedSteps({
@@ -715,6 +719,16 @@ export default function OnboardingPage() {
         body: JSON.stringify({ token }),
       })
       const data = await res.json()
+
+      // The fee was fully covered by a discount, so there is nothing to pay.
+      // Reload the session so the step shows as complete and the panel reads
+      // "Fee Waived" rather than opening an empty checkout.
+      if (data.payment_waived) {
+        await verifyToken()
+        setPaying(false)
+        return
+      }
+
       if (!res.ok || !data.client_token)
         throw new Error(data.error || 'Failed to create checkout session')
 
@@ -1413,7 +1427,7 @@ const checkout = new window.Payload.Checkout({
                       {discountAmount > 0 && (
                         <>
                           <p className="text-xs font-semibold text-green-700 mt-1">
-                            CRC Agent Promo: ${discountAmount} off first year
+                            {discountName}: ${discountAmount.toFixed(2)} off first year
                           </p>
                           <p className="text-xs text-luxury-gray-3">
                             Renews at ${referralSettings.annual_fee}/year

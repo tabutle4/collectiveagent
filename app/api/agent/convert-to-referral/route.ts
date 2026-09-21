@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireAuth } from '@/lib/api-auth'
+import {
+  REFERRAL_DISCOUNT_COLUMNS,
+  ReferralDiscount,
+  resolveReferralDiscount,
+} from '@/lib/referralDiscounts'
 import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
@@ -56,19 +61,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to convert agent' }, { status: 500 })
     }
 
-    // Check if there's a conversion promotion active
+    // Work out the best discount running right now for a converting CRC agent.
+    // The amount is snapshotted onto the onboarding session so an agent who
+    // starts a conversion during a promo keeps that price even if the promo
+    // ends before they reach the payment step.
     const { data: settings } = await supabaseAdmin
       .from('company_settings')
-      .select('referral_conversion_free_until, referral_conversion_discount, referral_annual_fee')
+      .select('referral_annual_fee')
       .single()
 
-    const now = new Date()
-    const promoEndDate = settings?.referral_conversion_free_until 
-      ? new Date(settings.referral_conversion_free_until) 
-      : null
-    const isPromoActive = promoEndDate && now <= promoEndDate
-    const discountAmount = isPromoActive ? (settings?.referral_conversion_discount || 0) : 0
-    const annualFee = settings?.referral_annual_fee || 299
+    const { data: discountRows } = await supabaseAdmin
+      .from('referral_discounts')
+      .select(REFERRAL_DISCOUNT_COLUMNS)
+      .eq('is_active', true)
+
+    const annualFee = Number(settings?.referral_annual_fee || 299)
+    const resolved = resolveReferralDiscount(
+      (discountRows || []) as unknown as ReferralDiscount[],
+      'crc_conversion',
+      annualFee
+    )
+    const discountAmount = resolved?.amountOff || 0
     const isFreeConversion = discountAmount >= annualFee // Full discount = free
 
     // Create new onboarding session for referral flow
@@ -84,6 +97,7 @@ export async function POST(request: NextRequest) {
         step_2_completed_at: isFreeConversion ? new Date().toISOString() : null, // Skip payment only if fully free
         payment_waived: isFreeConversion, // Track that fee was fully waived
         discount_amount: discountAmount, // Track discount amount
+        discount_name: resolved?.name || null, // Which promo it was, for the onboarding page
         previous_mls_choice: user.mls_choice, // Store original MLS for cancel/revert
         step_3_completed_at: null,
         step_4_completed_at: null,

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { createAgentInvoice } from '@/lib/payload/agentInvoice'
+import {
+  REFERRAL_DISCOUNT_COLUMNS,
+  ReferralDiscount,
+  resolveReferralDiscount,
+} from '@/lib/referralDiscounts'
 
 const plAuth = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
@@ -36,14 +41,65 @@ export async function POST(request: NextRequest) {
 
     const isReferralAgent = prospect.mls_choice === 'Referral Collective (No MLS)'
 
-    // Fetch onboarding session to check for discount
+    // Work out the discount. previous_mls_choice is written only by the
+    // conversion route, so it is what tells a converting CRC agent apart from
+    // an agent joining Referral Collective from another brokerage.
+    //
+    // A conversion keeps the amount snapshotted when it started, so a promo
+    // ending mid-onboarding does not change a price the agent was already
+    // quoted. Anyone else is priced against whatever is running today.
     const { data: session } = await supabaseAdmin
       .from('onboarding_sessions')
-      .select('discount_amount')
+      .select('discount_amount, discount_name, previous_mls_choice, payment_waived, step_2_completed_at')
       .eq('user_id', prospect.id)
       .single()
-    
-    const discountAmount = session?.discount_amount || 0
+
+    let discountAmount = 0
+    let discountName: string | null = null
+    if (isReferralAgent) {
+      if (session?.previous_mls_choice || session?.payment_waived) {
+        discountAmount = Number(session.discount_amount || 0)
+        discountName = session.discount_name || null
+      } else {
+        const { data: discountRows } = await supabaseAdmin
+          .from('referral_discounts')
+          .select(REFERRAL_DISCOUNT_COLUMNS)
+          .eq('is_active', true)
+
+        const resolved = resolveReferralDiscount(
+          (discountRows || []) as unknown as ReferralDiscount[],
+          'outside_only',
+          referralAnnualFee
+        )
+        discountAmount = resolved?.amountOff || 0
+        discountName = resolved?.name || null
+      }
+    }
+
+    // Nothing to charge. Waive the fee instead of sending a zero dollar bill
+    // to Payload, whose documentation does not say what it does with one.
+    // The onboarding page normally completes the payment step before an agent
+    // ever gets here, so this is the backstop for a discount that became fully
+    // covering between loading the page and pressing pay.
+    if (isReferralAgent && discountAmount >= referralAnnualFee) {
+      const waivedAt = new Date().toISOString()
+      await supabaseAdmin
+        .from('onboarding_sessions')
+        .update({
+          payment_waived: true,
+          step_2_completed_at: session?.step_2_completed_at || waivedAt,
+          discount_amount: discountAmount,
+          discount_name: discountName,
+          updated_at: waivedAt,
+        })
+        .eq('user_id', prospect.id)
+
+      return NextResponse.json({
+        success: true,
+        payment_waived: true,
+        message: 'No payment is due. The membership fee is fully covered.',
+      })
+    }
 
     // Step 1: Create Payload customer if they don't have one yet
     let payloadCustomerId = prospect.payload_payee_id
@@ -191,10 +247,12 @@ export async function POST(request: NextRequest) {
     })
 
     if (isReferralAgent) {
-      // Referral agent: $299 annual fee only, no monthly (minus any discount)
+      // Referral agent: $299 annual fee only, no monthly (minus any discount).
+      // A discount covering the whole fee returned above as a waiver, so
+      // finalAmount is always greater than zero here.
       const finalAmount = Math.max(0, referralAnnualFee - discountAmount)
-      const description = discountAmount > 0 
-        ? `Referral Collective Annual Membership (${discountAmount >= referralAnnualFee ? 'Promo - Free' : `$${discountAmount} discount applied`})`
+      const description = discountAmount > 0
+        ? `Referral Collective Annual Membership ($${discountAmount} discount applied)`
         : 'Referral Collective Annual Membership'
       params.append('description', description)
       params.append('items[0][type]', 'Annual Membership Fee')
