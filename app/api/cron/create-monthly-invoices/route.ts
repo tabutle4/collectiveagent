@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAgentInvoice } from '@/lib/payload/agentInvoice'
+import { isInvoiceForTargetMonth } from '@/lib/payload/agentInvoiceList'
 import { requireCronSecret } from '@/lib/api-auth'
 
 // The loop is sequential over every eligible agent and now makes one more
@@ -12,18 +13,12 @@ export const maxDuration = 300
 
 const plAuth = () => 'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
 
-// Returns true if the invoice's description (or first item's description) is for
-// the target month and year. This is what prevents creating a duplicate invoice
-// for the same month. Notably, we do NOT short-circuit because an unrelated month
-// is unpaid — that was the bug that caused agents with unpaid April fees to miss
-// their May invoices entirely.
-function isInvoiceForTargetMonth(inv: any, monthName: string, year: number): boolean {
-  const haystack = (
-    (inv.description || '') + ' ' +
-    (inv.items || []).map((i: any) => i.description || '').join(' ')
-  ).toLowerCase()
-  return haystack.includes(monthName.toLowerCase()) && haystack.includes(String(year))
-}
+// isInvoiceForTargetMonth now lives in lib/payload/agentInvoiceList, unchanged.
+// It is what prevents creating a duplicate invoice for the same month here, and
+// apply-late-fees now uses the same function to refuse to charge any month but
+// the one that just came due. Notably, we do NOT short-circuit because an
+// unrelated month is unpaid — that was the bug that caused agents with unpaid
+// April fees to miss their May invoices entirely.
 
 export async function GET(request: NextRequest) {
   const denied = requireCronSecret(request)

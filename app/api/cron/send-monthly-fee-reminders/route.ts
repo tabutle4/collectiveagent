@@ -3,6 +3,10 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { Resend } from 'resend'
 import { getEmailLayout } from '@/lib/email/layout'
 import { requireCronSecret } from '@/lib/api-auth'
+import {
+  isInvoiceForTargetMonth,
+  isMonthlyFeeInvoice,
+} from '@/lib/payload/agentInvoiceList'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const plAuth = () => 'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
@@ -26,7 +30,6 @@ export async function GET(request: NextRequest) {
     const now = new Date()
     const monthName = now.toLocaleString('default', { month: 'long' })
     const year = now.getFullYear()
-    const monthlyFeeLabel = `${monthName} ${year} Monthly Brokerage Fee`
 
     // Get all active, non-waived agents with a Payload ID and email.
     // is_active and the Referral Collective filter mirror the eligibility
@@ -58,17 +61,39 @@ export async function GET(request: NextRequest) {
     const checks = await Promise.all(
       eligibleAgents.map(async agent => {
         try {
+          // fields[]=*&fields[]=items: default attributes plus the nested line
+          // items, because this now reads amount_due as well as the items.
+          // https://docs.payload.com/apis/api-design/
           const res = await fetch(
-            `https://api.payload.com/invoices/?customer_id=${agent.payload_payee_id}&status=unpaid&limit=20`,
+            `https://api.payload.com/invoices/?customer_id=${agent.payload_payee_id}&status=unpaid&limit=20&fields[]=*&fields[]=items`,
             { headers: { Authorization: plAuth() } }
           )
           if (!res.ok) return { agent, hasUnpaid: false }
           const data = await res.json()
-          const hasUnpaid = (data.values || []).some((inv: any) =>
-            inv.items?.some(
-              (item: any) =>
-                item.type === 'Monthly Fee' && inv.description?.includes(monthlyFeeLabel)
-            )
+          // Identical to the eligibility the 6th uses, minus the late fee check,
+          // so a reminder on the 5th and a late fee on the 6th can never
+          // disagree about which invoice is this month's brokerage fee.
+          //
+          // Two changes from the old inline test, both of which decide whether a
+          // real person is emailed:
+          //
+          //   the month came only from inv.description, so an invoice whose
+          //   description was retyped in the Payload dashboard dropped out even
+          //   though its line item still named the month. isInvoiceForTargetMonth
+          //   reads the line item descriptions too.
+          //
+          //   the monthly fee was matched only by line item type, which Payload
+          //   does not reliably keep, so agents whose type had been dropped were
+          //   never reminded at all.
+          //
+          // Both widen who gets the email. amount_due > 0 is the one that
+          // narrows it: an agent who has already settled is no longer told their
+          // fee is due.
+          const hasUnpaid = (data.values || []).some(
+            (inv: any) =>
+              isInvoiceForTargetMonth(inv, monthName, year) &&
+              isMonthlyFeeInvoice(inv) &&
+              Number(inv?.amount_due ?? 0) > 0
           )
           return { agent, hasUnpaid }
         } catch {

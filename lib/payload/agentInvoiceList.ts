@@ -99,6 +99,76 @@ export const MONTHLY_FEE_ITEM_TYPES = ['Monthly Fee', 'Monthly Fee (Prorated)']
 export const MONTHLY_FEE_COMPANION_TYPES = ['Late Fee']
 
 /**
+ * ── Why `type` alone cannot be trusted ─────────────────────────────────────
+ *
+ * Payload's LineItem reference calls `type` an optional "Arbitrary type
+ * classification" (https://docs.payload.com/apis/object-reference/line-items/).
+ * It is not reliably kept. Kennedy Dixon's September 2026 monthly invoice came
+ * back from the invoice inspector with `type: null` on its only line item,
+ * while Breia Gordon's and Amanda Clarke's monthly invoices from the same cron
+ * carry theirs. Same code, same month, different outcome per invoice.
+ *
+ * An invoice whose type was dropped is invisible to every predicate here: the
+ * sweep reads a real monthly fee as a custom invoice and would switch autopay
+ * off on it, and the late fee cron skips the agent entirely.
+ *
+ * `description` is stored intact - 36 characters survived on the same invoice
+ * whose type was lost, and the 24-character truncation documented in
+ * claude/payload-type-field-24-char-truncation.md applies only to `type`. So
+ * every line predicate below matches on type OR description.
+ *
+ * NOTE: the truncation-tolerant `typeMatches` helper in commissionOffsetItems
+ * is deliberately NOT used here. It accepts a stored value that is a prefix of
+ * the expected one, and 'Monthly Fee' is a prefix of 'Monthly Fee (Prorated)',
+ * so it would blur the two. These type strings are all well under 24
+ * characters and are never truncated, so exact comparison is correct.
+ */
+
+/**
+ * Matches every monthly fee description this app writes:
+ *
+ *   'October 2026 Monthly Brokerage Fee'              create-monthly-invoices,
+ *                                                     create-invoice (monthly)
+ *   'Prorated monthly fee, 14 days remaining in ...'  create-invoice (onboarding)
+ *   'Prorated Monthly Fee - 10/03/26 to 10/31/26'     onboarding/create-payment
+ *
+ * Deliberately requires the word "fee" next to "monthly" rather than "monthly"
+ * on its own, so a custom invoice for something billed monthly does not read as
+ * the brokerage fee. It does not match either onboarding line
+ * ('One-time onboarding fee', 'Non-Refundable Onboarding Fee'), which is what
+ * keeps a $399 join invoice out.
+ */
+const MONTHLY_FEE_DESCRIPTION = /monthly\s+(?:brokerage\s+)?fee/i
+
+/** Matches 'Late fee: payment not received by the 5th', written by apply-late-fees. */
+const LATE_FEE_DESCRIPTION = /late\s+fee/i
+
+const typeOf = (item: any): string => String(item?.type ?? '')
+const descriptionOf = (item: any): string => String(item?.description ?? '')
+
+/** One line item that is the monthly brokerage fee, prorated or not. */
+export const isMonthlyFeeLine = (item: any): boolean =>
+  MONTHLY_FEE_ITEM_TYPES.includes(typeOf(item)) ||
+  MONTHLY_FEE_DESCRIPTION.test(descriptionOf(item))
+
+/** One line item that is a late fee. */
+export const isLateFeeLine = (item: any): boolean =>
+  MONTHLY_FEE_COMPANION_TYPES.includes(typeOf(item)) ||
+  LATE_FEE_DESCRIPTION.test(descriptionOf(item))
+
+/**
+ * True when this invoice already carries a late fee.
+ *
+ * Scans every item rather than only the positive charge lines, which is what
+ * the inline check in apply-late-fees did before this module existed. The
+ * question being asked is "has a late fee already been applied", and a late fee
+ * found in any shape must block a second one. Erring toward finding one means
+ * erring toward not charging.
+ */
+export const hasLateFeeLine = (inv: any): boolean =>
+  (inv?.items || []).some(isLateFeeLine)
+
+/**
  * The lines that represent something the agent was actually billed for.
  *
  * Everything else on a Payload invoice is bookkeeping and must not be read as
@@ -135,15 +205,42 @@ const chargeLines = (inv: any): any[] =>
  *
  * The rule that holds: look only at real charge lines, require at least one to
  * be the monthly fee, and require all of them to be the fee or something that
- * rides along with it. A join invoice fails because 'Onboarding Fee' is neither.
+ * rides along with it. A join invoice fails because the onboarding line is
+ * neither, by type or by description.
  */
 export const isMonthlyFeeInvoice = (inv: any): boolean => {
   const charges = chargeLines(inv)
   if (charges.length === 0) return false
 
-  const allowed = [...MONTHLY_FEE_ITEM_TYPES, ...MONTHLY_FEE_COMPANION_TYPES]
   return (
-    charges.some((i: any) => MONTHLY_FEE_ITEM_TYPES.includes(i?.type)) &&
-    charges.every((i: any) => allowed.includes(i?.type))
+    charges.some(isMonthlyFeeLine) &&
+    charges.every((i: any) => isMonthlyFeeLine(i) || isLateFeeLine(i))
   )
+}
+
+/**
+ * True if the invoice's description, or any of its line item descriptions, is
+ * for the given month and year.
+ *
+ * Lifted verbatim from app/api/cron/create-monthly-invoices, which defined it
+ * privately. It now has a second caller with money attached: apply-late-fees
+ * uses it to refuse to touch any month but the one that just came due, so the
+ * two must not be allowed to drift apart.
+ *
+ * Reading both the invoice description and the item descriptions is what makes
+ * it survive editing. The office can retype an invoice's description in the
+ * Payload dashboard; the line item description written at creation is left
+ * alone, and either one is enough.
+ *
+ * Note the failure direction. An invoice whose month can no longer be read
+ * matches nothing, so it is skipped rather than charged. That costs the
+ * brokerage a late fee it was owed. The reverse - charging the wrong month -
+ * costs an agent money they do not owe, and is the one this must never do.
+ */
+export function isInvoiceForTargetMonth(inv: any, monthName: string, year: number): boolean {
+  const haystack = (
+    (inv.description || '') + ' ' +
+    (inv.items || []).map((i: any) => i.description || '').join(' ')
+  ).toLowerCase()
+  return haystack.includes(monthName.toLowerCase()) && haystack.includes(String(year))
 }
