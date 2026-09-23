@@ -3,6 +3,7 @@ import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 import { pickHeadSubmission, canonicalSide } from '@/lib/compliance/derive'
+import { fetchChecklistProgress } from '@/lib/payouts/checklist'
 
 export const dynamic = 'force-dynamic'
 
@@ -222,34 +223,27 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Batch: checklist completeness per transaction. Sales use the 'cda'
-    // checklist, leases use the 'payouts' checklist. Complete = every active
-    // item on the transaction's template has a completion row.
+    // Batch: checklist completeness per transaction. Delegated to
+    // fetchChecklistProgress so this page and the payouts report answer the
+    // question the same way. The inline version this replaces read completions
+    // with a bare .select().in() per 200-deal chunk, and PostgREST caps a
+    // response at 1,000 rows however many match. Measured 2026-09-23 against
+    // live data, the five chunks wanted 1067 / 677 / 1216 / 1258 / 324 rows, so
+    // three of them overflowed and silently lost their tail. A deal whose rows
+    // fell in a dropped tail read "pending" here while the Check & Payouts tab
+    // showed the same deal done.
+    // fetchChecklistProgress pages with fetchAllRows, so nothing is dropped.
+    // Still chunked, because one .in() over every deal id builds an oversized
+    // request.
     const checklistCompleteByTxn: Record<string, boolean> = {}
     if (txnIds.length) {
-      const templates = await fetchByIds('checklist_templates', 'id, slug', 'slug', ['cda', 'payouts'])
-      const cdaTemplateId = templates.find((t: any) => t.slug === 'cda')?.id || null
-      const payoutTemplateId = templates.find((t: any) => t.slug === 'payouts')?.id || null
-      const itemRows = await fetchByIds(
-        'checklist_items',
-        'id, checklist_template_id',
-        'checklist_template_id',
-        [cdaTemplateId, payoutTemplateId].filter(Boolean) as string[],
-        q => q.eq('is_active', true)
-      )
-      const cdaItemIds = (itemRows || []).filter((i: any) => i.checklist_template_id === cdaTemplateId).map((i: any) => i.id)
-      const payoutItemIds = (itemRows || []).filter((i: any) => i.checklist_template_id === payoutTemplateId).map((i: any) => i.id)
-      const completions = await fetchByIds('checklist_completions', 'transaction_id, checklist_item_id', 'transaction_id', txnIds)
-      const doneByTxn: Record<string, Set<string>> = {}
-      for (const c of completions) {
-        if (!doneByTxn[c.transaction_id]) doneByTxn[c.transaction_id] = new Set()
-        doneByTxn[c.transaction_id].add(c.checklist_item_id)
-      }
-      for (const t of Object.values(txnMap) as any[]) {
-        const lease = isLeaseTransactionType(t.transaction_type)
-        const required = lease ? payoutItemIds : cdaItemIds
-        const done = doneByTxn[t.id] || new Set<string>()
-        checklistCompleteByTxn[t.id] = required.length > 0 && required.every((iid: string) => done.has(iid))
+      const CHUNK = 200
+      const txnList = Object.values(txnMap) as any[]
+      for (let i = 0; i < txnList.length; i += CHUNK) {
+        const progress = await fetchChecklistProgress(
+          txnList.slice(i, i + CHUNK).map((t: any) => ({ id: t.id, transaction_type: t.transaction_type }))
+        )
+        for (const [id, p] of Object.entries(progress)) checklistCompleteByTxn[id] = p.complete
       }
     }
 
