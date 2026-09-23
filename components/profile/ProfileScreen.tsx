@@ -143,7 +143,31 @@ export default function ProfileScreen({
     association_status_on_join: '',
   })
 
+  type AgentCredit = {
+    id: string
+    fee_type: 'rc_annual' | 'crc_onboarding' | 'crc_monthly'
+    amount: number
+    remaining: number
+    note: string | null
+    created_at: string
+    is_void: boolean
+    consumed_reference: string | null
+  }
+  const [credits, setCredits] = useState<AgentCredit[]>([])
+  const [creditDraft, setCreditDraft] = useState<{ fee_type: string; amount: string; note: string }>({
+    fee_type: 'crc_monthly',
+    amount: '',
+    note: '',
+  })
+  const [creditBusy, setCreditBusy] = useState(false)
+  const [creditError, setCreditError] = useState<string | null>(null)
+
   const [billingForm, setBillingForm] = useState({
+    // Standing rates. Empty string means "standard fee", which is what the
+    // API turns into null. '0' is a real rate and means free.
+    onboarding_fee_override: '',
+    monthly_fee_override: '',
+    rc_annual_fee_override: '',
     monthly_fee_waived: false,
     waive_buyer_processing_fees: false,
     waive_seller_processing_fees: false,
@@ -254,6 +278,7 @@ export default function ProfileScreen({
 
       // Load documents if admin
       if (isAdmin && freshUserData.id) {
+        loadCredits(freshUserData.id)
         const docsRes = await fetch(`/api/users/documents?user_id=${freshUserData.id}`)
         if (docsRes.ok) {
           const docsData = await docsRes.json()
@@ -388,6 +413,18 @@ export default function ProfileScreen({
       })
 
       setBillingForm({
+        onboarding_fee_override:
+          freshUserData.onboarding_fee_override === null || freshUserData.onboarding_fee_override === undefined
+            ? ''
+            : String(freshUserData.onboarding_fee_override),
+        monthly_fee_override:
+          freshUserData.monthly_fee_override === null || freshUserData.monthly_fee_override === undefined
+            ? ''
+            : String(freshUserData.monthly_fee_override),
+        rc_annual_fee_override:
+          freshUserData.rc_annual_fee_override === null || freshUserData.rc_annual_fee_override === undefined
+            ? ''
+            : String(freshUserData.rc_annual_fee_override),
         monthly_fee_waived: freshUserData.monthly_fee_waived || false,
         waive_buyer_processing_fees: freshUserData.waive_buyer_processing_fees || false,
         waive_seller_processing_fees: freshUserData.waive_seller_processing_fees || false,
@@ -597,6 +634,60 @@ export default function ProfileScreen({
     }
   }
 
+  const loadCredits = async (agentId: string) => {
+    try {
+      const res = await fetch(`/api/admin/agent-credits?user_id=${agentId}`)
+      if (!res.ok) return
+      const data = await res.json()
+      setCredits(data.credits || [])
+    } catch {
+      // A credits panel that cannot load is not worth failing the profile over.
+    }
+  }
+
+  const handleAddCredit = async () => {
+    if (!user) return
+    const amount = Number(creditDraft.amount)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setCreditError('Enter an amount greater than zero')
+      return
+    }
+    setCreditBusy(true)
+    setCreditError(null)
+    try {
+      const res = await fetch('/api/admin/agent-credits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id,
+          fee_type: creditDraft.fee_type,
+          amount,
+          note: creditDraft.note,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setCreditError(data.error || 'Could not add the credit')
+        return
+      }
+      setCreditDraft({ fee_type: creditDraft.fee_type, amount: '', note: '' })
+      await loadCredits(user.id)
+    } finally {
+      setCreditBusy(false)
+    }
+  }
+
+  const handleVoidCredit = async (creditId: string) => {
+    if (!user) return
+    setCreditBusy(true)
+    try {
+      await fetch(`/api/admin/agent-credits?id=${creditId}`, { method: 'DELETE' })
+      await loadCredits(user.id)
+    } finally {
+      setCreditBusy(false)
+    }
+  }
+
   const handleSaveBilling = async () => {
     if (!user) return
     setSavingBilling(true)
@@ -609,6 +700,9 @@ export default function ProfileScreen({
         body: JSON.stringify({
           id: user.id,
           updates: {
+            onboarding_fee_override: billingForm.onboarding_fee_override,
+            monthly_fee_override: billingForm.monthly_fee_override,
+            rc_annual_fee_override: billingForm.rc_annual_fee_override,
             monthly_fee_waived: billingForm.monthly_fee_waived,
             waive_buyer_processing_fees: billingForm.waive_buyer_processing_fees,
             waive_seller_processing_fees: billingForm.waive_seller_processing_fees,
@@ -1880,7 +1974,145 @@ export default function ProfileScreen({
             {canEditBilling ? (
               <div className="inner-card">
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
+                  {/* Standing rates. Blank means this agent pays the standard
+                      fee; a number here is their price and stops any promo
+                      applying on top of it. */}
+                  <div>
+                    <p className="text-sm font-medium text-luxury-gray-1">Agreed Rates</p>
+                    <p className="text-xs text-luxury-gray-3 mb-3">
+                      Leave blank for the standard fee. A rate here is what this agent pays, and running
+                      promotions do not come off it. Enter 0 for free.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs text-luxury-gray-3 mb-1">Onboarding fee</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="Standard"
+                          value={billingForm.onboarding_fee_override}
+                          onChange={e =>
+                            setBillingForm(prev => ({ ...prev, onboarding_fee_override: e.target.value }))
+                          }
+                          className="input-luxury"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-luxury-gray-3 mb-1">Monthly fee</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="Standard"
+                          value={billingForm.monthly_fee_override}
+                          onChange={e =>
+                            setBillingForm(prev => ({ ...prev, monthly_fee_override: e.target.value }))
+                          }
+                          className="input-luxury"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-luxury-gray-3 mb-1">RC annual membership</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="Standard"
+                          value={billingForm.rc_annual_fee_override}
+                          onChange={e =>
+                            setBillingForm(prev => ({ ...prev, rc_annual_fee_override: e.target.value }))
+                          }
+                          className="input-luxury"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* One-time credits. Money already collected or owed back,
+                      spent against the next invoice for that fee. */}
+                  <div className="pt-4 border-t border-luxury-gray-5/30">
+                    <p className="text-sm font-medium text-luxury-gray-1">Credits</p>
+                    <p className="text-xs text-luxury-gray-3 mb-3">
+                      A one-time amount that comes off this agent&apos;s next invoice for that fee. Anything left
+                      over carries to the invoice after it.
+                    </p>
+
+                    {credits.filter(c => !c.is_void).length > 0 && (
+                      <div className="space-y-2 mb-3">
+                        {credits
+                          .filter(c => !c.is_void)
+                          .map(credit => (
+                            <div
+                              key={credit.id}
+                              className="flex items-center justify-between text-xs border border-luxury-gray-5/40 rounded px-3 py-2"
+                            >
+                              <div>
+                                <span className="text-luxury-gray-1 font-medium">
+                                  ${Number(credit.remaining).toFixed(2)} left
+                                </span>
+                                <span className="text-luxury-gray-3">
+                                  {' '}of ${Number(credit.amount).toFixed(2)} ·{' '}
+                                  {credit.fee_type === 'crc_monthly'
+                                    ? 'Monthly fee'
+                                    : credit.fee_type === 'crc_onboarding'
+                                      ? 'Onboarding fee'
+                                      : 'RC membership'}
+                                </span>
+                                {credit.note && (
+                                  <span className="block text-luxury-gray-3 mt-0.5">{credit.note}</span>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => handleVoidCredit(credit.id)}
+                                disabled={creditBusy}
+                                className="text-luxury-gray-3 hover:text-red-600 transition-colors"
+                              >
+                                Void
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                      <select
+                        value={creditDraft.fee_type}
+                        onChange={e => setCreditDraft(prev => ({ ...prev, fee_type: e.target.value }))}
+                        className="input-luxury text-xs"
+                      >
+                        <option value="crc_monthly">Monthly fee</option>
+                        <option value="crc_onboarding">Onboarding fee</option>
+                        <option value="rc_annual">RC membership</option>
+                      </select>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Amount"
+                        value={creditDraft.amount}
+                        onChange={e => setCreditDraft(prev => ({ ...prev, amount: e.target.value }))}
+                        className="input-luxury text-xs"
+                      />
+                      <input
+                        type="text"
+                        placeholder="What it is for"
+                        value={creditDraft.note}
+                        onChange={e => setCreditDraft(prev => ({ ...prev, note: e.target.value }))}
+                        className="input-luxury text-xs"
+                      />
+                      <button
+                        onClick={handleAddCredit}
+                        disabled={creditBusy}
+                        className="btn btn-secondary text-xs disabled:opacity-50"
+                      >
+                        Add Credit
+                      </button>
+                    </div>
+                    {creditError && <p className="text-xs text-red-600 mt-2">{creditError}</p>}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-4 border-t border-luxury-gray-5/30">
                     <div>
                       <p className="text-sm font-medium text-luxury-gray-1">Monthly Fee Waived</p>
                       <p className="text-xs text-luxury-gray-3">

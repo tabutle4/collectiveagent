@@ -27,6 +27,8 @@ import {
 import {
   DISCOUNT_AUDIENCE_LABELS,
   ReferralDiscount,
+  FEE_TYPE_LABELS,
+  FeeType,
   describeDiscountAmount,
   describeDiscountSchedule,
   isDiscountActiveOn,
@@ -327,6 +329,8 @@ export default function SettingsPage() {
       id: '',
       name: '',
       description: null,
+      fee_type: 'rc_annual',
+      first_invoice_only: false,
       audience: 'all',
       discount_type: 'amount',
       amount: 0,
@@ -1133,7 +1137,7 @@ export default function SettingsPage() {
                   {/* Referral Discounts */}
                   <div className="inner-card">
                     <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-semibold text-luxury-gray-1">Referral Discounts</h3>
+                      <h3 className="text-sm font-semibold text-luxury-gray-1">Fee Discounts</h3>
                       <button
                         onClick={() => setEditingDiscount(blankDiscount())}
                         className="btn btn-primary text-sm flex items-center gap-2"
@@ -1143,13 +1147,15 @@ export default function SettingsPage() {
                       </button>
                     </div>
                     <p className="text-xs text-luxury-gray-3 mb-4">
-                      Discounts come off the ${settings.referral_annual_fee} annual membership. Only one is ever
-                      applied. When more than one is running, the largest wins. Switch a discount off to park it
-                      without losing the setup.
+                      Discounts come off whichever fee you pick: the ${settings.referral_annual_fee} Referral
+                      Collective membership, the ${settings.standard_onboarding_fee} onboarding fee or the
+                      ${settings.standard_monthly_fee} monthly fee. Only one is ever applied to a fee. When more
+                      than one is running, the largest wins. An agent on an agreed rate of their own is not
+                      discounted further. Switch a discount off to park it without losing the setup.
                     </p>
 
                     {discounts.length === 0 ? (
-                      <p className="text-xs text-luxury-gray-3">No discounts yet. Everyone pays the full annual fee.</p>
+                      <p className="text-xs text-luxury-gray-3">No discounts yet. Everyone pays the standard fees.</p>
                     ) : (
                       <div className="space-y-3">
                         {discounts.map((discount) => {
@@ -1160,9 +1166,19 @@ export default function SettingsPage() {
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <h4 className="text-sm font-semibold text-luxury-gray-1">{discount.name}</h4>
-                                    <span className="text-xs text-luxury-gray-3 bg-luxury-gray-6 px-2 py-0.5 rounded">
-                                      {DISCOUNT_AUDIENCE_LABELS[discount.audience]}
+                                    <span className="text-xs text-luxury-gray-2 bg-luxury-gray-6 px-2 py-0.5 rounded">
+                                      {FEE_TYPE_LABELS[(discount.fee_type || 'rc_annual') as FeeType]}
                                     </span>
+                                    {(discount.fee_type || 'rc_annual') === 'rc_annual' && (
+                                      <span className="text-xs text-luxury-gray-3 bg-luxury-gray-6 px-2 py-0.5 rounded">
+                                        {DISCOUNT_AUDIENCE_LABELS[discount.audience]}
+                                      </span>
+                                    )}
+                                    {discount.first_invoice_only && (
+                                      <span className="text-xs text-luxury-gray-3 bg-luxury-gray-6 px-2 py-0.5 rounded">
+                                        First invoice only
+                                      </span>
+                                    )}
                                     <span className="text-xs text-luxury-gold bg-luxury-gold/10 px-2 py-0.5 rounded">
                                       {describeDiscountAmount(discount)}
                                     </span>
@@ -1245,6 +1261,31 @@ export default function SettingsPage() {
 
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div>
+                              <label className="field-label">Which Fee</label>
+                              <select
+                                value={editingDiscount.fee_type || 'rc_annual'}
+                                onChange={(e) => {
+                                  const feeType = e.target.value as FeeType
+                                  setEditingDiscount({
+                                    ...editingDiscount,
+                                    fee_type: feeType,
+                                    // Converting and outside agents are Referral
+                                    // Collective ideas. A discount on a CRC fee
+                                    // applies to whoever is being billed.
+                                    audience: feeType === 'rc_annual' ? editingDiscount.audience : 'all',
+                                    first_invoice_only:
+                                      feeType === 'crc_monthly' ? editingDiscount.first_invoice_only : false,
+                                  })
+                                }}
+                                className="input-luxury"
+                              >
+                                <option value="rc_annual">RC annual membership</option>
+                                <option value="crc_onboarding">CRC onboarding fee</option>
+                                <option value="crc_monthly">CRC monthly fee</option>
+                              </select>
+                            </div>
+                            {(editingDiscount.fee_type || 'rc_annual') === 'rc_annual' && (
+                            <div>
                               <label className="field-label">Applies To</label>
                               <select
                                 value={editingDiscount.audience}
@@ -1256,6 +1297,7 @@ export default function SettingsPage() {
                                 <option value="outside_only">Outside agents only</option>
                               </select>
                             </div>
+                            )}
                             <div>
                               <label className="field-label">Discount Type</label>
                               <select
@@ -1440,10 +1482,45 @@ export default function SettingsPage() {
                             <span className="text-sm text-luxury-gray-2">Switched on</span>
                           </label>
 
+                          {(editingDiscount.fee_type || 'rc_annual') === 'crc_monthly' && (
+                            <label className="flex items-start gap-2">
+                              <input
+                                type="checkbox"
+                                checked={!!editingDiscount.first_invoice_only}
+                                onChange={(e) =>
+                                  setEditingDiscount({ ...editingDiscount, first_invoice_only: e.target.checked })
+                                }
+                                className="rounded mt-0.5"
+                              />
+                              <span className="text-sm text-luxury-gray-2">
+                                One invoice per agent
+                                <span className="block text-xs text-luxury-gray-3">
+                                  Each agent gets this once, then pays full price even while it is still running.
+                                  Leave it off to discount every month the promo is on.
+                                </span>
+                              </span>
+                            </label>
+                          )}
+
                           <p className="text-xs text-luxury-gray-3">
-                            {isDiscountActiveOn(editingDiscount)
-                              ? `Running today. A ${DISCOUNT_AUDIENCE_LABELS[editingDiscount.audience].toLowerCase()} membership would be $${Math.max(0, settings.referral_annual_fee - (editingDiscount.discount_type === 'percent' ? (settings.referral_annual_fee * editingDiscount.amount) / 100 : editingDiscount.amount)).toFixed(2)} instead of $${settings.referral_annual_fee}.`
-                              : 'Not running today with these settings.'}
+                            {(() => {
+                              if (!isDiscountActiveOn(editingDiscount)) {
+                                return 'Not running today with these settings.'
+                              }
+                              const feeType = (editingDiscount.fee_type || 'rc_annual') as FeeType
+                              const baseFee =
+                                feeType === 'crc_onboarding'
+                                  ? settings.standard_onboarding_fee
+                                  : feeType === 'crc_monthly'
+                                    ? settings.standard_monthly_fee
+                                    : settings.referral_annual_fee
+                              const off =
+                                editingDiscount.discount_type === 'percent'
+                                  ? (baseFee * editingDiscount.amount) / 100
+                                  : editingDiscount.amount
+                              const after = Math.max(0, baseFee - off).toFixed(2)
+                              return `Running today. ${FEE_TYPE_LABELS[feeType]} would be $${after} instead of $${baseFee}.`
+                            })()}
                           </p>
                         </div>
 

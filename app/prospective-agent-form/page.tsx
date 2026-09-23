@@ -199,17 +199,28 @@ function ProspectiveAgentFormContent() {
               <div>
                 <label className="block text-xs text-luxury-gray-3 mb-3">Which MLS will you join? *</label>
                 <div className="space-y-2">
-                  {['HAR', 'MetroTex | NTREIS', 'Both', 'Referral Collective (No MLS)'].map(mls => (
-                    <label key={mls} className="flex items-center gap-2.5 cursor-pointer">
+                  {[
+                    { value: 'HAR', hint: 'Houston' },
+                    { value: 'MetroTex | NTREIS', hint: 'Dallas' },
+                    {
+                      value: 'Referral Collective (No MLS)',
+                      hint: 'Choose this if you do not want to practice real estate. You will be a referral only agent with no MLS access.',
+                    },
+                  ].map(option => (
+                    <label key={option.value} className="flex items-start gap-2.5 cursor-pointer">
                       <input
                         type="radio"
                         name="mls_choice"
-                        value={mls}
-                        checked={formData.mls_choice === mls}
+                        value={option.value}
+                        checked={formData.mls_choice === option.value}
                         onChange={handleChange}
-                        required={mls === 'HAR'}
+                        required={option.value === 'HAR'}
+                        className="mt-1"
                       />
-                      <span className="text-sm text-luxury-gray-2">{mls}</span>
+                      <span className="text-sm text-luxury-gray-2">
+                        {option.value}
+                        <span className="block text-xs text-luxury-gray-3 mt-0.5">{option.hint}</span>
+                      </span>
                     </label>
                   ))}
                 </div>

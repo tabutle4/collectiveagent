@@ -1,5 +1,12 @@
 /**
- * Referral Collective membership discounts.
+ * Fee discounts.
+ *
+ * Started life as Referral Collective membership discounts and now covers
+ * every fee the brokerages charge: the RC annual membership, the CRC
+ * onboarding fee and the CRC monthly fee. `fee_type` on each row says which
+ * one it touches, so a promo on the monthly fee can never come off an
+ * onboarding invoice. The table keeps its original name; the filename and
+ * table name are historical, the contents are not.
  *
  * One place decides which discount applies and how many dollars come off, so
  * the price on the public pricing page, the price on the onboarding step and
@@ -12,6 +19,17 @@
 
 import { CENTRAL_TIME_ZONE } from '@/lib/timezone'
 
+/** Which fee a discount comes off. */
+export type FeeType = 'rc_annual' | 'crc_onboarding' | 'crc_monthly'
+
+export const FEE_TYPES: FeeType[] = ['rc_annual', 'crc_onboarding', 'crc_monthly']
+
+export const FEE_TYPE_LABELS: Record<FeeType, string> = {
+  rc_annual: 'Referral Collective annual membership',
+  crc_onboarding: 'Collective Realty Co. onboarding fee',
+  crc_monthly: 'Collective Realty Co. monthly fee',
+}
+
 export type DiscountAudience = 'all' | 'crc_conversion' | 'outside_only'
 export type DiscountType = 'amount' | 'percent'
 export type DiscountSchedule = 'once' | 'monthly' | 'yearly'
@@ -23,6 +41,13 @@ export interface ReferralDiscount {
   id: string
   name: string
   description: string | null
+  fee_type: FeeType
+  /**
+   * Monthly-fee promos only. False means every invoice inside the window is
+   * discounted; true means each agent gets it on one invoice and pays full
+   * price afterwards, even while the promo is still running.
+   */
+  first_invoice_only: boolean
   audience: DiscountAudience
   discount_type: DiscountType
   amount: number
@@ -45,6 +70,9 @@ export interface ResolvedDiscount {
   /** What the agent actually pays, after the discount. */
   finalPrice: number
   audience: DiscountAudience
+  feeType: FeeType
+  /** Monthly promos: true when each agent may use this on one invoice only. */
+  firstInvoiceOnly: boolean
 }
 
 export const DISCOUNT_AUDIENCE_LABELS: Record<DiscountAudience, string> = {
@@ -181,10 +209,17 @@ export function resolveReferralDiscount(
   discounts: ReferralDiscount[],
   audience: PricingAudience,
   fee: number,
-  now: Date = new Date()
+  now: Date = new Date(),
+  feeType: FeeType = 'rc_annual',
+  options: { excludeDiscountIds?: Set<string> } = {}
 ): ResolvedDiscount | null {
+  const excluded = options.excludeDiscountIds
   const applicable = (discounts || []).filter(
-    d => (d.audience === 'all' || d.audience === audience) && isDiscountActiveOn(d, now)
+    d =>
+      (d.fee_type || 'rc_annual') === feeType &&
+      !excluded?.has(d.id) &&
+      (d.audience === 'all' || d.audience === audience) &&
+      isDiscountActiveOn(d, now)
   )
   if (applicable.length === 0) return null
 
@@ -215,6 +250,8 @@ export function resolveReferralDiscount(
     amountOff: bestValue,
     finalPrice: Math.round(Math.max(fee - bestValue, 0) * 100) / 100,
     audience: best.audience,
+    feeType: (best.fee_type || 'rc_annual') as FeeType,
+    firstInvoiceOnly: !!best.first_invoice_only,
   }
 }
 
@@ -271,4 +308,4 @@ export function describeDiscountAmount(discount: ReferralDiscount): string {
 
 /** Columns every route needs when reading discounts. */
 export const REFERRAL_DISCOUNT_COLUMNS =
-  'id, name, description, audience, discount_type, amount, schedule_type, starts_on, ends_on, start_month, start_day, end_month, end_day, repeat_until, is_active'
+  'id, name, description, fee_type, first_invoice_only, audience, discount_type, amount, schedule_type, starts_on, ends_on, start_month, start_day, end_month, end_day, repeat_until, is_active'

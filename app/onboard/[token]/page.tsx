@@ -483,6 +483,25 @@ export default function OnboardingPage() {
   const [paymentWaived, setPaymentWaived] = useState(false)
   const [discountAmount, setDiscountAmount] = useState(0)
   const [discountName, setDiscountName] = useState('')
+  // What this specific agent owes, resolved server side: their agreed rate if
+  // they have one, otherwise a running promo, minus any credit they hold.
+  type StepPricing = {
+    fee_type: string
+    base_fee: number
+    standing_rate: number | null
+    discount_name: string | null
+    discount_amount: number
+    credit_applied: number
+    amount_due: number
+    monthly: {
+      base_fee: number
+      price: number
+      standing_rate: number | null
+      discount_name: string | null
+      discount_amount: number
+    } | null
+  }
+  const [pricing, setPricing] = useState<StepPricing | null>(null)
   const [isConversion, setIsConversion] = useState(false) // True if existing agent converting to referral
   const [step1Completed, setStep1Completed] = useState(false)
   const [completedSteps, setCompletedSteps] = useState<Record<number, boolean>>({})
@@ -640,6 +659,7 @@ export default function OnboardingPage() {
       if (data.session?.current_step > 1) setStep1Completed(true)
       if (data.session?.step_2_completed_at) setPaymentPaid(true)
       if (data.session?.payment_waived) setPaymentWaived(true)
+      if (data.pricing) setPricing(data.pricing)
       if (data.discount) {
         setDiscountAmount(Number(data.discount.amount_off) || 0)
         setDiscountName(data.discount.name || 'Promotion')
@@ -1126,7 +1146,6 @@ const checkout = new window.Payload.Checkout({
                       <option value="">Select</option>
                       <option value="HAR">HAR</option>
                       <option value="MetroTex | NTREIS">MetroTex | NTREIS</option>
-                      <option value="Both">Both</option>
                     </select>
                   </div>
                   <div className="md:col-span-2">
@@ -1434,17 +1453,27 @@ const checkout = new window.Payload.Checkout({
                           </p>
                         </>
                       )}
+                      {pricing?.standing_rate != null && (
+                        <p className="text-xs font-semibold text-green-700 mt-1">Agreed rate</p>
+                      )}
+                      {!!pricing?.credit_applied && pricing.credit_applied > 0 && (
+                        <p className="text-xs font-semibold text-green-700 mt-1">
+                          ${pricing.credit_applied.toFixed(2)} credit applied
+                        </p>
+                      )}
                     </div>
                     <div className="text-right">
-                      {discountAmount > 0 ? (
+                      {pricing && pricing.amount_due < pricing.base_fee ? (
                         <>
-                          <p className="text-xs text-luxury-gray-3 line-through">${referralSettings.annual_fee.toFixed(2)}</p>
+                          <p className="text-xs text-luxury-gray-3 line-through">${pricing.base_fee.toFixed(2)}</p>
                           <p className="text-sm font-semibold text-green-700">
-                            {discountAmount >= referralSettings.annual_fee ? 'FREE' : `$${(referralSettings.annual_fee - discountAmount).toFixed(2)}`}
+                            {pricing.amount_due <= 0 ? 'FREE' : `$${pricing.amount_due.toFixed(2)}`}
                           </p>
                         </>
                       ) : (
-                        <p className="text-sm font-semibold text-luxury-gray-1">${referralSettings.annual_fee.toFixed(2)}</p>
+                        <p className="text-sm font-semibold text-luxury-gray-1">
+                          ${(pricing?.amount_due ?? referralSettings.annual_fee).toFixed(2)}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -1457,7 +1486,20 @@ const checkout = new window.Payload.Checkout({
                           One-time fee to join {standardSettings.agency_name}
                         </p>
                       </div>
-                      <p className="text-sm font-semibold text-luxury-gray-1">${standardSettings.onboarding_fee.toFixed(2)}</p>
+                      <div className="text-right">
+                        {pricing && pricing.amount_due < pricing.base_fee ? (
+                          <>
+                            <p className="text-xs text-luxury-gray-3 line-through">${pricing.base_fee.toFixed(2)}</p>
+                            <p className="text-sm font-semibold text-green-700">
+                              {pricing.amount_due <= 0 ? 'FREE' : `$${pricing.amount_due.toFixed(2)}`}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-sm font-semibold text-luxury-gray-1">
+                            ${(pricing?.amount_due ?? standardSettings.onboarding_fee).toFixed(2)}
+                          </p>
+                        )}
+                      </div>
                     </div>
                     {!monthlyFeeWaived && (
                     <div className="inner-card flex items-center justify-between">
@@ -1480,7 +1522,8 @@ const checkout = new window.Payload.Checkout({
                           const now = new Date()
                           const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
                           const remaining = dim - now.getDate() + 1
-                          return `$${(Math.round((standardSettings.monthly_fee / dim) * remaining * 100) / 100).toFixed(2)}`
+                          const monthlyRate = pricing?.monthly?.price ?? standardSettings.monthly_fee
+                          return `$${(Math.round((monthlyRate / dim) * remaining * 100) / 100).toFixed(2)}`
                         })()}
                       </p>
                     </div>
@@ -1494,7 +1537,7 @@ const checkout = new window.Payload.Checkout({
                     ? 'Processing fees are passed to the payer. Annual membership renews each year.'
                     : monthlyFeeWaived
                     ? 'Processing fees are passed to the payer. Your monthly fee is waived.'
-                    : `Processing fees are passed to the payer. Monthly fees of $${standardSettings.monthly_fee} are due by the 5th of each month thereafter.`}
+                    : `Processing fees are passed to the payer. Monthly fees of $${pricing?.monthly?.price ?? standardSettings.monthly_fee} are due by the 5th of each month thereafter.`}
                 </p>
               </div>
             </div>

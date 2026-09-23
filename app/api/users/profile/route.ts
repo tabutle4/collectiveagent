@@ -208,6 +208,25 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/**
+ * A standing rate is a nullable numeric column, so a cleared field has to
+ * arrive as null rather than '' - Postgres rejects an empty string for numeric
+ * and the whole save would fail with a type error the form could not explain.
+ * A negative rate is treated as cleared rather than stored.
+ */
+const STANDING_RATE_FIELDS = [
+  'onboarding_fee_override',
+  'monthly_fee_override',
+  'rc_annual_fee_override',
+]
+
+function standingRate(value: any): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 0) return null
+  return Math.round(parsed * 100) / 100
+}
+
 export async function PATCH(request: NextRequest) {
   const auth = await requireAuth(request)
   if (auth.error) return auth.error
@@ -259,7 +278,9 @@ export async function PATCH(request: NextRequest) {
           filteredUpdates[key] =
             key === 'dashboard_links'
               ? sanitizeDashboardLinks(updates[key])
-              : updates[key]
+              : STANDING_RATE_FIELDS.includes(key)
+                ? standingRate(updates[key])
+                : updates[key]
         }
       }
       const { error } = await supabaseAdmin.from('users').update(filteredUpdates).eq('id', id)
@@ -347,6 +368,11 @@ export async function PATCH(request: NextRequest) {
         'revenue_share',
         // Billing and compliance flags
         'monthly_fee_waived',
+        // Standing rates. Null means the agent pays the standard fee; a number
+        // replaces it and suppresses any promo (see lib/fees.ts).
+        'onboarding_fee_override',
+        'monthly_fee_override',
+        'rc_annual_fee_override',
         'waive_buyer_processing_fees',
         'waive_seller_processing_fees',
         'half_buyer_processing_fees',

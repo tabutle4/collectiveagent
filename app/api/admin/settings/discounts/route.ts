@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
-import { REFERRAL_DISCOUNT_COLUMNS } from '@/lib/referralDiscounts'
+import { FEE_TYPES, REFERRAL_DISCOUNT_COLUMNS } from '@/lib/referralDiscounts'
 
 export const dynamic = 'force-dynamic'
 
 const AUDIENCES = ['all', 'crc_conversion', 'outside_only']
+const FEE_TYPE_VALUES: string[] = FEE_TYPES
 const DISCOUNT_TYPES = ['amount', 'percent']
 const SCHEDULES = ['once', 'monthly', 'yearly']
 
@@ -46,6 +47,7 @@ function optionalDate(value: any): string | null {
  */
 function buildRow(discount: any) {
   const audience = AUDIENCES.includes(discount.audience) ? discount.audience : 'all'
+  const feeType = FEE_TYPE_VALUES.includes(discount.fee_type) ? discount.fee_type : 'rc_annual'
   const discountType = DISCOUNT_TYPES.includes(discount.discount_type)
     ? discount.discount_type
     : 'amount'
@@ -62,6 +64,11 @@ function buildRow(discount: any) {
   return {
     name: String(discount.name || '').trim(),
     description: discount.description ? String(discount.description).trim() : null,
+    fee_type: feeType,
+    // Only the monthly fee recurs, so only a monthly-fee promo can be limited
+    // to one invoice per agent. Anywhere else the flag would never be read, and
+    // storing it would suggest a rule that does not exist.
+    first_invoice_only: feeType === 'crc_monthly' ? discount.first_invoice_only === true : false,
     audience,
     discount_type: discountType,
     amount,

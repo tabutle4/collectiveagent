@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAgentInvoice } from '@/lib/payload/agentInvoice'
 import { isInvoiceForTargetMonth } from '@/lib/payload/agentInvoiceList'
 import { requireCronSecret } from '@/lib/api-auth'
+import { commitPricing, priceFeeForUser } from '@/lib/fees'
+import { supabaseAdmin } from '@/lib/supabase'
 
 // The loop is sequential over every eligible agent and now makes one more
 // Payload round trip each, to read the new invoice back. Matching the app's
@@ -41,7 +43,7 @@ export async function GET(request: NextRequest) {
     const { data: agents } = await supabase
       .from('users')
       .select(
-        'id, payload_payee_id, first_name, preferred_first_name, last_name, preferred_last_name, mls_choice'
+        'id, payload_payee_id, first_name, preferred_first_name, last_name, preferred_last_name, mls_choice, monthly_fee_override, onboarding_fee_override, rc_annual_fee_override, monthly_fee_paid_through'
       )
       .eq('status', 'active')
       .eq('is_active', true)
@@ -68,8 +70,17 @@ export async function GET(request: NextRequest) {
 
     let created = 0
     let skipped = 0
+    let coveredWithoutInvoice = 0
     const errors: string[] = []
     const unconfirmed: string[] = []
+
+    // Last day of the month being billed, used when a credit or a $0 rate
+    // covers the whole month and no invoice is raised: nothing will ever be
+    // paid for that month, so the agent has to be marked paid here or the app
+    // shows them overdue for a month they do not owe.
+    const billedMonthEnd = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0)
+      .toISOString()
+      .split('T')[0]
 
     for (const agent of eligibleAgents) {
       try {
@@ -92,6 +103,51 @@ export async function GET(request: NextRequest) {
           continue
         }
 
+        const agentName = `${agent.preferred_first_name || agent.first_name} ${agent.preferred_last_name || agent.last_name}`
+
+        // Already settled for the month being billed. This has to come before
+        // pricing: an agent whose credit covered the month has no invoice for
+        // the Payload duplicate check above to find, so without this a re-run
+        // would spend their credit a second time or bill them for a month the
+        // app already shows as paid.
+        if (agent.monthly_fee_paid_through && agent.monthly_fee_paid_through >= billedMonthEnd) {
+          skipped++
+          continue
+        }
+
+        // This agent's own rate: a standing rate if they have one, otherwise a
+        // running promo, then any credit they are holding.
+        const pricing = await priceFeeForUser({
+          userId: agent.id,
+          feeType: 'crc_monthly',
+          baseFee: monthlyFee,
+          user: agent,
+        })
+
+        // Nothing to bill. Do not send Payload a zero dollar invoice - mark the
+        // month paid, spend whatever credit covered it, and move on.
+        if (pricing.amountDue <= 0) {
+          await commitPricing(pricing, agent.id, `monthly:${monthName} ${year}`)
+          const currentPaidThrough = agent.monthly_fee_paid_through
+          if (!currentPaidThrough || currentPaidThrough < billedMonthEnd) {
+            await supabaseAdmin
+              .from('users')
+              .update({ monthly_fee_paid_through: billedMonthEnd })
+              .eq('id', agent.id)
+          }
+          coveredWithoutInvoice++
+          continue
+        }
+
+        const lineDescription = [
+          targetDescription,
+          pricing.standingRate !== null ? '(agreed rate)' : '',
+          pricing.discount ? `($${pricing.discount.amountOff} off - ${pricing.discount.name})` : '',
+          pricing.creditApplied > 0 ? `($${pricing.creditApplied} credit applied)` : '',
+        ]
+          .filter(Boolean)
+          .join(' ')
+
         // The monthly fee is the one agent invoice autopay is allowed to
         // collect, so this is the only caller that passes true.
         const result = await createAgentInvoice(
@@ -102,14 +158,12 @@ export async function GET(request: NextRequest) {
             customer_id: agent.payload_payee_id,
             description: targetDescription,
             'items[0][type]': 'Monthly Fee',
-            'items[0][description]': targetDescription,
-            'items[0][amount]': monthlyFee.toString(),
+            'items[0][description]': lineDescription,
+            'items[0][amount]': pricing.amountDue.toString(),
             'items[0][entry_type]': 'charge',
           }),
           { autopayAllowed: true }
         )
-
-        const agentName = `${agent.preferred_first_name || agent.first_name} ${agent.preferred_last_name || agent.last_name}`
 
         if (!result.ok) {
           errors.push(`${agentName}: ${result.error?.message}`)
@@ -125,6 +179,11 @@ export async function GET(request: NextRequest) {
         if (!result.autopayConfirmed) {
           unconfirmed.push(`${agentName} (${data?.id})`)
         }
+
+        // The invoice exists, so the credit that part-paid it is spent and a
+        // first-invoice-only promo is used up. Done before the payment link so
+        // a failed link does not leave the discount given away for free.
+        await commitPricing(pricing, agent.id, `invoice:${data.id}`)
 
         // Send payment link so Payload emails the agent
         await fetch('https://api.payload.com/payment_links/', {
@@ -146,12 +205,13 @@ export async function GET(request: NextRequest) {
     }
 
     console.log(
-      `Monthly invoices: ${created} created, ${skipped} skipped, ${errors.length} errors, ${unconfirmed.length} with an unconfirmed autopay setting`
+      `Monthly invoices: ${created} created, ${skipped} skipped, ${coveredWithoutInvoice} fully covered, ${errors.length} errors, ${unconfirmed.length} with an unconfirmed autopay setting`
     )
     return NextResponse.json({
       success: true,
       created,
       skipped,
+      covered_without_invoice: coveredWithoutInvoice,
       target_month: `${monthName} ${year}`,
       fee_amount: monthlyFee,
       errors: errors.length ? errors : undefined,

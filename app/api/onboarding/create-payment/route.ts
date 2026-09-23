@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { createAgentInvoice } from '@/lib/payload/agentInvoice'
-import {
-  REFERRAL_DISCOUNT_COLUMNS,
-  ReferralDiscount,
-  resolveReferralDiscount,
-} from '@/lib/referralDiscounts'
+import { PricingAudience } from '@/lib/referralDiscounts'
+import { commitPricing, planCredits, priceFeeForUser, releaseCreditsFor } from '@/lib/fees'
 
 const plAuth = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
@@ -31,7 +28,9 @@ export async function POST(request: NextRequest) {
     // Authenticate by campaign_token
     const { data: prospect, error: prospectError } = await supabaseAdmin
       .from('users')
-      .select('id, first_name, last_name, email, payload_payee_id, mls_choice, monthly_fee_waived')
+      .select(
+        'id, first_name, last_name, email, payload_payee_id, mls_choice, monthly_fee_waived, onboarding_fee_override, monthly_fee_override, rc_annual_fee_override'
+      )
       .eq('campaign_token', token)
       .single()
 
@@ -54,35 +53,96 @@ export async function POST(request: NextRequest) {
       .eq('user_id', prospect.id)
       .single()
 
-    let discountAmount = 0
-    let discountName: string | null = null
-    if (isReferralAgent) {
-      if (session?.previous_mls_choice || session?.payment_waived) {
-        discountAmount = Number(session.discount_amount || 0)
-        discountName = session.discount_name || null
-      } else {
-        const { data: discountRows } = await supabaseAdmin
-          .from('referral_discounts')
-          .select(REFERRAL_DISCOUNT_COLUMNS)
-          .eq('is_active', true)
+    const feeType = isReferralAgent ? 'rc_annual' : 'crc_onboarding'
+    const baseFee = isReferralAgent ? referralAnnualFee : standardOnboardingFee
+    const audience: PricingAudience = session?.previous_mls_choice
+      ? 'crc_conversion'
+      : 'outside_only'
 
-        const resolved = resolveReferralDiscount(
-          (discountRows || []) as unknown as ReferralDiscount[],
-          'outside_only',
-          referralAnnualFee
-        )
-        discountAmount = resolved?.amountOff || 0
-        discountName = resolved?.name || null
-      }
+    // Standing rate, then promo, then credits. lib/fees is the only thing that
+    // decides which of those applies, so this route cannot disagree with the
+    // price the agent was shown on the step before.
+    const pricing = await priceFeeForUser({
+      userId: prospect.id,
+      feeType,
+      baseFee,
+      audience,
+      user: prospect,
+      applyCredits: false,
+    })
+
+    let discountAmount = pricing.discount?.amountOff || 0
+    let discountName = pricing.discount?.name || null
+    let feePrice = pricing.price
+
+    // A conversion keeps the amount snapshotted when it started, so a promo
+    // ending mid-onboarding does not change a price the agent was already
+    // quoted. A standing rate still beats the snapshot: it is the later,
+    // deliberate decision about what this one person pays.
+    if (
+      isReferralAgent &&
+      pricing.standingRate === null &&
+      (session?.previous_mls_choice || session?.payment_waived)
+    ) {
+      discountAmount = Number(session.discount_amount || 0)
+      discountName = session.discount_name || null
+      feePrice = Math.max(0, Math.round((baseFee - discountAmount) * 100) / 100)
     }
+
+    const credits = await planCredits(prospect.id, feeType, feePrice)
+    const feeDue = credits.amountDue
+
+    // The monthly fee carries its own standing rate and promos, so the prorated
+    // line is priced through the resolver rather than the flat company setting.
+    const monthlyPricing =
+      !isReferralAgent && !prospect.monthly_fee_waived
+        ? await priceFeeForUser({
+            userId: prospect.id,
+            feeType: 'crc_monthly',
+            baseFee: standardMonthlyFee,
+            audience,
+            user: prospect,
+            applyCredits: false,
+          })
+        : null
+
+    const billingNow = new Date()
+    const daysThisMonth = new Date(
+      billingNow.getFullYear(),
+      billingNow.getMonth() + 1,
+      0
+    ).getDate()
+    const daysLeftThisMonth = daysThisMonth - billingNow.getDate() + 1
+    const proratedDue = monthlyPricing
+      ? Math.round((monthlyPricing.price / daysThisMonth) * daysLeftThisMonth * 100) / 100
+      : 0
 
     // Nothing to charge. Waive the fee instead of sending a zero dollar bill
     // to Payload, whose documentation does not say what it does with one.
     // The onboarding page normally completes the payment step before an agent
     // ever gets here, so this is the backstop for a discount that became fully
     // covering between loading the page and pressing pay.
-    if (isReferralAgent && discountAmount >= referralAnnualFee) {
+    if (feeDue + proratedDue <= 0) {
       const waivedAt = new Date().toISOString()
+      // The credits still count as spent: they are what covered the fee.
+      await commitPricing(
+        { ...pricing, creditsUsed: credits.creditsUsed, creditApplied: credits.creditApplied, amountDue: 0 },
+        prospect.id,
+        'waived'
+      )
+      // Same reasoning as the invoice path: the monthly promo is not spent on
+      // a partial first month.
+      // No invoice means no Payload webhook, so the flags it would have set are
+      // written here. Without this the agent shows unpaid forever and the fee
+      // gate keeps them out of the app.
+      await supabaseAdmin
+        .from('users')
+        .update({
+          onboarding_fee_paid: true,
+          onboarding_fee_paid_date: waivedAt.split('T')[0],
+        })
+        .eq('id', prospect.id)
+
       await supabaseAdmin
         .from('onboarding_sessions')
         .update({
@@ -97,7 +157,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         payment_waived: true,
-        message: 'No payment is due. The membership fee is fully covered.',
+        message: 'No payment is due. The fee is fully covered.',
       })
     }
 
@@ -192,6 +252,12 @@ export async function POST(request: NextRequest) {
           headers: { Authorization: plAuth() },
         })
         const verifyData = await verifyRes.json().catch(() => null)
+        if (verifyRes.ok && verifyData?.status === 'closed') {
+          // That invoice is gone, so any credit spent on it goes back. Without
+          // this, reopening the payment step burns the credit against an
+          // invoice nobody paid and bills the agent the full amount instead.
+          await releaseCreditsFor(`invoice:${inv.id}`)
+        }
         if (!verifyRes.ok || verifyData?.status !== 'closed') {
           console.error(
             'Could not confirm closed status for stale onboarding invoice:',
@@ -250,48 +316,67 @@ export async function POST(request: NextRequest) {
       // Referral agent: $299 annual fee only, no monthly (minus any discount).
       // A discount covering the whole fee returned above as a waiver, so
       // finalAmount is always greater than zero here.
-      const finalAmount = Math.max(0, referralAnnualFee - discountAmount)
-      const description = discountAmount > 0
-        ? `Referral Collective Annual Membership ($${discountAmount} discount applied)`
+      const adjustments: string[] = []
+      if (pricing.standingRate !== null) adjustments.push('agreed rate')
+      else if (discountAmount > 0) adjustments.push(`$${discountAmount} discount applied`)
+      if (credits.creditApplied > 0) adjustments.push(`$${credits.creditApplied} credit applied`)
+      const description = adjustments.length
+        ? `Referral Collective Annual Membership (${adjustments.join(', ')})`
         : 'Referral Collective Annual Membership'
       params.append('description', description)
       params.append('items[0][type]', 'Annual Membership Fee')
       params.append('items[0][description]', description)
-      params.append('items[0][amount]', finalAmount.toString())
+      params.append('items[0][amount]', feeDue.toString())
       params.append('items[0][entry_type]', 'charge')
-      invoiceAmount = finalAmount
+      invoiceAmount = feeDue
     } else {
-      // Standard agent: $399 onboarding + prorated monthly
+      // Standard agent: onboarding fee + prorated monthly, both at whatever
+      // this agent's rate actually is.
       const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
       const today = now.getDate()
-      const remainingDays = daysInMonth - today + 1
 
       const pad = (n: number) => String(n).padStart(2, '0')
       const yy = String(now.getFullYear()).slice(2)
       const startLabel = `${pad(now.getMonth() + 1)}/${pad(today)}/${yy}`
       const endLabel = `${pad(now.getMonth() + 1)}/${pad(daysInMonth)}/${yy}`
-      // Agents with users.monthly_fee_waived set pay the onboarding fee only.
-      // Leaving proratedAmount at 0 skips the line item below and keeps
-      // invoiceAmount at the onboarding fee.
-      if (!prospect.monthly_fee_waived) {
+      // Agents with users.monthly_fee_waived set pay the onboarding fee only,
+      // and monthlyPricing is null for them, so proratedDue is already 0.
+      if (proratedDue > 0) {
         proratedLabel = `Prorated Monthly Fee - ${startLabel} to ${endLabel}`
-        proratedAmount = Math.round((standardMonthlyFee / daysInMonth) * remainingDays * 100) / 100
+        proratedAmount = proratedDue
       }
+
+      const adjustments: string[] = []
+      if (pricing.standingRate !== null) adjustments.push('agreed rate')
+      else if (discountAmount > 0) adjustments.push(`$${discountAmount} discount applied`)
+      if (credits.creditApplied > 0) adjustments.push(`$${credits.creditApplied} credit applied`)
+      const onboardingLabel = adjustments.length
+        ? `Non-Refundable Onboarding Fee (${adjustments.join(', ')})`
+        : 'Non-Refundable Onboarding Fee'
 
       params.append('description', 'Onboarding Invoice')
-      params.append('items[0][type]', 'Onboarding Fee')
-      params.append('items[0][description]', 'Non-Refundable Onboarding Fee')
-      params.append('items[0][amount]', standardOnboardingFee.toString())
-      params.append('items[0][entry_type]', 'charge')
 
-      if (proratedAmount > 0) {
-        params.append('items[1][type]', 'Monthly Fee (Prorated)')
-        params.append('items[1][description]', proratedLabel)
-        params.append('items[1][amount]', proratedAmount.toString())
-        params.append('items[1][entry_type]', 'charge')
+      // A line is only added when it carries money. An agreed rate of $0 or a
+      // credit that covers the onboarding fee leaves the prorated month as the
+      // only charge, and Payload's docs do not say what a zero dollar line
+      // does, so one is never sent.
+      let itemIndex = 0
+      if (feeDue > 0) {
+        params.append(`items[${itemIndex}][type]`, 'Onboarding Fee')
+        params.append(`items[${itemIndex}][description]`, onboardingLabel)
+        params.append(`items[${itemIndex}][amount]`, feeDue.toString())
+        params.append(`items[${itemIndex}][entry_type]`, 'charge')
+        itemIndex++
       }
 
-      invoiceAmount = standardOnboardingFee + proratedAmount
+      if (proratedAmount > 0) {
+        params.append(`items[${itemIndex}][type]`, 'Monthly Fee (Prorated)')
+        params.append(`items[${itemIndex}][description]`, proratedLabel)
+        params.append(`items[${itemIndex}][amount]`, proratedAmount.toString())
+        params.append(`items[${itemIndex}][entry_type]`, 'charge')
+      }
+
+      invoiceAmount = Math.round((feeDue + proratedAmount) * 100) / 100
     }
 
     // Step 3: Create the invoice.
@@ -319,6 +404,19 @@ export async function POST(request: NextRequest) {
     }
 
     const invoiceId = invoiceData.id
+
+    // The charge exists, so the credits that paid part of it are now spent and
+    // a first-invoice-only promo is now used. Done after creation on purpose:
+    // a failed invoice must not burn either.
+    await commitPricing(
+      { ...pricing, creditsUsed: credits.creditsUsed, creditApplied: credits.creditApplied, amountDue: feeDue },
+      prospect.id,
+      `invoice:${invoiceId}`
+    )
+    // Deliberately NOT committing monthlyPricing here. A first-invoice-only
+    // monthly promo is worth a whole month; this line is a few days of one, and
+    // retiring the promo on it would hand the agent a fraction of what it is
+    // worth. It is spent on their first full monthly invoice instead.
 
     // Step 4: Get checkout token. Onboarding payment is a one-time charge for
     // both standard and referral agents. No autopay setup here. Autopay opt-in
