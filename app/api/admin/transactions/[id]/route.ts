@@ -24,7 +24,7 @@ import {
 import { buildStatementEmail, buildCdaEmail } from '@/lib/email/buildTransactionEmails'
 import { getEmailLayout } from '@/lib/email/layout'
 import { fundingStatus, btsaTotalFromAgentRows, fundingExpectedLabel, effectiveAgentNetTotal, MATH_TOLERANCE } from '@/lib/transactions/funding'
-import { processPayout, previewPayout, payoutStatus, recentPayoutCredits } from '@/lib/payload/processPayout'
+import { processPayout, previewPayout, payoutStatus, recentPayoutCredits, voidPayout } from '@/lib/payload/processPayout'
 
 export const dynamic = 'force-dynamic'
 
@@ -3603,6 +3603,101 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         })
         .eq('id', internal_agent_id)
       return NextResponse.json({ success: true })
+    }
+
+    // ── Void a payout and release the row ────────────────────────────────────
+    // A payout that has been sent locks the row: processPayout refuses to send
+    // again while payment_sent_date is set. Until now the only way out was a
+    // Payload 404, so a payout voided in Payload's dashboard left the row stuck
+    // and the reconciliation email reporting the dead reference every morning.
+    //
+    // Order is deliberate. Payload is asked to void FIRST and the local row is
+    // released only once Payload has confirmed it. The reverse order would
+    // clear the guard while the money was still in flight, and the next click
+    // of Process Payout would send a second one.
+    if (action === 'void_payout') {
+      const voidAuth = await requirePermission(request, 'can_process_payouts')
+      if (voidAuth.error) return voidAuth.error
+      const { internal_agent_id } = body
+      if (!internal_agent_id) {
+        return NextResponse.json({ error: 'internal_agent_id required' }, { status: 400 })
+      }
+      const { data: voidTia } = await supabase
+        .from('transaction_internal_agents')
+        .select('id, payment_status, payment_sent_date, payment_reference')
+        .eq('id', internal_agent_id)
+        .eq('transaction_id', id)
+        .single()
+      if (!voidTia) {
+        return NextResponse.json({ error: 'Agent record not found on this deal' }, { status: 404 })
+      }
+      // A paid row means the money is recorded as gone and a ledger line may
+      // already exist for it. Unwinding that is a correction, not a void.
+      if (voidTia.payment_status === 'paid') {
+        return NextResponse.json(
+          { error: 'This row is already marked paid. Voiding is only for a payout that has not settled.' },
+          { status: 400 }
+        )
+      }
+      if (!voidTia.payment_sent_date) {
+        return NextResponse.json(
+          { error: 'No payout has been initiated for this row, so there is nothing to void.' },
+          { status: 400 }
+        )
+      }
+      if (!voidTia.payment_reference) {
+        return NextResponse.json(
+          { error: 'No Payload payout is recorded on this row, so there is nothing to void.' },
+          { status: 400 }
+        )
+      }
+      // `payment_reference` is a free-text "Reference / Check #" box on the
+      // Mark Paid modal as well as the field Process Payout writes, so it can
+      // hold a check number, a Zelle reference, or anything a person typed.
+      // Payload transaction ids are txn_-prefixed. Without this guard a
+      // hand-typed value that happened to look like a Payload id would be sent
+      // to Payload and could void somebody else's transaction. The
+      // reconciliation cron applies the same guard twice for the same reason.
+      if (!String(voidTia.payment_reference).startsWith('txn_')) {
+        return NextResponse.json(
+          {
+            error: `The reference on this row is "${voidTia.payment_reference}", which is not a Payload payout id. Only a payout sent through the app can be voided here.`,
+          },
+          { status: 400 }
+        )
+      }
+
+      const voided = await voidPayout(voidTia.payment_reference)
+      if (!voided.ok) {
+        return NextResponse.json({ error: voided.error || 'Could not void the payout' }, { status: 400 })
+      }
+
+      const { error: releaseError } = await supabase
+        .from('transaction_internal_agents')
+        .update({
+          payment_sent_date: null,
+          payment_sent_by: null,
+          payment_reference: null,
+          payload_funding_id: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', internal_agent_id)
+      if (releaseError) {
+        // The void succeeded at Payload, so the money is not moving. Saying so
+        // is better than a bare failure, because the row still needs clearing
+        // and the person has to know the void itself worked.
+        return NextResponse.json(
+          {
+            error: `The payout was voided at Payload, so no money is moving. This row could not be released: ${releaseError.message}. Press Check status, then Clear and allow retry.`,
+          },
+          { status: 500 }
+        )
+      }
+
+      return NextResponse.json({
+        success: true,
+        already_voided: !!voided.alreadyVoided,
+      })
     }
 
     // ── Mark all checks processed ────────────────────────────────────────────

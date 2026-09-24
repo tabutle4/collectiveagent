@@ -773,6 +773,14 @@ export async function previewPayout({
 // dashboard to answer "did this payout land."
 // ─────────────────────────────────────────────────────────────────────────
 
+export interface PayoutLedgerEntry {
+  id: string | null
+  amount: number | null
+  assoc_transaction_id: string | null
+  entry_type: string | null
+  processed_date: string | null
+}
+
 export interface PayoutStatusResult {
   ok: boolean
   error?: string
@@ -787,13 +795,68 @@ export interface PayoutStatusResult {
   fundingStatus?: string | null
   amount?: number | null
   processedDate?: string | null
+  /**
+   * The Payload funding transaction this payout settled inside - the single
+   * bank debit that carried it, and the thing a statement line can be matched
+   * against.
+   *
+   * NOT in Payload's object reference. Confirmed against live data on
+   * 2026-09-24: a settled credit carries a ledger entry whose
+   * `assoc_transaction_id` is the funding transaction seen in the dashboard's
+   * Deposits view, with `entry_type` 'reversal' because a payout batch debits
+   * the account. See claude/payload-void-and-batch-facts-sep24-2026.md.
+   */
+  fundingId?: string | null
+}
+
+/**
+ * Pick the funding (batch) entry out of a transaction's ledger array.
+ *
+ * A credit that has settled carries an entry pointing at the funding
+ * transaction. 'reversal' is preferred because that is the entry type a payout
+ * batch produces - the batch debits the account - but the array is not assumed
+ * to hold exactly one entry, and a transaction that has also been refunded
+ * will carry more. Anything without an `assoc_transaction_id` is not a link to
+ * a funding transaction and is skipped.
+ */
+function pickFundingEntry(ledger: PayoutLedgerEntry[]): PayoutLedgerEntry | null {
+  // Only a 'reversal' entry counts, and there is no fallback to "whichever
+  // entry came first".
+  //
+  // Payload does not publish the value set for `entry_type`, so the two values
+  // used here are the ones this app has actually observed: 'deposit' for money
+  // arriving (app/api/cron/payload/funding-sync/route.ts reads exactly that)
+  // and 'reversal' for the batch debit that carries a payout out. A refunded
+  // payout carries further entries, so the array is not assumed to hold one.
+  //
+  // Guessing is the dangerous option, not the safe one. A wrong
+  // assoc_transaction_id groups a payout into the wrong batch and posts a
+  // wrong total against a real bank line. Returning null just leaves the
+  // payout posting as its own ledger line, which is what happens today and is
+  // never wrong, only less convenient.
+  const reversal = ledger.find(
+    e => !!e.assoc_transaction_id && String(e.entry_type || '').toLowerCase() === 'reversal'
+  )
+  return reversal || null
 }
 
 export async function payoutStatus(paymentReference: string): Promise<PayoutStatusResult> {
   try {
-    const res = await fetch(`https://api.payload.com/transactions/${paymentReference}`, {
-      headers: { Authorization: plAuth() },
-    })
+    // `fields[]=*&fields[]=ledger` is what surfaces the funding transaction.
+    // Without it Payload returns the transaction alone and the batch link is
+    // invisible, which is why this was believed not to exist at all.
+    //
+    // The bracketed array form is the documented one
+    // (https://docs.payload.com/apis/api-design/) and the only form used
+    // anywhere else in this app - see app/api/cron/payload/funding-sync
+    // /route.ts, which fetches the identical transaction+ledger pair. A
+    // comma-separated `fields=*,ledger` is NOT documented, and if Payload
+    // ignores it the ledger array is simply absent, every funding id reads
+    // null, and batch grouping silently does nothing with no error anywhere.
+    const res = await fetch(
+      `https://api.payload.com/transactions/${paymentReference}?fields[]=*&fields[]=ledger`,
+      { headers: { Authorization: plAuth() } }
+    )
     if (res.status === 404) return { ok: true, notFound: true }
     const data = await res.json().catch(() => null)
     if (!res.ok) {
@@ -803,6 +866,16 @@ export async function payoutStatus(paymentReference: string): Promise<PayoutStat
           data?.error_description || data?.message || `Payload lookup failed (${res.status})`,
       }
     }
+    const ledger: PayoutLedgerEntry[] = Array.isArray(data?.ledger)
+      ? data.ledger.map((e: any) => ({
+          id: e?.id ?? null,
+          amount: typeof e?.amount === 'number' ? e.amount : null,
+          assoc_transaction_id: e?.assoc_transaction_id ?? null,
+          entry_type: e?.entry_type ?? null,
+          processed_date: e?.processed_date ?? null,
+        }))
+      : []
+    const funding = pickFundingEntry(ledger)
     return {
       ok: true,
       status: data?.status ?? null,
@@ -810,9 +883,103 @@ export async function payoutStatus(paymentReference: string): Promise<PayoutStat
       fundingStatus: data?.funding_status ?? null,
       amount: data?.amount ?? null,
       processedDate: data?.processed_date ?? null,
+      fundingId: funding?.assoc_transaction_id ?? null,
     }
   } catch (e: any) {
     return { ok: false, error: e?.message || 'Payload lookup failed' }
+  }
+}
+
+export interface VoidPayoutResult {
+  ok: boolean
+  error?: string
+  /** Payload's status after the call. 'voided' on success. */
+  status?: string | null
+  /** True when the payout was ALREADY voided, so nothing was changed. */
+  alreadyVoided?: boolean
+}
+
+/**
+ * Void a payout at Payload.
+ *
+ * Payload, Voids & Refunds (https://docs.payload.com/apis/voids-and-refunds/):
+ * "To cancel a recent payment before it settles, update its status to `voided`
+ * using the `PUT` method ... on the transaction object. If a payment has
+ * already settled, you can initiate a refund instead." And: "You can only void
+ * a payment while the transaction's `funding_status` is `pending`."
+ *
+ * That constraint is checked HERE rather than left to Payload, because the
+ * failure it produces otherwise arrives at the worst possible moment with no
+ * explanation of what to do instead. A settled payout needs a refund, which is
+ * a different transaction and a different conversation.
+ *
+ * This does NOT touch the local row. The caller clears the send fields only
+ * after Payload has confirmed the void, so a failed void can never leave a row
+ * that looks re-sendable while the money is still in flight.
+ */
+export async function voidPayout(paymentReference: string): Promise<VoidPayoutResult> {
+  if (!paymentReference) return { ok: false, error: 'No Payload reference on this row.' }
+
+  const before = await payoutStatus(paymentReference)
+  if (!before.ok) return { ok: false, error: before.error || 'Could not reach Payload.' }
+  if (before.notFound) {
+    return {
+      ok: false,
+      error:
+        'Payload has no payout with that reference. Use Clear and allow retry instead - there is nothing to void.',
+    }
+  }
+
+  const status = String(before.status || '').toLowerCase()
+  const funding = String(before.fundingStatus || '').toLowerCase()
+
+  // Already done. Reported rather than re-attempted, so pressing the button
+  // twice cannot turn a success into an error.
+  if (status === 'voided') return { ok: true, status: 'voided', alreadyVoided: true }
+
+  if (funding !== 'pending') {
+    return {
+      ok: false,
+      error:
+        funding === 'batched'
+          ? 'This payout has already settled, so it cannot be voided. It left the account in a Payload batch and has to be refunded instead.'
+          : `This payout cannot be voided: Payload reports its funding status as ${before.fundingStatus || '(none returned)'}, and a void is only possible while that reads pending.`,
+    }
+  }
+
+  try {
+    const res = await fetch(`https://api.payload.com/transactions/${paymentReference}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: plAuth(),
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({ status: 'voided' }),
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) {
+      return {
+        ok: false,
+        error:
+          describePayloadDetails(data?.details) ||
+          data?.error_description ||
+          data?.message ||
+          `Payload refused the void (${res.status})`,
+      }
+    }
+    const after = String(data?.status || '').toLowerCase()
+    if (after !== 'voided') {
+      // Payload answered 2xx but did not void. Refusing to report success is
+      // the whole point: the caller clears the send fields on ok, and doing
+      // that against a live payout would invite a duplicate payment.
+      return {
+        ok: false,
+        error: `Payload accepted the request but the payout still reads ${data?.status || 'unknown'}. Check it in Payload before re-sending.`,
+      }
+    }
+    return { ok: true, status: 'voided' }
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'Could not reach Payload to void the payout.' }
   }
 }
 

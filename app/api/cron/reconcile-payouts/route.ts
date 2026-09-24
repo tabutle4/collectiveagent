@@ -42,7 +42,13 @@ const KNOWN_FUNDING_STATUSES = new Set(['pending', 'captured', 'batched', 'refun
 // Documented Transaction status values that mean the payout did not or no
 // longer stands. Checked BEFORE funding_status, because a rejection arrives
 // after funding_status has already read `batched`.
-const FAILED_STATUSES = new Set(['rejected', 'declined', 'voided'])
+// 'voided' is deliberately NOT in here. It is intercepted earlier and reported
+// in its own bucket, because a void is not a failure to investigate - it is a
+// payout somebody cancelled on purpose, and the only thing it needs is a
+// re-send. Leaving it in this set as well would be a second, unreachable claim
+// about the same status, and reordering the branches later would silently
+// restore the old behaviour of reporting it as a failure every morning.
+const FAILED_STATUSES = new Set(['rejected', 'declined'])
 
 // funding_status values that mean money came back after settling.
 const REVERSED_FUNDING = new Set(['refunded', 'reversed'])
@@ -57,6 +63,7 @@ interface TiaRow {
   payment_date: string | null
   payment_status: string | null
   agent_net: number | string | null
+  payload_funding_id: string | null
 }
 
 interface MarkedRow {
@@ -82,7 +89,7 @@ interface AttentionRow {
 }
 
 const TIA_FIELDS =
-  'id, transaction_id, agent_id, payment_reference, payment_method, funding_source, payment_date, payment_status, agent_net'
+  'id, transaction_id, agent_id, payment_reference, payment_method, funding_source, payment_date, payment_status, agent_net, payload_funding_id'
 
 const fmtMoney = (v: any) => {
   const n = parseFloat(v ?? 0) || 0
@@ -136,6 +143,13 @@ export async function GET(request: NextRequest) {
     const inFlight: InFlightRow[] = []
     const attention: AttentionRow[] = []
     const returned: AttentionRow[] = []
+    // Voided payouts get their own bucket rather than sitting in `attention`.
+    // A void is not a failure and not a thing to investigate - it is a payout
+    // somebody deliberately cancelled, and the only action it needs is a
+    // re-send. Mixed in with real problems it read as one, every morning,
+    // forever, because nothing here clears the reference. Tara's call,
+    // 2026-09-24: report it, do not clear it. A person presses the button.
+    const voided: AttentionRow[] = []
 
     // transaction_internal_agents holds 1,503 rows and grows with every deal,
     // so both selects page through fetchAllRows. A truncated page here would
@@ -232,6 +246,14 @@ export async function GET(request: NextRequest) {
       // Status is checked FIRST. A rejection arrives after funding_status has
       // already gone `batched`, so testing funding_status first would mark a
       // returned payout paid.
+      if (status === 'voided') {
+        voided.push({
+          ...l,
+          why: 'Voided in Payload. The money never left. Open the deal, press Check status, then Clear and allow retry to send it again.',
+        })
+        continue
+      }
+
       if (FAILED_STATUSES.has(status)) {
         attention.push({
           ...l,
@@ -316,6 +338,28 @@ export async function GET(request: NextRequest) {
         const drift =
           settledAmount !== null && Math.abs(settledAmount - recordedNet) > MATH_TOLERANCE
 
+        // The Payload batch this payout settled inside, captured here because
+        // this is the one place the app already has the transaction in hand.
+        // Fetching it later, per payout, on every ledger sync would be a
+        // polling loop re-reading a value that never changes once settled.
+        //
+        // Best effort on purpose: a payout that is genuinely paid must not be
+        // reported as a failure because a reporting column could not be
+        // written. Anything missed is picked up by the Pass B re-check.
+        if (lookup.fundingId) {
+          const { error: fundingError } = await supabaseAdmin
+            .from('transaction_internal_agents')
+            .update({ payload_funding_id: lookup.fundingId })
+            .eq('id', row.id)
+          if (fundingError) {
+            console.error(
+              'reconcile-payouts: could not store the Payload funding id for',
+              row.id,
+              fundingError.message
+            )
+          }
+        }
+
         marked.push({
           ...l,
           amount: fmtMoney(recordedNet),
@@ -376,6 +420,25 @@ export async function GET(request: NextRequest) {
       const status = String(lookup.status || '').toLowerCase()
       const funding = String(lookup.fundingStatus || '').toLowerCase()
 
+      // Backfill the batch id for a row that never came through Pass A - one
+      // somebody marked paid by hand rather than letting the reconciliation
+      // find it. Only written when it is missing, so this never overwrites a
+      // value Pass A already recorded, and never rewrites settled history.
+      if (lookup.fundingId && !row.payload_funding_id) {
+        const { error: backfillError } = await supabaseAdmin
+          .from('transaction_internal_agents')
+          .update({ payload_funding_id: lookup.fundingId })
+          .eq('id', row.id)
+          .is('payload_funding_id', null)
+        if (backfillError) {
+          console.error(
+            'reconcile-payouts: could not backfill the Payload funding id for',
+            row.id,
+            backfillError.message
+          )
+        }
+      }
+
       if (status === 'rejected' || REVERSED_FUNDING.has(funding)) {
         // Deliberately NOT unmarked. A money record does not reverse itself.
         returned.push({
@@ -386,11 +449,70 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // ── Pass C: outside brokerage payouts, batch id only ────────────────────
+    // Agent payouts pick up their Payload batch id in Pass A and Pass B. An
+    // outside brokerage payout never passes through either, because neither
+    // touches transaction_external_brokerages - so without this the column on
+    // that table could only ever be NULL and an outside brokerage could never
+    // join a batch, which is the one case it was added for.
+    //
+    // Deliberately narrow. This does NOT mark anything paid, does not report,
+    // and does not decide anything - Pass A's whole job is deciding, and doing
+    // it in two places is how two answers appear. It fills in one reporting
+    // column on rows a person already marked paid.
+    //
+    // Costs nothing today: 0 external payouts currently carry a txn_ reference.
+    const externalsNeedingBatch = await fetchAllRows<{
+      id: string
+      payment_reference: string | null
+      payload_funding_id: string | null
+    }>(
+      'transaction_external_brokerages',
+      'id, payment_reference, payload_funding_id',
+      {
+        filters: [
+          { type: 'eq', column: 'payment_status', value: 'paid' },
+          { type: 'not', column: 'payment_reference', value: null },
+          { type: 'is', column: 'payload_funding_id', value: null },
+          { type: 'gte', column: 'payment_date', value: watchFrom },
+        ],
+      }
+    )
+
+    for (const ext of externalsNeedingBatch) {
+      if (apiCalls >= MAX_PER_RUN) {
+        capped++
+        continue
+      }
+      // Same guard as both other passes: the reference box is free text and a
+      // check number is not ours to look up.
+      if (!String(ext.payment_reference || '').startsWith('txn_')) continue
+      apiCalls++
+      const lookup = await payoutStatus(ext.payment_reference as string)
+      if (!lookup.ok || !lookup.fundingId) continue
+      const { error: extError } = await supabaseAdmin
+        .from('transaction_external_brokerages')
+        .update({ payload_funding_id: lookup.fundingId })
+        .eq('id', ext.id)
+        .is('payload_funding_id', null)
+      if (extError) {
+        console.error(
+          'reconcile-payouts: could not store the Payload funding id for external',
+          ext.id,
+          extError.message
+        )
+      }
+    }
+
     // ── Morning email ───────────────────────────────────────────────────────
     // Skipped entirely on a quiet run. A daily no-op email trains people to
     // ignore it.
     const hasSomething =
-      marked.length > 0 || inFlight.length > 0 || attention.length > 0 || returned.length > 0
+      marked.length > 0 ||
+      inFlight.length > 0 ||
+      attention.length > 0 ||
+      returned.length > 0 ||
+      voided.length > 0
 
     if (hasSomething) {
       const th = (t: string) =>
@@ -415,6 +537,19 @@ export async function GET(request: NextRequest) {
              ['Agent', 'Deal', 'Amount', 'What happened'],
              returned
                .map(r => row([esc(r.agent), esc(r.deal), esc(r.amount), esc(r.why)]))
+               .join('')
+           )}`
+        )
+      }
+
+      if (voided.length > 0) {
+        sections.push(
+          `<p style="margin-top:14px;"><strong>Voided in Payload - needs re-sending</strong></p>
+           <p>These payouts were cancelled before they settled, so no money moved. Each one is still holding its old Payload reference, which is why it keeps appearing here. Clearing it on the deal page releases the row and lets the payout be sent again.</p>
+           ${table(
+             ['Agent', 'Deal', 'Amount', 'What to do'],
+             voided
+               .map(v => row([esc(v.agent), esc(v.deal), esc(v.amount), esc(v.why)]))
                .join('')
            )}`
         )
@@ -474,6 +609,7 @@ export async function GET(request: NextRequest) {
         `${inFlight.length} in flight`,
       ]
       if (returned.length > 0) subjectBits.unshift(`${returned.length} returned`)
+      if (voided.length > 0) subjectBits.push(`${voided.length} voided`)
       if (attention.length > 0) subjectBits.push(`${attention.length} need attention`)
 
       try {
@@ -506,6 +642,7 @@ export async function GET(request: NextRequest) {
       in_flight: inFlight.length,
       needs_attention: attention.length,
       returned_after_paid: returned.length,
+      voided_needing_resend: voided.length,
       email_sent: hasSomething,
       marked,
       in_flight_rows: inFlight,

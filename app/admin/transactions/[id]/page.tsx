@@ -3389,8 +3389,47 @@ export default function AdminTransactionDetailPage() {
     }
   }
 
+  // Void a payout that has not settled, then release the row so it can be
+  // sent again. The server asks Payload first and only clears the row once
+  // Payload confirms, so a failure here always leaves the row locked rather
+  // than re-sendable.
+  const voidPayoutRow = async (agent: any) => {
+    if (
+      !confirm(
+        `Void the payout to ${fmtName(agent.user)} in Payload and re-enable the payout button?\n\nThis only works while Payload still reports the payout as pending. Once it has settled it cannot be voided.`
+      )
+    )
+      return
+    setPayoutStatusById(prev => ({ ...prev, [agent.id]: { ...(prev[agent.id] || {}), loading: true } }))
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'void_payout', internal_agent_id: agent.id }),
+      })
+      const d = await res.json()
+      if (!res.ok) {
+        alert(d.error || 'Void failed')
+        setPayoutStatusById(prev => ({ ...prev, [agent.id]: { ...(prev[agent.id] || {}), loading: false } }))
+        return
+      }
+      if (d.already_voided) {
+        alert('That payout was already voided in Payload. The row has been released, so it can be sent again.')
+      }
+      setPayoutStatusById(prev => {
+        const next = { ...prev }
+        delete next[agent.id]
+        return next
+      })
+      await loadData()
+    } catch (err: any) {
+      alert(err?.message || 'Void failed')
+      setPayoutStatusById(prev => ({ ...prev, [agent.id]: { ...(prev[agent.id] || {}), loading: false } }))
+    }
+  }
+
   const clearPaymentSent = async (agent: any) => {
-    if (!confirm(`Clear the payment sent date for ${fmtName(agent.user)} and re-enable the payout button? Only do this when the status check shows no payout exists in Payload.`)) return
+    if (!confirm(`Clear the payment sent date for ${fmtName(agent.user)} and re-enable the payout button? Only do this when the status check shows the payout does not exist in Payload, or that it was voided.`)) return
     setPayoutStatusById(prev => ({ ...prev, [agent.id]: { ...(prev[agent.id] || {}), loading: true } }))
     try {
       const res = await fetch(`/api/admin/transactions/${id}`, {
@@ -5893,15 +5932,38 @@ export default function AdminTransactionDetailPage() {
                                             >
                                               {payoutStatusById[a.id]?.loading ? 'Checking...' : 'Check status'}
                                             </button>
-                                            {payoutStatusById[a.id]?.mode === 'reference' && payoutStatusById[a.id]?.not_found && (
-                                              <button
-                                                onClick={() => clearPaymentSent(a)}
-                                                disabled={payoutStatusById[a.id]?.loading}
-                                                className="btn btn-secondary text-[11px] px-2 py-0.5 disabled:opacity-50"
-                                              >
-                                                Clear and allow retry
-                                              </button>
-                                            )}
+                                            {/* Void is offered only while Payload still reports the
+                                                payout pending, because that is the only window in which
+                                                Payload permits one. Offering it after that produces a
+                                                refusal at the moment it matters most. */}
+                                            {payoutStatusById[a.id]?.mode === 'reference' &&
+                                              !payoutStatusById[a.id]?.not_found &&
+                                              String(payoutStatusById[a.id]?.status || '').toLowerCase() !== 'voided' &&
+                                              String(payoutStatusById[a.id]?.funding_status || '').toLowerCase() === 'pending' && (
+                                                <button
+                                                  onClick={() => voidPayoutRow(a)}
+                                                  disabled={payoutStatusById[a.id]?.loading}
+                                                  className="btn btn-secondary text-[11px] px-2 py-0.5 disabled:opacity-50"
+                                                  title="Cancel this payout in Payload and allow it to be sent again"
+                                                >
+                                                  Void payout
+                                                </button>
+                                              )}
+                                            {/* A payout voided in Payload used to offer nothing here,
+                                                because this only tested not_found. The row stayed locked
+                                                and the reconciliation email reported the dead reference
+                                                every morning. */}
+                                            {payoutStatusById[a.id]?.mode === 'reference' &&
+                                              (payoutStatusById[a.id]?.not_found ||
+                                                String(payoutStatusById[a.id]?.status || '').toLowerCase() === 'voided') && (
+                                                <button
+                                                  onClick={() => clearPaymentSent(a)}
+                                                  disabled={payoutStatusById[a.id]?.loading}
+                                                  className="btn btn-secondary text-[11px] px-2 py-0.5 disabled:opacity-50"
+                                                >
+                                                  Clear and allow retry
+                                                </button>
+                                              )}
                                           </div>
                                         )}
                                       </>

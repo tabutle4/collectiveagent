@@ -133,3 +133,25 @@ safe.
 Nothing auto-posts until `ledger_start_date` is set, which is done from the
 Start the ledger button on Money Movement rather than in SQL. Until then the
 Payouts Report keeps using the typed bank balance exactly as it does today.
+
+## 15_payout_batch_grouping.sql
+
+Additive. Adds `payload_funding_id` to `transaction_internal_agents` and
+`transaction_external_brokerages`.
+
+Runs BEFORE the code deploy, and the order is load bearing.
+
+Reversed, it breaks loudly and widely. `payload_funding_id` is in the SELECT list of the
+reconciliation cron (`TIA_FIELDS`) and of both payout queries in `lib/payouts/posting.ts`,
+and `fetchAllRows` throws on a query error. Against a database without the columns,
+PostgREST answers 42703 and the throw takes down the nightly ledger cron, the Catch up the
+ledger button, Start the ledger, the payouts report, and every Mark Paid that posts a ledger
+line. Nothing is written wrongly and it recovers the moment the SQL lands, but the app is
+visibly broken until then.
+
+Run in the stated order and none of that happens. The old code neither reads nor writes
+these columns, so running the SQL early is safe.
+
+The columns start empty and fill themselves: the 11:30 UTC reconciliation stores the id for
+every payout it marks paid, and backfills any already-paid row within the 30 day reversal
+window that is missing one. Nothing needs to be backfilled by hand.

@@ -23,6 +23,8 @@ interface LedgerRow {
   description: string
   amount: number
   transaction_id: string | null
+  property_address: string | null
+  agent_name: string | null
   bank_reference: string | null
   payment_method: string | null
   payment_method_label: string
@@ -261,9 +263,15 @@ export default function MoneyMovementPage() {
       return
     }
     const added =
-      (json.deposits?.added || 0) + (json.agent_payouts?.added || 0) + (json.external_payouts?.added || 0)
+      (json.deposits?.added || 0) +
+      (json.agent_payouts?.added || 0) +
+      (json.external_payouts?.added || 0) +
+      (json.batches?.added || 0)
     const removed =
-      (json.deposits?.reversed || 0) + (json.agent_payouts?.reversed || 0) + (json.external_payouts?.reversed || 0)
+      (json.deposits?.reversed || 0) +
+      (json.agent_payouts?.reversed || 0) +
+      (json.external_payouts?.reversed || 0) +
+      (json.batches?.reversed || 0)
     const review: string[] = json.left_for_review || []
     const base =
       added === 0 && removed === 0
@@ -506,7 +514,11 @@ export default function MoneyMovementPage() {
                                 {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                                 {row.category_label}
                                 <span className="text-xs text-luxury-gray-3">
-                                  ({row.children.length} deal{row.children.length === 1 ? '' : 's'})
+                                  ({row.children.length}{' '}
+                                  {row.category === 'agent_payout' || row.category === 'external_payout'
+                                    ? `payment${row.children.length === 1 ? '' : 's'}`
+                                    : `deal${row.children.length === 1 ? '' : 's'}`}
+                                  )
                                 </span>
                                 {row.warnings.length > 0 && (
                                   <span className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
@@ -524,6 +536,15 @@ export default function MoneyMovementPage() {
                               <span className="text-xs text-luxury-gray-3 ml-2">
                                 by {row.payment_method_label}
                               </span>
+                            )}
+                            {/* The deal and the person, looked up live rather
+                                than read out of a description written months
+                                ago. Only rendered when the line actually names
+                                one, so a transfer or a bill stays uncluttered. */}
+                            {(row.property_address || row.agent_name) && (
+                              <p className="text-xs text-luxury-gray-3 mt-0.5">
+                                {[row.agent_name, row.property_address].filter(Boolean).join(' - ')}
+                              </p>
                             )}
                           </td>
                           <td className="py-3 px-4 text-right font-medium text-green-700">
@@ -562,17 +583,24 @@ export default function MoneyMovementPage() {
                           row.children.map(child => (
                             <tr key={child.id} className="bg-luxury-cream">
                               <td className="py-2 px-4"></td>
-                              <td className="py-2 px-4 pl-10 text-xs text-luxury-gray-3">Deal</td>
+                              <td className="py-2 px-4 pl-10 text-xs text-luxury-gray-3">
+                                {child.category === 'agent_payout' || child.category === 'external_payout'
+                                  ? 'Paid'
+                                  : 'Deal'}
+                              </td>
                               <td className="py-2 px-4 text-xs text-luxury-gray-2">
                                 {child.transaction_id ? (
                                   <Link
                                     href={`/admin/transactions/${child.transaction_id}`}
                                     className="text-luxury-accent hover:underline"
                                   >
-                                    {child.description}
+                                    {child.property_address || child.description}
                                   </Link>
                                 ) : (
-                                  child.description
+                                  child.property_address || child.description
+                                )}
+                                {child.agent_name && (
+                                  <span className="text-luxury-gray-3"> - {child.agent_name}</span>
                                 )}
                               </td>
                               <td className="py-2 px-4"></td>

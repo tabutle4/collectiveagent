@@ -640,6 +640,7 @@ CREATE TABLE public.transaction_internal_agents (
   payment_sent_date date,
   payment_sent_by uuid,
   paid_by uuid,
+  payload_funding_id text,
   CONSTRAINT transaction_internal_agents_pkey PRIMARY KEY (id),
   CONSTRAINT transaction_internal_agents_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES public.transactions(id),
   CONSTRAINT transaction_internal_agents_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES public.users(id),
@@ -681,6 +682,7 @@ CREATE TABLE public.transaction_external_brokerages (
   federal_id_number text,
   notes text,
   side text CHECK ((side = ANY (ARRAY['buyer'::text, 'seller'::text, 'tenant'::text, 'landlord'::text])) OR side IS NULL),
+  payload_funding_id text,
   CONSTRAINT transaction_external_brokerages_pkey PRIMARY KEY (id),
   CONSTRAINT transaction_external_brokerages_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES public.transactions(id)
 );

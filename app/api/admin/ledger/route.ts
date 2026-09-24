@@ -35,6 +35,10 @@ type LedgerRow = {
   description: string
   amount: number
   transaction_id: string | null
+  /** The deal's address, resolved from `transactions`, not from the check. */
+  property_address: string | null
+  /** Who was paid, when the line names one. */
+  agent_name: string | null
   bank_reference: string | null
   payment_method: string | null
   payment_method_label: string
@@ -49,7 +53,12 @@ type LedgerRow = {
   warnings: { transaction_id: string | null; property_address: string | null; warning: string }[]
 }
 
-function shape(r: any, children: LedgerRow[] = [], warnings: LedgerRow['warnings'] = []): LedgerRow {
+function shape(
+  r: any,
+  children: LedgerRow[] = [],
+  warnings: LedgerRow['warnings'] = [],
+  lookups?: { address: Map<string, string>; agent: Map<string, string> }
+): LedgerRow {
   return {
     id: r.id,
     entry_date: r.entry_date,
@@ -59,6 +68,8 @@ function shape(r: any, children: LedgerRow[] = [], warnings: LedgerRow['warnings
     description: r.description,
     amount: Number(r.amount || 0),
     transaction_id: r.transaction_id ?? null,
+    property_address: (r.transaction_id && lookups?.address.get(r.transaction_id)) || null,
+    agent_name: (r.agent_id && lookups?.agent.get(r.agent_id)) || null,
     bank_reference: r.bank_reference ?? null,
     payment_method: r.payment_method ?? null,
     payment_method_label: paymentMethodLabel(r.payment_method),
@@ -97,7 +108,7 @@ export async function GET(request: NextRequest) {
 
     const rows = await fetchAllRows<any>(
       'brokerage_ledger',
-      'id, entry_date, entry_type, category, subcategory, description, amount, transaction_id, parent_entry_id, bank_reference, bank_date, payment_method, reconciled, notes, created_at',
+      'id, entry_date, entry_type, category, subcategory, description, amount, transaction_id, agent_id, parent_entry_id, bank_reference, bank_date, payment_method, reconciled, notes, created_at',
       {
         filters: [
           { type: 'eq', column: 'account', value: DEFAULT_LEDGER_ACCOUNT },
@@ -148,13 +159,64 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Address and agent are resolved here rather than frozen into the
+    // description at posting time. A description written months ago cannot
+    // follow a corrected address, and the ledger has always stored the ids
+    // needed to look both up - it just never sent them.
+    const txnIdsOnRows = Array.from(
+      new Set(all.map(r => r.transaction_id).filter((v: any): v is string => !!v))
+    )
+    const agentIdsOnRows = Array.from(
+      new Set(all.map(r => r.agent_id).filter((v: any): v is string => !!v))
+    )
+    // Both lookups are chunked. `fetchAllRows` pages the response, but the id
+    // list goes into one `.in()` and PostgREST carries its filters in the
+    // query string, so the REQUEST grows with the number of ids. A wide date
+    // window on a busy ledger would build a URL past the 8 KB request line
+    // that common proxies default to, and it would fail as the ledger grew
+    // rather than on the day it shipped.
+    const ID_CHUNK = 100
+    const addressByTxn = new Map<string, string>()
+    for (let i = 0; i < txnIdsOnRows.length; i += ID_CHUNK) {
+      const txnRows = await fetchAllRows<{ id: string; property_address: string | null }>(
+        'transactions',
+        'id, property_address',
+        { filters: [{ type: 'in', column: 'id', value: txnIdsOnRows.slice(i, i + ID_CHUNK) }] }
+      )
+      for (const t of txnRows || []) {
+        if (t.property_address) addressByTxn.set(t.id, t.property_address)
+      }
+    }
+    const agentNameById = new Map<string, string>()
+    for (let i = 0; i < agentIdsOnRows.length; i += ID_CHUNK) {
+      const userRows = await fetchAllRows<{
+        id: string
+        first_name: string | null
+        last_name: string | null
+        preferred_first_name: string | null
+        preferred_last_name: string | null
+      }>('users', 'id, first_name, last_name, preferred_first_name, preferred_last_name', {
+        filters: [{ type: 'in', column: 'id', value: agentIdsOnRows.slice(i, i + ID_CHUNK) }],
+      })
+      for (const u of userRows || []) {
+        // Preferred name first, matching how every other screen addresses an
+        // agent.
+        const first = u.preferred_first_name || u.first_name || ''
+        const last = u.preferred_last_name || u.last_name || ''
+        const name = `${first} ${last}`.trim()
+        if (name) agentNameById.set(u.id, name)
+      }
+    }
+    const lookups = { address: addressByTxn, agent: agentNameById }
+
     const entries = parents.map(p =>
       shape(
         p,
         (childrenByParent[p.id] || [])
           .sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))
-          .map(c => shape(c)),
-        warningsByEntry[p.id] || []
+          .map(c => shape(c, [], [], lookups)),
+        warningsByEntry[p.id] || [],
+        lookups
       )
     )
 
