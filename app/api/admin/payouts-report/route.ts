@@ -7,6 +7,10 @@ import { SIDE_MODES_FILTER, pickSideSubmissions, deriveSideStatus, expectedSides
 import { officeNetState } from '@/lib/payouts/ledger'
 import { computeAutoHolds, computePayloadPending, isNotCleared, type HoldCheck } from '@/lib/payouts/holds'
 import { fetchChecklistProgress } from '@/lib/payouts/checklist'
+import { ledgerBalance } from '@/lib/payouts/position'
+import { DEFAULT_LEDGER_ACCOUNT } from '@/lib/payouts/ledger'
+import { billsDueWithin, billsDueTotal, type RecurringBill } from '@/lib/payouts/bills'
+import { syncPayoutsLedgerQuietly } from '@/lib/payouts/posting'
 
 export const dynamic = 'force-dynamic'
 
@@ -127,7 +131,12 @@ export async function GET(request: NextRequest) {
         ),
         fetchAllRows(
           'transaction_external_brokerages',
-          'transaction_id, brokerage_name, agent_name, commission_amount, payment_status, payment_date',
+          // `id` is read below to build the row the Mark Paid button posts
+          // back. It was missing from this list, so every external row reached
+          // the browser with `id: undefined`, the click sent no external_id,
+          // and the route answered 400. Every field read off a result has to
+          // be in that result's SELECT list.
+          'id, transaction_id, brokerage_name, agent_name, commission_amount, payment_status, payment_date',
           { filters: [{ type: 'in', column: 'transaction_id', value: txnIds }] }
         ),
         fetchAllRows(
@@ -475,6 +484,31 @@ export async function GET(request: NextRequest) {
       }
     )
 
+    // The ledger balance, and what the recurring bills say is about to leave.
+    // `ledgerBalance` is imported rather than re-summed here: three copies of a
+    // balance is how two screens come to disagree about the same dollar.
+    const ledger = await ledgerBalance()
+
+    const billRows = await fetchAllRows<RecurringBill>(
+      'recurring_bills',
+      'id, name, amount, days, last_day_of_month, window_start_day, window_end_day, shift_earlier_for_nonbusiness, active, account',
+      {
+        filters: [
+          { type: 'eq', column: 'active', value: true },
+          // This report is the payouts account. `account` exists on the table
+          // to keep the other accounts' bills out, and every live row happens
+          // to be 'payouts' today, which is exactly when a missing filter goes
+          // unnoticed until it does not.
+          { type: 'eq', column: 'account', value: DEFAULT_LEDGER_ACCOUNT },
+        ],
+      }
+    )
+    const billOccurrences = billsDueWithin(billRows || [], today, 14)
+    const billsDue = {
+      total: billsDueTotal(billOccurrences),
+      lines: billOccurrences,
+    }
+
     // Pending PM agent referral fees (payee_type = 'agent', status = 'pending').
     // Brokerage-payee rows are intentionally excluded: that portion stays in
     // the CRC bank and would double-count the reconciliation.
@@ -617,6 +651,18 @@ export async function GET(request: NextRequest) {
       unswept_office_net: Math.round(unsweptOfficeNet * 100) / 100,
       unswept_deals: unsweptDeals.sort((a, b) => b.amount - a.amount),
       office_net_unknown: officeNetUnknown,
+      // Once the ledger is started it is the balance, and the typed figure
+      // stops being the source of truth for this screen. Both are sent so the
+      // page can show which one it is using rather than silently switching.
+      ledger_balance: ledger.balance,
+      ledger_started: ledger.started,
+      ledger_start_date: ledger.startDate,
+      // Information beside the sweep, never subtracted. Settled spec section
+      // 8: a 14 day window, shown so a transfer decision is made knowing what
+      // is about to leave. Subtracting it would double count, because the bill
+      // is not owed to anyone yet.
+      bills_due_14_days: billsDue.total,
+      bills_due_lines: billsDue.lines,
     })
   } catch (error: any) {
     console.error('Payouts report error:', error)
@@ -672,6 +718,10 @@ export async function POST(request: NextRequest) {
         })
         .eq('id', external_id)
       if (error) throw error
+      // Money has left the payouts account, so record it now rather than at
+      // the next nightly run. Best effort for the same reason as Mark Paid:
+      // the brokerage has been paid either way.
+      await syncPayoutsLedgerQuietly(auth.user.id)
       return NextResponse.json({ success: true })
     }
 

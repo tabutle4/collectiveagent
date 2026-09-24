@@ -110,6 +110,12 @@ export default function MoneyMovementPage() {
   // them had a route and no way in. The first entry anyone needs is the
   // opening balance, and until it exists the account reads as zero.
   const [adding, setAdding] = useState(false)
+  const [ledgerStarted, setLedgerStarted] = useState<boolean | null>(null)
+  const [startOpen, setStartOpen] = useState(false)
+  const [startBalance, setStartBalance] = useState('')
+  const [starting, setStarting] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [syncNote, setSyncNote] = useState<string | null>(null)
   const [addCategory, setAddCategory] = useState('opening_balance')
   const [addAmount, setAddAmount] = useState('')
   const [addDate, setAddDate] = useState(today())
@@ -133,6 +139,9 @@ export default function MoneyMovementPage() {
       const json = await res.json()
       setRows(json.entries || [])
       setTotals(json.totals || { opening: 0, in: 0, out: 0, swept: 0, closing: 0 })
+      // An empty list cannot tell a ledger that has not been opened apart from
+      // a quiet fortnight, so the route says which it is.
+      setLedgerStarted(!!json.started)
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -237,6 +246,57 @@ export default function MoneyMovementPage() {
     balanceAfter[r.id] = Math.round(running * 100) / 100
   }
 
+  // Catch-up is idempotent, so pressing it twice is harmless. It exists
+  // because "is the ledger current?" is a question asked while looking at the
+  // screen, and the honest answer has to be available then rather than after
+  // the next nightly run.
+  async function runSync() {
+    setSyncing(true)
+    setSyncNote(null)
+    const res = await fetch('/api/admin/ledger/sync', { method: 'POST' })
+    const json = await res.json().catch(() => ({}))
+    setSyncing(false)
+    if (!res.ok) {
+      setSyncNote(json.error || 'Could not catch the ledger up')
+      return
+    }
+    const added =
+      (json.deposits?.added || 0) + (json.agent_payouts?.added || 0) + (json.external_payouts?.added || 0)
+    const removed =
+      (json.deposits?.reversed || 0) + (json.agent_payouts?.reversed || 0) + (json.external_payouts?.reversed || 0)
+    const review: string[] = json.left_for_review || []
+    const base =
+      added === 0 && removed === 0
+        ? 'Already up to date.'
+        : `Added ${added} line${added === 1 ? '' : 's'}${removed ? `, removed ${removed}` : ''}.`
+    // Saying "Already up to date" while the sync knows some records could not
+    // be posted is a false statement on the one screen anybody checks.
+    setSyncNote(
+      review.length > 0
+        ? `${base} ${review.length} record${review.length === 1 ? '' : 's'} could not be posted and need a look.`
+        : base
+    )
+    load()
+  }
+
+  async function startLedger() {
+    setStarting(true)
+    const res = await fetch('/api/admin/ledger/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ opening_balance: startBalance }),
+    })
+    const json = await res.json().catch(() => ({}))
+    setStarting(false)
+    if (!res.ok) {
+      alert(json.error || 'Could not start the ledger')
+      return
+    }
+    setStartOpen(false)
+    setLedgerStarted(true)
+    load()
+  }
+
   return (
     <div className="min-h-screen bg-luxury-cream p-6">
       <div className="max-w-7xl mx-auto">
@@ -245,6 +305,22 @@ export default function MoneyMovementPage() {
             <ArrowLeft size={20} />
           </Link>
           <h1 className="page-title">Money Movement</h1>
+          {hasPermission('can_manage_ledger') && ledgerStarted === false && (
+            <button onClick={() => setStartOpen(true)} className="btn btn-primary text-xs flex items-center gap-1.5">
+              Start the ledger
+            </button>
+          )}
+          {hasPermission('can_manage_ledger') && ledgerStarted === true && (
+            <button
+              onClick={runSync}
+              disabled={syncing}
+              className="btn btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50"
+              title="Look for anything that has happened but is not on the ledger yet"
+            >
+              {syncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              Catch up the ledger
+            </button>
+          )}
           <Link href="/admin/reports/payouts" className="text-xs text-luxury-accent hover:underline">
             Payouts Report
           </Link>
@@ -252,6 +328,48 @@ export default function MoneyMovementPage() {
             Bank Reconciliation
           </Link>
         </div>
+
+        {syncNote && (
+          <p className="text-xs text-luxury-gray-3 mb-4">{syncNote}</p>
+        )}
+
+        {startOpen && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+              <div className="px-5 py-4 border-b border-luxury-gray-5">
+                <h3 className="text-sm font-semibold text-luxury-gray-1">Start the ledger</h3>
+                <p className="text-xs text-luxury-gray-3 mt-0.5">
+                  From today, the balance is worked out from what comes in and goes out instead of
+                  being typed.
+                </p>
+              </div>
+              <div className="px-5 py-4 space-y-3">
+                <div>
+                  <label className="field-label">The bank's balance at the start of today</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={startBalance}
+                    onChange={e => setStartBalance(e.target.value)}
+                    className="input-luxury w-full text-xs"
+                    placeholder="0.00"
+                  />
+                </div>
+                <p className="text-xs text-luxury-gray-3">
+                  Use today's opening figure, not the balance right now. Everything dated today gets
+                  added on top of it, so a mid-morning figure would count this morning's activity
+                  twice.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2 px-5 py-4 border-t border-luxury-gray-5">
+                <button onClick={() => setStartOpen(false)} disabled={starting} className="btn btn-secondary text-xs">Cancel</button>
+                <button onClick={startLedger} disabled={starting || !startBalance} className="btn btn-primary text-xs">
+                  {starting ? 'Starting...' : 'Start the ledger'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <div className="container-card">

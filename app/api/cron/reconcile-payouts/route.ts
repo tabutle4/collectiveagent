@@ -29,9 +29,14 @@ const REVERSAL_WATCH_DAYS = 30
 
 // Payload's documented funding_status values
 // (docs.payload.com/apis/object-reference/transactions).
-// `batched` is the only one that means the money left CRC's operating
+// `batched` is the only one that means the money actually left the payouts
 // account. Anything outside this set is unknown to us and must never mark
 // money paid - it gets reported instead.
+//
+// This comment used to say "operating account". That was wrong: Tara states
+// that Payload ACH payouts leave the PAYOUTS account, which is why an agent
+// payout posts to the payouts ledger. Corrected rather than deleted, because
+// the wrong version was load bearing for a design decision.
 const KNOWN_FUNDING_STATUSES = new Set(['pending', 'captured', 'batched', 'refunded', 'reversed'])
 
 // Documented Transaction status values that mean the payout did not or no
@@ -255,10 +260,10 @@ export async function GET(request: NextRequest) {
 
       if (funding !== 'batched') {
         // captured, refunded, reversed. Documented, but none of them means the
-        // batch left CRC's operating account, which is Tara's rule for paid.
+        // batch left the payouts account, which is Tara's rule for paid.
         attention.push({
           ...l,
-          why: `Funding status is ${funding}, not batched, so the money has not left the operating account. Not marked paid.`,
+          why: `Funding status is ${funding}, not batched, so the money has not left the payouts account. Not marked paid.`,
         })
         continue
       }

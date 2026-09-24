@@ -681,6 +681,13 @@ export default function PayoutsReportPage() {
   const [landlordCollapsed, setLandlordCollapsed] = useState(false)
 
   const [bankBalance, setBankBalance] = useState('')
+  const [ledgerBalance, setLedgerBalance] = useState(0)
+  const [ledgerStarted, setLedgerStarted] = useState(false)
+  const [billsDue14, setBillsDue14] = useState(0)
+  const [payExpense, setPayExpense] = useState<{ id: string; description: string; amount: number | null } | null>(null)
+  const [payAmount, setPayAmount] = useState('')
+  const [payDate, setPayDate] = useState('')
+  const [paying, setPaying] = useState(false)
   const [holds, setHolds] = useState('')
   const [savingBalances, setSavingBalances] = useState(false)
   const [autoPayloadTotal, setAutoPayloadTotal] = useState(0)
@@ -734,6 +741,9 @@ export default function PayoutsReportPage() {
       setPmFees(json.pm_fees || [])
       setLandlordPayouts(json.landlord_payouts || [])
       setBankBalance(json.settings?.bank_balance?.toString() || '')
+      setLedgerBalance(Number(json.ledger_balance || 0))
+      setLedgerStarted(!!json.ledger_started)
+      setBillsDue14(Number(json.bills_due_14_days || 0))
       setHolds(json.settings?.funds_on_hold?.toString() || '')
       setAutoPayloadTotal(json.pending_payload_total || 0)
       setPayloadBreakdown(json.payload_breakdown || { commission_link: 0, retainer_link: 0, pm_rent: 0, other: 0 })
@@ -786,26 +796,41 @@ export default function PayoutsReportPage() {
   const expensesTotal    = expenses.reduce((s, e) => s + (e.amount || 0), 0)
   const pmFeesTotal      = pmFees.reduce((s, f) => s + f.amount, 0)
   const landlordTotal    = landlordPayouts.reduce((s, l) => s + l.amount, 0)
-  const grandTotal       = paidAgentTotal + holdAgentTotal + expensesTotal + pmFeesTotal + landlordTotal
+  // Landlord disbursements are deliberately NOT in here. That money lives in
+  // the trust account, not this one, so subtracting it claimed the payouts
+  // account owed something it was never holding. It becomes a claim on this
+  // account only once a transfer in from trust has been recorded, and that
+  // transfer is a ledger line like any other. Settled spec, section 6.
+  const grandTotal       = paidAgentTotal + holdAgentTotal + expensesTotal + pmFeesTotal
 
   const bank                  = parseFloat(bankBalance) || 0
   const manualHolds           = parseFloat(holds) || 0
   const holdsAmt              = autoHoldsTotal + manualHolds
   const payloadAmt            = autoPayloadTotal
-  const difference            = (bank + holdsAmt + payloadAmt) - grandTotal
+  // Once the ledger is started it IS the balance, and the typed figure stops
+  // being the source of truth for this screen. Before that it is still the
+  // only figure there is. Both are kept rather than one silently replacing the
+  // other, so nobody has to guess which number they are reading.
+  const availableFunds        = ledgerStarted ? ledgerBalance : bank
   // Waterfall values for the Bottom Line. What's left is `difference` by
   // construction: totalFunds - grandTotal, just presented top down.
-  const totalFunds            = bank + holdsAmt + payloadAmt
+  const totalFunds            = availableFunds + holdsAmt + payloadAmt
+  const difference            = totalFunds - grandTotal
   const agentCommissions      = paidAgentTotal + holdAgentTotal
   const brokerageAfterAgents  = totalFunds - agentCommissions
-  const afterPM               = brokerageAfterAgents - landlordTotal - pmFeesTotal
+  const afterPM               = brokerageAfterAgents - pmFeesTotal
 
   const saveBalances = async () => {
     setSavingBalances(true)
     await fetch('/api/admin/payouts-report', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bank_balance: bankBalance, funds_on_hold: holds }),
+      // Once the ledger is open the bank figure is no longer typed here, so
+      // sending it would stamp bank_balance_updated_at and put a fresh "last
+      // balanced" time on the Reconciliation screen that nobody entered.
+      body: JSON.stringify(
+        ledgerStarted ? { funds_on_hold: holds } : { bank_balance: bankBalance, funds_on_hold: holds }
+      ),
     })
     setSavingBalances(false)
   }
@@ -876,6 +901,41 @@ export default function PayoutsReportPage() {
       alert(json.error || 'Could not release that item')
       return
     }
+    load()
+  }
+
+  // Paid is the third ending, and the only one that moves money. Release stops
+  // reserving without changing any balance; Delete says it should never have
+  // existed. Neither of those could say a bill actually went out, which is why
+  // paying one could not be told apart from cancelling one.
+  const openPayExpense = (exp: { id: string; description: string; amount: number | null }) => {
+    setPayExpense(exp)
+    // Defaults to what was reserved, but it is editable, because the real
+    // figure routinely differs. Payload's ACH fee varies every month.
+    setPayAmount(exp.amount != null ? String(exp.amount) : '')
+    setPayDate(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }))
+  }
+
+  const confirmPayExpense = async () => {
+    if (!payExpense) return
+    setPaying(true)
+    const res = await fetch('/api/admin/payout-expenses', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: payExpense.id,
+        action: 'pay',
+        amount: payAmount,
+        paid_date: payDate,
+      }),
+    })
+    setPaying(false)
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}))
+      alert(json.error || 'Could not record that payment')
+      return
+    }
+    setPayExpense(null)
     load()
   }
 
@@ -1229,6 +1289,15 @@ export default function PayoutsReportPage() {
                       )}
                       {hasPermission('can_manage_ledger') && (
                         <button
+                          onClick={() => openPayExpense({ id: exp.id, description: exp.description, amount: exp.amount ?? null })}
+                          className="text-xs px-2 py-1 rounded border border-luxury-gray-5 text-luxury-gray-2 hover:bg-luxury-gray-5/40 transition-colors"
+                          title="Record that this money has left the account"
+                        >
+                          Paid
+                        </button>
+                      )}
+                      {hasPermission('can_manage_ledger') && (
+                        <button
                           onClick={() => releaseExpense(exp.id)}
                           className="text-xs px-2 py-1 rounded border border-luxury-gray-5 text-luxury-gray-2 hover:bg-luxury-gray-5/40 transition-colors"
                           title="Stop holding this money back"
@@ -1272,13 +1341,29 @@ export default function PayoutsReportPage() {
           {/* Bank balance */}
           <div className="inner-card">
             <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Bank Balance</p>
-            <div className="mb-3">
-              <label className="field-label">Payouts account</label>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-luxury-gray-3">$</span>
-                <input type="number" step="0.01" value={bankBalance} onChange={e => setBankBalance(e.target.value)} className="input-luxury flex-1" placeholder="0.00" />
+            {ledgerStarted ? (
+              <div className="mb-3">
+                <label className="field-label">Payouts account, from the ledger</label>
+                <div className="flex items-center justify-between">
+                  <span className="text-lg font-semibold text-luxury-gray-1">{fmt(ledgerBalance)}</span>
+                  <Link href="/admin/reports/money-movement" className="text-xs text-luxury-accent hover:underline">
+                    See the lines
+                  </Link>
+                </div>
+                <p className="text-xs text-luxury-gray-3 mt-1">
+                  Worked out from what came in and went out. Nothing to type. The bank statement is
+                  checked against this on the Bank Reconciliation screen.
+                </p>
               </div>
-            </div>
+            ) : (
+              <div className="mb-3">
+                <label className="field-label">Payouts account</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-luxury-gray-3">$</span>
+                  <input type="number" step="0.01" value={bankBalance} onChange={e => setBankBalance(e.target.value)} className="input-luxury flex-1" placeholder="0.00" />
+                </div>
+              </div>
+            )}
 
             {/* Holds - auto from uncleared checks, expandable */}
             <button type="button" onClick={() => setHoldsOpen(v => !v)} className="w-full flex items-center justify-between text-sm py-1">
@@ -1364,10 +1449,6 @@ export default function PayoutsReportPage() {
                 <span className="font-bold text-luxury-accent whitespace-nowrap">{fmt(brokerageAfterAgents)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-luxury-gray-2">- Landlord disbursements</span>
-                <span className="font-medium text-luxury-gray-1">-{fmt(landlordTotal)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
                 <span className="text-luxury-gray-2">- PM referral fees</span>
                 <span className="font-medium text-luxury-gray-1">-{fmt(pmFeesTotal)}</span>
               </div>
@@ -1422,6 +1503,12 @@ export default function PayoutsReportPage() {
                   Recheck our share on every deal
                 </button>
               )}
+              {billsDue14 > 0 && (
+                <p className="text-xs text-luxury-gray-3 mt-2">
+                  Bills due in the next 14 days: {fmt(billsDue14)}. Not subtracted, shown so a
+                  transfer is decided knowing what is about to leave.
+                </p>
+              )}
               {hasPermission('can_manage_sweeps') && (
                 <button
                   onClick={() => setSweepOpen(true)}
@@ -1442,6 +1529,7 @@ export default function PayoutsReportPage() {
 
       {sweepOpen && (
         <SweepDialog
+          bottomLine={difference}
           onClose={() => setSweepOpen(false)}
           onSwept={() => { setSweepOpen(false); load() }}
         />
@@ -1459,6 +1547,43 @@ export default function PayoutsReportPage() {
           onClose={() => setAgentMarkPaid(null)}
           onMarked={() => { setAgentMarkPaid(null); load() }}
         />
+      )}
+
+      {/* Record a payment against an item in Also In Payouts. The amount is
+          editable because the figure that actually leaves the bank routinely
+          differs from the one that was reserved. */}
+      {payExpense && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-luxury-gray-5">
+              <div>
+                <h2 className="text-sm font-semibold text-luxury-gray-1">Record This As Paid</h2>
+                <p className="text-xs text-luxury-gray-3 mt-0.5">{payExpense.description}</p>
+              </div>
+              <button onClick={() => setPayExpense(null)} className="text-luxury-gray-3 hover:text-luxury-gray-1"><X size={16} /></button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="field-label">Amount that left *</label>
+                  <input type="number" step="0.01" className="input-luxury text-xs" value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="0.00" />
+                </div>
+                <div>
+                  <label className="field-label">Date it left *</label>
+                  <input type="date" className="input-luxury text-xs" value={payDate} onChange={e => setPayDate(e.target.value)} />
+                </div>
+              </div>
+              <p className="text-xs text-luxury-gray-3">
+                This takes the money out of the ledger. To stop holding it back without paying
+                anything, use Release instead.
+              </p>
+            </div>
+            <div className="px-5 pb-5 flex gap-3">
+              <button onClick={() => setPayExpense(null)} disabled={paying} className="btn btn-secondary text-xs flex-1">Cancel</button>
+              <button onClick={confirmPayExpense} disabled={paying || !payAmount || !payDate} className="btn btn-primary text-xs flex-1">{paying ? 'Saving...' : 'Confirm Paid'}</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* External Mark Paid Modal */}

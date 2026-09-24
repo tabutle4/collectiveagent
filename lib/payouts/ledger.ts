@@ -20,6 +20,14 @@ export type LedgerEntryType = (typeof LEDGER_ENTRY_TYPES)[number]
 /**
  * `brokerage_ledger.category`. The real kind of thing that happened.
  * `entry_type` only says which way the balance moved.
+ *
+ * The four `transfer_in_*` reasons are deliberately separate rather than one
+ * `transfer_in`, because they do not mean the same thing to whoever reads the
+ * month. Commission that was banked to the income account and moved back is a
+ * CORRECTION and must never read as income arriving; money moved in to cover a
+ * shortfall is real money arriving. Collapsing them loses the distinction at
+ * the only moment anyone knows it. `transfer_in` is kept for entries recorded
+ * before the four existed.
  */
 export const LEDGER_CATEGORIES = [
   'opening_balance',
@@ -29,6 +37,10 @@ export const LEDGER_CATEGORIES = [
   'sweep',
   'bill',
   'transfer_in',
+  'transfer_in_trust',
+  'transfer_in_income_correction',
+  'transfer_in_shortfall',
+  'transfer_in_expenses',
   'transfer_out',
   'earmark_release',
   'adjustment_in',
@@ -46,6 +58,10 @@ const CATEGORY_LABELS: Record<LedgerCategory, string> = {
   sweep: 'Moved to our income account',
   bill: 'Bill paid',
   transfer_in: 'Money moved in',
+  transfer_in_trust: 'Moved in from trust, to send a landlord disbursement',
+  transfer_in_income_correction: 'Moved back from income, commission banked to the wrong account',
+  transfer_in_shortfall: 'Moved in to cover a shortfall',
+  transfer_in_expenses: 'Moved in from the expenses account',
   transfer_out: 'Money moved out',
   earmark_release: 'Money set aside, released',
   adjustment_in: 'Correction, money added',
@@ -86,6 +102,10 @@ const CATEGORY_DIRECTION: Record<LedgerCategory, 'in' | 'out' | 'none'> = {
   sweep: 'out',
   bill: 'out',
   transfer_in: 'in',
+  transfer_in_trust: 'in',
+  transfer_in_income_correction: 'in',
+  transfer_in_shortfall: 'in',
+  transfer_in_expenses: 'in',
   transfer_out: 'out',
   earmark_release: 'none',
   adjustment_in: 'in',
@@ -107,6 +127,10 @@ const CATEGORY_ENTRY_TYPE: Record<LedgerCategory, LedgerEntryType> = {
   sweep: 'transfer',
   bill: 'expense',
   transfer_in: 'transfer',
+  transfer_in_trust: 'transfer',
+  transfer_in_income_correction: 'transfer',
+  transfer_in_shortfall: 'transfer',
+  transfer_in_expenses: 'transfer',
   transfer_out: 'transfer',
   earmark_release: 'transfer',
   adjustment_in: 'transfer',

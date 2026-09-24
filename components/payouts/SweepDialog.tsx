@@ -39,9 +39,16 @@ function todayCentral(): string {
 export default function SweepDialog({
   onClose,
   onSwept,
+  bottomLine,
 }: {
   onClose: () => void
   onSwept: () => void
+  /**
+   * The Bottom Line as it stands before this transfer. Passed in rather than
+   * refetched so the warning below is measured against exactly the figure the
+   * person is looking at on the report behind this dialog.
+   */
+  bottomLine?: number
 }) {
   const [deals, setDeals] = useState<SweepDeal[]>([])
   const [loading, setLoading] = useState(true)
@@ -54,6 +61,10 @@ export default function SweepDialog({
   // nobody chose, and the point of this screen is that the record says what
   // actually happened.
   const [paymentMethod, setPaymentMethod] = useState('')
+  // For deals whose share left the account before the ledger was opened. Marks
+  // them as moved without recording a transfer today, because the opening
+  // balance already accounts for that money.
+  const [alreadyMoved, setAlreadyMoved] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -89,6 +100,17 @@ export default function SweepDialog({
   const total = chosen.reduce((s, d) => s + d.office_net, 0)
   const warned = chosen.filter(d => !d.ready && !d.refusal)
 
+  // Moving our share takes money out of the payouts account without changing
+  // what we owe, so the Bottom Line drops by exactly the amount transferred.
+  // Nothing in the sweep gates checks this: funds cleared, checklist and
+  // compliance all describe the DEAL, and none of them knows whether enough is
+  // left in the account to pay the agents afterwards.
+  //
+  // Warns, never blocks, like every other gate here.
+  const bottomLineAfter = bottomLine === undefined ? null : Math.round((bottomLine - total) * 100) / 100
+  const wouldGoShort =
+    !alreadyMoved && bottomLineAfter !== null && bottomLineAfter < 0 && total > 0
+
   const record = async () => {
     setSaving(true)
     setError(null)
@@ -101,6 +123,7 @@ export default function SweepDialog({
           transfer_date: transferDate,
           bank_reference: bankReference || null,
           payment_method: paymentMethod || null,
+          already_moved: alreadyMoved,
         }),
       })
       const json = await res.json()
@@ -218,6 +241,18 @@ export default function SweepDialog({
         </div>
 
         <div className="border-t border-luxury-gray-5 px-5 py-4">
+          <label className="flex items-start gap-2 mb-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={alreadyMoved}
+              onChange={e => setAlreadyMoved(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span className="text-xs text-luxury-gray-2">
+              This money already left, before the ledger was opened. Just mark the deals, do not
+              record a transfer.
+            </span>
+          </label>
           <div className="flex flex-wrap items-end gap-3 mb-3">
             <div className="w-40">
               <label className="field-label">Date it moved</label>
@@ -265,6 +300,14 @@ export default function SweepDialog({
 
           <div className="flex items-center justify-between gap-3">
             <div>
+              {wouldGoShort && (
+                <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 mb-3">
+                  <p className="text-xs text-amber-800">
+                    After this transfer the account is short {fmt(Math.abs(bottomLineAfter as number))} of
+                    covering everyone queued. You can still move it.
+                  </p>
+                </div>
+              )}
               <p className="text-xs text-luxury-gray-3 uppercase tracking-wide">Moving</p>
               <p className="text-lg font-bold text-luxury-gray-1">{fmt(total)}</p>
               <p className="text-xs text-luxury-gray-3">

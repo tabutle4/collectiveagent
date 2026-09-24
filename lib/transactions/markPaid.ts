@@ -2,6 +2,7 @@ import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { computeCommission } from '@/lib/transactions/math'
 import { num, recomputeOfficeNet, markDealChecksProcessed } from '@/lib/transactions/cascade'
 import { settlePayloadInvoiceForDebt } from '@/lib/payload/settleInvoiceForDebt'
+import { syncPayoutsLedgerQuietly } from '@/lib/payouts/posting'
 
 // ─── Mark agent paid (TIA) ───────────────────────────────────────────────────
 // Extracted verbatim from the `mark_paid` action in
@@ -281,6 +282,16 @@ export async function markAgentPaid(args: MarkAgentPaidArgs): Promise<MarkAgentP
   }
 
   await recomputeOfficeNet(id)
+
+  // Post the money leaving the payouts account, so the ledger is current the
+  // moment the payment is marked rather than at the next nightly run.
+  //
+  // Deliberately best effort and deliberately LAST. The agent has been paid
+  // and the row is written; a ledger line failing to post must not turn that
+  // into an error the caller reports as a failed payout. The nightly cron and
+  // the catch-up button both re-derive the identical line from this same row,
+  // so nothing is lost, and the failure is logged rather than swallowed.
+  await syncPayoutsLedgerQuietly(args.paidBy ?? null)
 
   return {
     alreadyPaid: false,

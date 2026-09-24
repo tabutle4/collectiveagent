@@ -82,13 +82,29 @@ export async function GET(request: NextRequest) {
     const from = single || searchParams.get('from') || today
     const to = single || searchParams.get('to') || today
 
+    // Whether the ledger has been opened at all. The page needs it to decide
+    // between offering Start the ledger and offering Catch up the ledger, and
+    // an empty entry list on its own cannot tell those apart from a quiet week.
+    const { data: settingsRow } = await supabaseAdmin
+      .from('company_settings')
+      .select('id, ledger_start_date')
+      .limit(1)
+      .maybeSingle()
+    const ledgerStart = settingsRow?.ledger_start_date
+      ? String(settingsRow.ledger_start_date).slice(0, 10)
+      : null
+    const ledgerStarted = !!ledgerStart
+
     const rows = await fetchAllRows<any>(
       'brokerage_ledger',
       'id, entry_date, entry_type, category, subcategory, description, amount, transaction_id, parent_entry_id, bank_reference, bank_date, payment_method, reconciled, notes, created_at',
       {
         filters: [
           { type: 'eq', column: 'account', value: DEFAULT_LEDGER_ACCOUNT },
-          { type: 'gte', column: 'entry_date', value: from },
+          // `from` is widened to the start date when the requested window
+          // reaches back before the ledger opened, so the register never lists
+          // a line the opening balance already accounts for.
+          { type: 'gte', column: 'entry_date', value: ledgerStart && from < ledgerStart ? ledgerStart : from },
           { type: 'lte', column: 'entry_date', value: to },
         ],
       }
@@ -148,15 +164,27 @@ export async function GET(request: NextRequest) {
     dayBefore.setUTCDate(dayBefore.getUTCDate() - 1)
     const priorCutoff = dayBefore.toISOString().slice(0, 10)
 
+    // The same start-date floor `ledgerBalance` applies, and for the same
+    // reason. Rows can exist from before the ledger was opened, and the
+    // opening balance is the bank's own figure, which already contains
+    // whatever they describe.
+    //
+    // This register and the Payouts Report must never disagree about one bank
+    // account. Flooring one and not the other is exactly how that happens: on
+    // live data three surviving pre-start rows would have put Money Movement
+    // $1,012.69 above the figure the report shows, permanently.
+    const priorFilters: Array<{ type: string; column: string; value: unknown }> = [
+      { type: 'eq', column: 'account', value: DEFAULT_LEDGER_ACCOUNT },
+      { type: 'lte', column: 'entry_date', value: priorCutoff },
+    ]
+    if (ledgerStart) {
+      priorFilters.push({ type: 'gte', column: 'entry_date', value: ledgerStart })
+    }
+
     const priorRows = await fetchAllRows<any>(
       'brokerage_ledger',
       'amount, category, parent_entry_id, entry_date',
-      {
-        filters: [
-          { type: 'eq', column: 'account', value: DEFAULT_LEDGER_ACCOUNT },
-          { type: 'lte', column: 'entry_date', value: priorCutoff },
-        ],
-      }
+      { filters: priorFilters as any }
     )
     const opening = (priorRows || [])
       .filter(r => !r.parent_entry_id)
@@ -177,7 +205,7 @@ export async function GET(request: NextRequest) {
       closing: Math.round((opening + movement) * 100) / 100,
     }
 
-    return NextResponse.json({ from, to, entries, totals })
+    return NextResponse.json({ from, to, entries, totals, started: ledgerStarted, start_date: ledgerStart })
   } catch (error: any) {
     console.error('Ledger read error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })

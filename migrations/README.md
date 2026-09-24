@@ -110,3 +110,26 @@ predate this reorganisation and are not fixed by it:
 - `types/tc-module.ts:5` references `deploy/sql/01_schema.sql`
 - `docs/FORM-BUILDER-SUMMARY.md` references `supabase-forms-schema.sql`
 - `docs/HEADSHOT-SETUP.md` references `supabase-headshot-schema.sql`
+
+## 14_ledger_autopost.sql
+
+Additive. Adds `company_settings.ledger_start_date` and widens
+`payout_expenses_status_check` to allow `paid`.
+
+Runs BEFORE the code deploy, and the order is load bearing in one direction.
+
+Reversed, the app is live against a database without `ledger_start_date`.
+`ledgerBalance()` selects that column, PostgREST answers 42703, and the
+Reconciliation screen and the nightly snapshot both read the ledger as zero
+until the SQL lands. Nothing is written wrongly and it self-corrects, but a
+snapshot row taken in that window records a zero ledger and has to be
+re-run. Marking an earmark Paid also fails outright, because the live CHECK
+still rejects `'paid'`.
+
+Run in the stated order and none of that happens. The old code neither reads
+the new column nor writes the new status value, so running the SQL early is
+safe.
+
+Nothing auto-posts until `ledger_start_date` is set, which is done from the
+Start the ledger button on Money Movement rather than in SQL. Until then the
+Payouts Report keeps using the typed bank balance exactly as it does today.

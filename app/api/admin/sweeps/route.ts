@@ -173,6 +173,16 @@ export async function POST(request: NextRequest) {
     // shared list does not recognise is stored as nothing rather than as a
     // word nobody can group on later.
     const paymentMethod = normalizePaymentMethod(body?.payment_method)
+    // Recording something that already happened, rather than moving money now.
+    //
+    // Needed because the stamp columns had no route into them except the sweep
+    // itself and hand-written SQL, and SQL is how 17 deals ended up stamped
+    // with no ledger line behind them. This gives that job a door.
+    //
+    // It stamps the deals and writes NO ledger entry, deliberately: the money
+    // left before the ledger opened, so the opening balance already accounts
+    // for it. Posting a line as well would take the same money out twice.
+    const alreadyMoved = body?.already_moved === true
 
     if (ids.length === 0) {
       return NextResponse.json({ error: 'Select at least one deal to sweep' }, { status: 400 })
@@ -206,6 +216,36 @@ export async function POST(request: NextRequest) {
     }
 
     const total = Math.round(chosen.reduce((s, d) => s + d.office_net, 0) * 100) / 100
+
+    if (alreadyMoved) {
+      const sweptAtHistoric = new Date().toISOString()
+      const historicIds = chosen.map(d => d.transaction_id)
+      const { data: stamped, error: stampError } = await supabaseAdmin
+        .from('transactions')
+        .update({
+          office_net_swept_at: sweptAtHistoric,
+          office_net_swept_amount: null,
+          updated_at: sweptAtHistoric,
+        })
+        .in('id', historicIds)
+        .is('office_net_swept_at', null)
+        .select('id')
+      if (stampError) throw stampError
+
+      // The amount is left null on purpose. `office_net_swept_amount` records
+      // what was actually transferred, and for a historic move nobody knows
+      // that figure. Writing today's office net there would look like evidence
+      // and be a guess, which is worse than an honest blank.
+      return NextResponse.json({
+        success: true,
+        already_moved: true,
+        // What was actually stamped, not what was selected. The `.is()` guard
+        // can skip a deal another request stamped in between, and reporting
+        // the request's own list would claim work it did not do.
+        deals: stamped?.length ?? 0,
+        ledger_entry_id: null,
+      })
+    }
 
     // One bank line, with a real ledger row per deal beneath it. The parent
     // reconciles against the single statement entry; each child names one deal

@@ -962,6 +962,7 @@ CREATE TABLE public.company_settings (
   cda_due_soon_days integer NOT NULL DEFAULT 7,
   trec_broker_license_number text,
   license_report_email text,
+  ledger_start_date date,
   CONSTRAINT company_settings_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.required_documents (
@@ -1821,7 +1822,7 @@ CREATE TABLE public.payout_expenses (
   description text NOT NULL,
   amount numeric,
   category text,
-  status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'released'::text])),
+  status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'released'::text, 'paid'::text])),
   released_at timestamp with time zone,
   released_by uuid,
   CONSTRAINT payout_expenses_pkey PRIMARY KEY (id),

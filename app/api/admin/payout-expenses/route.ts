@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
 import { getCentralDateString } from '@/lib/timezone'
 import { entryTypeForCategory, DEFAULT_LEDGER_ACCOUNT } from '@/lib/payouts/ledger'
+import { normalizePaymentMethod } from '@/lib/transactions/constants'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,9 +61,10 @@ export async function PATCH(request: NextRequest) {
   if (auth.error) return auth.error
 
   try {
-    const { id, action } = await request.json()
+    const body = await request.json()
+    const { id, action } = body
     if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
-    if (action !== 'release') {
+    if (action !== 'release' && action !== 'pay') {
       return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
     }
 
@@ -73,6 +75,93 @@ export async function PATCH(request: NextRequest) {
       .eq('id', id)
       .maybeSingle()
     if (readError) throw readError
+
+    // ── Paid ────────────────────────────────────────────────────────────────
+    // An item had two endings and neither of them moved money: Release stops
+    // reserving and deliberately changes no balance, Delete removes the
+    // record. So there was no way to say a bill was actually paid, which is
+    // why paying one could not be told apart from cancelling one.
+    //
+    // Paid is the third ending: the earmark closes AND a bill line posts, for
+    // the amount that actually left. That amount is typed, because the real
+    // figure routinely differs from the reserved one - Payload's ACH fee
+    // varies every month, and the settled spec calls for the stored recurring
+    // amount and the actual paid amount to both exist rather than one
+    // overwriting the other.
+    if (action === 'pay') {
+      if (!expense) return NextResponse.json({ error: 'That item no longer exists' }, { status: 404 })
+      if (expense.status !== 'active') {
+        return NextResponse.json(
+          { error: `That item has already been ${expense.status}` },
+          { status: 409 }
+        )
+      }
+
+      // The paid amount is the one figure here that genuinely comes from the
+      // person, because only they know what left the bank. It is validated
+      // rather than trusted, and it defaults to the reserved amount.
+      const typed = body?.amount
+      const paidAmount =
+        typed === undefined || typed === null || typed === ''
+          ? Number(expense.amount || 0)
+          : Number(typed)
+      if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
+        return NextResponse.json(
+          { error: 'Enter the amount that actually left the account' },
+          { status: 400 }
+        )
+      }
+      const paidDate: string =
+        typeof body?.paid_date === 'string' && body.paid_date
+          ? body.paid_date.slice(0, 10)
+          : getCentralDateString()
+
+      // `.eq('status','active')` makes this the claim: whoever flips the row
+      // from active owns the payment. The returned rows say whether this
+      // request was that one. Without checking, two clicks both proceed to
+      // insert, the loser hits the unique constraint, and its compensation
+      // resets the row to active while the winner's ledger line stands - an
+      // item that reads unpaid and can never be paid again.
+      const { data: claimed, error: payUpdateError } = await supabaseAdmin
+        .from('payout_expenses')
+        .update({ status: 'paid', released_at: new Date().toISOString(), released_by: auth.user.id })
+        .eq('id', id)
+        .eq('status', 'active')
+        .select('id')
+      if (payUpdateError) throw payUpdateError
+      if (!claimed || claimed.length === 0) {
+        return NextResponse.json(
+          { error: 'Someone else recorded that payment a moment ago' },
+          { status: 409 }
+        )
+      }
+
+      const { error: billError } = await supabaseAdmin.from('brokerage_ledger').insert({
+        entry_date: paidDate,
+        entry_type: entryTypeForCategory('bill'),
+        category: 'bill',
+        description: expense.description,
+        amount: Math.round(paidAmount * 100) / 100,
+        payment_method: normalizePaymentMethod(body?.payment_method),
+        bank_reference: body?.bank_reference || null,
+        bank_date: paidDate,
+        external_id: `bill:${id}`,
+        recorded_by: auth.user.id,
+        account: DEFAULT_LEDGER_ACCOUNT,
+      })
+      if (billError) {
+        // Put it back rather than leaving it marked paid with nothing in the
+        // ledger to say the money left. Same compensation shape as the release
+        // path below, for the same reason: PostgREST has no transactions.
+        await supabaseAdmin
+          .from('payout_expenses')
+          .update({ status: 'active', released_at: null, released_by: null })
+          .eq('id', id)
+        throw billError
+      }
+
+      return NextResponse.json({ success: true, amount: Math.round(paidAmount * 100) / 100 })
+    }
     if (!expense) return NextResponse.json({ error: 'That item no longer exists' }, { status: 404 })
     if (expense.status === 'released') {
       return NextResponse.json({ error: 'That item has already been released' }, { status: 409 })
