@@ -686,6 +686,22 @@ CREATE TABLE public.transaction_external_brokerages (
   CONSTRAINT transaction_external_brokerages_pkey PRIMARY KEY (id),
   CONSTRAINT transaction_external_brokerages_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES public.transactions(id)
 );
+CREATE TABLE public.transaction_activity (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  transaction_id uuid NOT NULL,
+  occurred_at timestamp with time zone NOT NULL DEFAULT now(),
+  source_table text NOT NULL,
+  record_id uuid,
+  event_type text NOT NULL,
+  field text,
+  old_value text,
+  new_value text,
+  actor_id uuid,
+  details jsonb,
+  CONSTRAINT transaction_activity_pkey PRIMARY KEY (id),
+  CONSTRAINT transaction_activity_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES public.transactions(id) ON DELETE CASCADE,
+  CONSTRAINT transaction_activity_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.users(id)
+);
 -- SOURCE OF TRUTH for a deal's people. The flat contact columns on
 -- transactions (client_name, client_email, client_phone, title_company,
 -- title_officer_name, title_company_email, title_officer_phone) are a

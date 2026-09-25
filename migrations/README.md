@@ -155,3 +155,29 @@ these columns, so running the SQL early is safe.
 The columns start empty and fill themselves: the 11:30 UTC reconciliation stores the id for
 every payout it marks paid, and backfills any already-paid row within the 30 day reversal
 window that is missing one. Nothing needs to be backfilled by hand.
+
+## 16_transaction_activity.sql
+
+Additive. Adds the `transaction_activity` table, one trigger function, and four triggers
+on `transactions`, `transaction_internal_agents`, `transaction_external_brokerages` and
+`agent_debts`.
+
+Runs BEFORE the code deploy. Reversed, the Activity tab and the "our cut changed" panel on
+Money Movement both fail: they SELECT from a table that does not exist and PostgREST answers
+42703. Nothing is written wrongly, and it recovers the moment the SQL lands.
+
+**A trigger rather than application logging, on purpose.** `office_net` is written from one
+place in the app today, so a hook there would catch everything made through the app right
+now - which is not the same as catching everything. A row corrected by hand in SQL is
+invisible to application code, and a writer added next year misses the hook entirely. That
+is exactly how the payouts ledger got caught out by `checks_received` having six writers. A
+log with a hole in it is worse than no log for a question like "why is this different from
+yesterday", because it answers confidently and wrongly.
+
+**It records forward only.** The table starts empty and fills from the first edit after the
+SQL runs. Nothing that happened before then can be recovered, because it was never written
+down anywhere. Say so to anyone who asks why a deal shows no history.
+
+**Numbers are compared as numbers.** 2100.0 and 2100.00 are the same amount; comparing the
+text would file a change that did not happen, and a log full of noise is one people stop
+reading.

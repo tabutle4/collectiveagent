@@ -576,7 +576,7 @@ function CheckImageUpload({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type NavTab = 'overview' | 'commissions' | 'check_payouts' | 'contacts' | 'documents'
+type NavTab = 'overview' | 'commissions' | 'check_payouts' | 'contacts' | 'documents' | 'activity'
 
 // ─── Compliance Documents Tab ─────────────────────────────────────────────────
 
@@ -2203,6 +2203,8 @@ export default function AdminTransactionDetailPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const searchParams = useSearchParams()
+  const [activity, setActivity] = useState<any[]>([])
+  const [loadingActivity, setLoadingActivity] = useState(false)
   const [activeTab, setActiveTabState] = useState<NavTab>(
     (searchParams.get('tab') as NavTab) || 'overview'
   )
@@ -2447,6 +2449,18 @@ export default function AdminTransactionDetailPage() {
       cancelled = true
     }
   }, [data?.agents])
+
+  // What happened on this deal. Loaded only when the tab is opened, like the
+  // other tabs, because most visits never look at it.
+  useEffect(() => {
+    if (activeTab !== 'activity' || !id) return
+    setLoadingActivity(true)
+    fetch(`/api/admin/transactions/${id}/activity`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : { entries: [] }))
+      .then(d => setActivity(d.entries || []))
+      .catch(() => {})
+      .finally(() => setLoadingActivity(false))
+  }, [activeTab, id])
 
   useEffect(() => {
     if (activeTab !== 'check_payouts' || !id) return
@@ -4231,6 +4245,7 @@ export default function AdminTransactionDetailPage() {
     { key: 'check_payouts', label: 'Check & Payouts', show: true },
     { key: 'contacts', label: 'Contacts', show: true },
     { key: 'documents', label: 'Documents', show: true },
+    { key: 'activity', label: 'Activity', show: true },
   ]
 
   return (
@@ -6718,10 +6733,92 @@ export default function AdminTransactionDetailPage() {
               }}
             />
           )}
+
+          {/* ── Activity ──────────────────────────────────────────────────────
+              Everything that has happened to the money on this deal, newest
+              first. Every row comes from a database trigger, so a change made
+              straight in SQL shows up here exactly like one made on screen.
+
+              Our cut is called out; the figures underneath it are the reason
+              it moved, which is the question somebody is actually asking when
+              they notice the number is different from yesterday. */}
+          {activeTab === 'activity' && (
+            <div className="p-4 md:p-6">
+              {loadingActivity ? (
+                <p className="text-sm text-luxury-gray-3">Loading what happened...</p>
+              ) : activity.length === 0 ? (
+                <div className="container-card">
+                  <p className="text-sm text-luxury-gray-2">Nothing has changed on this deal yet.</p>
+                  <p className="text-xs text-luxury-gray-3 mt-1">
+                    Changes are recorded from the moment this was switched on, so anything
+                    edited before then is not listed.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {Object.entries(
+                    activity.reduce((groups: Record<string, any[]>, e: any) => {
+                      // The Central business day, worked out server side. NOT
+                      // a slice of the timestamp: that is the UTC date, and it
+                      // disagrees with the Central time printed beside it for
+                      // everything after 7pm.
+                      const day = e.occurred_on || String(e.occurred_at).slice(0, 10)
+                      ;(groups[day] ||= []).push(e)
+                      return groups
+                    }, {})
+                  ).map(([day, entries]) => (
+                    <div key={day} className="container-card">
+                      <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+                        {fmtDate(day)}
+                      </p>
+                      <div className="space-y-2">
+                        {(entries as any[]).map((e: any) => (
+                          <div
+                            key={e.id}
+                            className={
+                              e.headline
+                                ? 'flex items-start gap-3 py-2 px-3 rounded bg-luxury-cream'
+                                : 'flex items-start gap-3 py-1.5 px-3'
+                            }
+                          >
+                            <span className="text-[11px] text-luxury-gray-3 whitespace-nowrap mt-0.5 w-16 flex-shrink-0">
+                              {new Date(e.occurred_at).toLocaleTimeString('en-US', {
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                timeZone: 'America/Chicago',
+                              })}
+                            </span>
+                            <div className="min-w-0">
+                              <p
+                                className={
+                                  e.headline
+                                    ? 'text-sm font-semibold text-luxury-gray-1'
+                                    : 'text-sm text-luxury-gray-2'
+                                }
+                              >
+                                {e.summary}
+                              </p>
+                              {e.delta !== null && e.delta !== 0 && (
+                                <p className="text-xs text-luxury-gray-3 mt-0.5">
+                                  {e.delta > 0 ? 'Up' : 'Down'} {fmt$(Math.abs(e.delta))}
+                                  {e.actor_name ? ` - ${e.actor_name}` : ''}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* ── Right Panel (hidden on Documents tab to maximize compliance space) ── */}
-        {activeTab !== 'documents' && (
+        {/* ── Right Panel (hidden on Documents and Activity tabs, where the
+            extra width is worth more than the sidebar) ── */}
+        {activeTab !== 'documents' && activeTab !== 'activity' && (
         <div className="md:w-72 md:flex-shrink-0 border-t md:border-t-0 md:border-l border-luxury-gray-5 p-4 space-y-3 bg-white">
           {/* Agents - sorted: listing, primary, team lead, referral */}
           {agents.length > 0 && [...agents].sort((a: any, b: any) => {

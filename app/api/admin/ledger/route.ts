@@ -267,7 +267,112 @@ export async function GET(request: NextRequest) {
       closing: Math.round((opening + movement) * 100) / 100,
     }
 
-    return NextResponse.json({ from, to, entries, totals, started: ledgerStarted, start_date: ledgerStart })
+    // ── What changed about our cut ──────────────────────────────────────────
+    // Deliberately NOT ledger entries. A deal's cut moving does not move the
+    // bank account by a penny - it changes what we are owed - so posting it to
+    // the ledger would make the balance wrong. It belongs here because it is
+    // the other half of "what happened", and it is the question somebody asks
+    // when the figure on screen is higher than it was yesterday.
+    //
+    // Fetched a day wide on either side and then filtered exactly, because
+    // occurred_at is a timestamp and the window is in Central business days.
+    // Subtracting a fixed offset would be wrong for half the year.
+    const wideFrom = new Date(`${from}T00:00:00Z`)
+    wideFrom.setUTCDate(wideFrom.getUTCDate() - 1)
+    const wideTo = new Date(`${to}T00:00:00Z`)
+    wideTo.setUTCDate(wideTo.getUTCDate() + 2)
+    const centralDay = (ts: string) =>
+      new Date(ts).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
+
+    const activityRows = await fetchAllRows<{
+      id: string
+      transaction_id: string
+      occurred_at: string
+      old_value: string | null
+      new_value: string | null
+    }>('transaction_activity', 'id, transaction_id, occurred_at, old_value, new_value', {
+      filters: [
+        { type: 'eq', column: 'field', value: 'office_net' },
+        { type: 'gte', column: 'occurred_at', value: wideFrom.toISOString() },
+        { type: 'lte', column: 'occurred_at', value: wideTo.toISOString() },
+      ],
+      orderBy: { column: 'occurred_at', ascending: false },
+    })
+
+    const inWindow = (activityRows || []).filter(r => {
+      const day = centralDay(r.occurred_at)
+      return day >= from && day <= to
+    })
+
+    const crcTxnIds = Array.from(new Set(inWindow.map(r => r.transaction_id)))
+    const crcAddress = new Map<string, string>()
+    for (let i = 0; i < crcTxnIds.length; i += ID_CHUNK) {
+      const rowsT = await fetchAllRows<{ id: string; property_address: string | null }>(
+        'transactions',
+        'id, property_address',
+        { filters: [{ type: 'in', column: 'id', value: crcTxnIds.slice(i, i + ID_CHUNK) }] }
+      )
+      for (const t of rowsT || []) {
+        if (t.property_address) crcAddress.set(t.id, t.property_address)
+      }
+    }
+
+    // One line per deal, not one per edit. Somebody who changed a fee three
+    // times in a morning moved the cut once as far as anyone reading this
+    // cares: from where it started to where it ended up.
+    const byDeal = new Map<
+      string,
+      { transaction_id: string; address: string | null; first_old: string | null; last_new: string | null; edits: number; last_at: string }
+    >()
+    // inWindow is newest first, so walking it backwards gives oldest first.
+    for (let i = inWindow.length - 1; i >= 0; i--) {
+      const r = inWindow[i]
+      const existing = byDeal.get(r.transaction_id)
+      if (!existing) {
+        byDeal.set(r.transaction_id, {
+          transaction_id: r.transaction_id,
+          address: crcAddress.get(r.transaction_id) || null,
+          first_old: r.old_value,
+          last_new: r.new_value,
+          edits: 1,
+          last_at: r.occurred_at,
+        })
+      } else {
+        existing.last_new = r.new_value
+        existing.edits++
+        existing.last_at = r.occurred_at
+      }
+    }
+
+    const crcChanges = [...byDeal.values()]
+      .map(d => {
+        const was = Number(d.first_old || 0)
+        const now = Number(d.last_new || 0)
+        return {
+          transaction_id: d.transaction_id,
+          address: d.address,
+          was: Math.round(was * 100) / 100,
+          now: Math.round(now * 100) / 100,
+          difference: Math.round((now - was) * 100) / 100,
+          edits: d.edits,
+          last_at: d.last_at,
+        }
+      })
+      // A cut edited and put back where it started is not a change anybody
+      // needs to read about.
+      .filter(d => Math.abs(d.difference) > 0.004)
+      .sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference))
+
+    return NextResponse.json({
+      from,
+      to,
+      entries,
+      totals,
+      started: ledgerStarted,
+      start_date: ledgerStart,
+      crc_changes: crcChanges,
+      crc_change_total: Math.round(crcChanges.reduce((s, c) => s + c.difference, 0) * 100) / 100,
+    })
   } catch (error: any) {
     console.error('Ledger read error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })

@@ -65,6 +65,11 @@ export default function SweepDialog({
   // them as moved without recording a transfer today, because the opening
   // balance already accounts for that money.
   const [alreadyMoved, setAlreadyMoved] = useState(false)
+  // What actually left the bank. Starts as what the ticked deals add up to,
+  // which is the ordinary case, and is editable because it routinely is not.
+  // Some of a deal's share is often already in the income account by the time
+  // the sweep is recorded.
+  const [actualAmount, setActualAmount] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -100,6 +105,17 @@ export default function SweepDialog({
   const total = chosen.reduce((s, d) => s + d.office_net, 0)
   const warned = chosen.filter(d => !d.ready && !d.refusal)
 
+  // Ticking a deal changes the suggested figure. Deliberately overwrites
+  // anything typed: a number that was right for four deals is not right for
+  // five, and silently keeping it is how the wrong amount gets recorded.
+  useEffect(() => {
+    setActualAmount(total > 0 ? total.toFixed(2) : '')
+  }, [total])
+
+  const transferredNum = actualAmount === '' ? total : Number(actualAmount)
+  const transferredValid = Number.isFinite(transferredNum) && transferredNum > 0
+  const partial = transferredValid && Math.abs(transferredNum - total) > 0.004
+
   // Moving our share takes money out of the payouts account without changing
   // what we owe, so the Bottom Line drops by exactly the amount transferred.
   // Nothing in the sweep gates checks this: funds cleared, checklist and
@@ -107,9 +123,15 @@ export default function SweepDialog({
   // left in the account to pay the agents afterwards.
   //
   // Warns, never blocks, like every other gate here.
-  const bottomLineAfter = bottomLine === undefined ? null : Math.round((bottomLine - total) * 100) / 100
+  // Measured against what actually leaves, not against what the deals add up
+  // to. Warning about a shortfall that a smaller transfer will not cause is
+  // how a warning stops being read.
+  const bottomLineAfter =
+    bottomLine === undefined || !transferredValid
+      ? null
+      : Math.round((bottomLine - transferredNum) * 100) / 100
   const wouldGoShort =
-    !alreadyMoved && bottomLineAfter !== null && bottomLineAfter < 0 && total > 0
+    !alreadyMoved && bottomLineAfter !== null && bottomLineAfter < 0 && transferredNum > 0
 
   const record = async () => {
     setSaving(true)
@@ -124,6 +146,7 @@ export default function SweepDialog({
           bank_reference: bankReference || null,
           payment_method: paymentMethod || null,
           already_moved: alreadyMoved,
+          actual_amount: actualAmount === '' ? null : actualAmount,
         }),
       })
       const json = await res.json()
@@ -263,6 +286,22 @@ export default function SweepDialog({
                 className="input-luxury w-full text-xs"
               />
             </div>
+            {/* Hidden when nothing is being recorded as moving today. The
+                already-left path writes no ledger line at all, so an amount
+                box there would be asking for a figure that is thrown away. */}
+            {!alreadyMoved && (
+              <div className="w-40">
+                <label className="field-label">Amount that moved *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={actualAmount}
+                  onChange={e => setActualAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="input-luxury w-full text-xs"
+                />
+              </div>
+            )}
             <div className="w-36">
               <label className="field-label">How it moved</label>
               <select
@@ -300,6 +339,15 @@ export default function SweepDialog({
 
           <div className="flex items-center justify-between gap-3">
             <div>
+              {partial && !alreadyMoved && (
+                <div className="rounded-lg bg-luxury-cream px-3 py-2 mb-3">
+                  <p className="text-xs text-luxury-gray-2">
+                    {transferredNum < total
+                      ? `These deals are worth ${fmt(total)} but only ${fmt(transferredNum)} is moving. The deals will be marked moved with no amount recorded against each one, because nobody knows which deal the rest came from.`
+                      : `You are moving ${fmt(transferredNum)}, which is more than the ${fmt(total)} these deals account for. The extra is recorded as part of this transfer.`}
+                  </p>
+                </div>
+              )}
               {wouldGoShort && (
                 <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 mb-3">
                   <p className="text-xs text-amber-800">
@@ -309,9 +357,14 @@ export default function SweepDialog({
                 </div>
               )}
               <p className="text-xs text-luxury-gray-3 uppercase tracking-wide">Moving</p>
-              <p className="text-lg font-bold text-luxury-gray-1">{fmt(total)}</p>
+              <p className="text-lg font-bold text-luxury-gray-1">
+                {transferredValid ? fmt(transferredNum) : fmt(0)}
+              </p>
               <p className="text-xs text-luxury-gray-3">
                 {chosen.length} deal{chosen.length === 1 ? '' : 's'}
+                {/* Both figures side by side, so a transfer smaller than the
+                    deals reads as deliberate rather than as a mistake. */}
+                {partial ? `, worth ${fmt(total)}` : ''}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -320,7 +373,7 @@ export default function SweepDialog({
               </button>
               <button
                 onClick={record}
-                disabled={saving || chosen.length === 0}
+                disabled={saving || chosen.length === 0 || (!alreadyMoved && !transferredValid)}
                 className="btn btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
               >
                 {saving ? <Loader2 size={12} className="animate-spin" /> : <ArrowRight size={12} />}

@@ -12,6 +12,18 @@ import {
   sidesBadge,
 } from '@/lib/payouts/sweep'
 import { entryTypeForCategory, DEFAULT_LEDGER_ACCOUNT } from '@/lib/payouts/ledger'
+
+// Money as it belongs on a ledger line: always two decimals.
+//
+// NOT `fmtMoney` from lib/compliance/fieldGroups.tsx, which is the only
+// exported one. That version omits minimumFractionDigits, so a round figure
+// renders as "$1,000" with no cents - fine on a compliance form, wrong on a
+// financial record. This matches the formatter the reconciliation cron uses
+// for the same reason.
+const fmtMoney = (v: any) => {
+  const n = parseFloat(v ?? 0) || 0
+  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
 import { normalizePaymentMethod } from '@/lib/transactions/constants'
 
 export const dynamic = 'force-dynamic'
@@ -184,6 +196,31 @@ export async function POST(request: NextRequest) {
     // for it. Posting a line as well would take the same money out twice.
     const alreadyMoved = body?.already_moved === true
 
+    // What actually left the bank, which is not always what the deals add up
+    // to.
+    //
+    // Money gets moved to income ahead of a sweep, or part of a deal's share
+    // is already gone, so the real transfer can be smaller than the deals it
+    // covers. It can also be larger, when the account is being balanced down
+    // and the excess is more than the deals account for. Until now this box
+    // computed the figure and refused to be told otherwise, so the only way to
+    // record the truth was to mark the deals moved and then hand-write a
+    // separate ledger line - which lands in the generic "money moved out"
+    // category and never reaches the Moved To Income total.
+    //
+    // Same reasoning as the amount on Record This As Paid: only the person
+    // looking at the bank knows what really moved.
+    const actualRaw = body?.actual_amount
+    const actualProvided =
+      actualRaw !== undefined && actualRaw !== null && String(actualRaw).trim() !== ''
+    const actualAmount = actualProvided ? Number(actualRaw) : null
+    if (actualProvided && (!Number.isFinite(actualAmount as number) || (actualAmount as number) <= 0)) {
+      return NextResponse.json(
+        { error: 'Enter the amount that actually moved, as a number greater than zero' },
+        { status: 400 }
+      )
+    }
+
     if (ids.length === 0) {
       return NextResponse.json({ error: 'Select at least one deal to sweep' }, { status: 400 })
     }
@@ -216,6 +253,10 @@ export async function POST(request: NextRequest) {
     }
 
     const total = Math.round(chosen.reduce((s, d) => s + d.office_net, 0) * 100) / 100
+    // The bank figure. Defaults to what the deals add up to, which is the
+    // ordinary case.
+    const transferred = actualProvided ? Math.round((actualAmount as number) * 100) / 100 : total
+    const partial = Math.abs(transferred - total) > 0.004
 
     if (alreadyMoved) {
       const sweptAtHistoric = new Date().toISOString()
@@ -256,8 +297,16 @@ export async function POST(request: NextRequest) {
         entry_date: entryDate,
         entry_type: entryTypeForCategory('sweep'),
         category: 'sweep',
-        description: `Office net moved to the income account, ${chosen.length} deal${chosen.length === 1 ? '' : 's'}`,
-        amount: total,
+        // Both figures, because the gap between them is the thing somebody
+        // asks about later. A line reading $1,085.19 against 11 deals worth
+        // $6,309.39 is not a mistake, and it should not look like one.
+        description: partial
+          ? `Moved to the income account, ${chosen.length} deal${chosen.length === 1 ? '' : 's'} covering ${fmtMoney(total)}`
+          : `Office net moved to the income account, ${chosen.length} deal${chosen.length === 1 ? '' : 's'}`,
+        amount: transferred,
+        notes: partial
+          ? `The deals covered add up to ${fmtMoney(total)}. ${fmtMoney(transferred)} actually moved${transferred < total ? ', so the rest had already gone or stayed in the account' : ', which is more than the deals account for'}.`
+          : null,
         bank_reference: bankReference,
         bank_date: entryDate,
         payment_method: paymentMethod,
@@ -323,7 +372,12 @@ export async function POST(request: NextRequest) {
         .from('transactions')
         .update({
           office_net_swept_at: sweptAt,
-          office_net_swept_amount: Math.round(d.office_net * 100) / 100,
+          // Blank when the transfer did not match the deals. `office_net_swept_amount`
+          // records what was actually moved for THIS deal, and when only part
+          // of the total moved nobody knows which deal it came from. Writing
+          // the deal's own office net there would look like evidence and be a
+          // guess - the same call as the historic path above.
+          office_net_swept_amount: partial ? null : Math.round(d.office_net * 100) / 100,
           updated_at: sweptAt,
         })
         .eq('id', d.transaction_id)

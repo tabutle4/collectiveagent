@@ -106,6 +106,8 @@ export default function MoneyMovementPage() {
   // What changed since last night's snapshot. Null when no snapshot exists
   // yet, which is different from "nothing changed" and has to read differently.
   const [since, setSince] = useState<SinceLast | null>(null)
+  const [crcChanges, setCrcChanges] = useState<any[]>([])
+  const [crcChangeTotal, setCrcChangeTotal] = useState(0)
   const [snapshotChecked, setSnapshotChecked] = useState(false)
   // Adding a line by hand. Without this the ledger had no writer reachable
   // from any screen: the opening balance, a bill paid, a correction, all of
@@ -144,6 +146,8 @@ export default function MoneyMovementPage() {
       // An empty list cannot tell a ledger that has not been opened apart from
       // a quiet fortnight, so the route says which it is.
       setLedgerStarted(!!json.started)
+      setCrcChanges(json.crc_changes || [])
+      setCrcChangeTotal(Number(json.crc_change_total || 0))
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -404,6 +408,85 @@ export default function MoneyMovementPage() {
           </div>
         </div>
 
+        {/* Deals whose share changed in this window.
+            NOT ledger lines, deliberately. Our cut moving does not move the
+            bank account - it changes what we are owed - so putting it on the
+            ledger would make the balance wrong. It belongs on this screen
+            because it is the other half of "what happened", and it answers the
+            question somebody asks when the figure is higher than it was
+            yesterday.
+
+            One line per deal rather than one per edit, showing where the
+            figure started and where it ended up. */}
+        {crcChanges.length > 0 && (
+          <div className="container-card mb-6">
+            <div className="flex items-baseline justify-between mb-3">
+              <h2 className="text-sm font-semibold text-luxury-gray-1">
+                Our cut changed on {crcChanges.length} deal{crcChanges.length === 1 ? '' : 's'}
+              </h2>
+              <span
+                className={
+                  crcChangeTotal >= 0
+                    ? 'text-sm font-semibold text-green-700'
+                    : 'text-sm font-semibold text-red-700'
+                }
+              >
+                {crcChangeTotal >= 0 ? '+' : ''}
+                {formatCurrency(crcChangeTotal)} overall
+              </span>
+            </div>
+            <p className="text-xs text-luxury-gray-3 mb-3">
+              No money moved in or out of the account for these. What changed is what the
+              deal owes us.
+            </p>
+            <table className="w-full text-sm">
+              <thead>
+                <tr>
+                  <th className="th-luxury text-left">Deal</th>
+                  <th className="th-luxury text-right">Was</th>
+                  <th className="th-luxury text-right">Now</th>
+                  <th className="th-luxury text-right">Difference</th>
+                </tr>
+              </thead>
+              <tbody>
+                {crcChanges.map((c: any) => (
+                  <tr key={c.transaction_id} className="tr-luxury">
+                    <td className="py-2 px-4">
+                      <Link
+                        href={`/admin/transactions/${c.transaction_id}?tab=activity`}
+                        className="text-luxury-accent hover:underline"
+                      >
+                        {c.address || 'A deal'}
+                      </Link>
+                      {c.edits > 1 && (
+                        <span className="text-xs text-luxury-gray-3 ml-2">
+                          {c.edits} changes
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2 px-4 text-right text-luxury-gray-2">
+                      {formatCurrency(c.was)}
+                    </td>
+                    <td className="py-2 px-4 text-right font-medium text-luxury-gray-1">
+                      {formatCurrency(c.now)}
+                    </td>
+                    <td
+                      className={
+                        c.difference >= 0
+                          ? 'py-2 px-4 text-right font-medium text-green-700'
+                          : 'py-2 px-4 text-right font-medium text-red-700'
+                      }
+                    >
+                      {c.difference >= 0 ? '+' : ''}
+                      {formatCurrency(c.difference)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {/* What moved overnight. The account is photographed every night, so a
             change since then is read by subtraction rather than reconstructed,
             which is the whole reason the nightly job exists. */}
@@ -545,6 +628,13 @@ export default function MoneyMovementPage() {
                               <p className="text-xs text-luxury-gray-3 mt-0.5">
                                 {[row.agent_name, row.property_address].filter(Boolean).join(' - ')}
                               </p>
+                            )}
+                            {/* The note a line was recorded with. The API has
+                                always sent this and nothing showed it, so a
+                                transfer that explains itself explained itself
+                                to nobody. */}
+                            {row.notes && (
+                              <p className="text-xs text-luxury-gray-3 mt-0.5">{row.notes}</p>
                             )}
                           </td>
                           <td className="py-3 px-4 text-right font-medium text-green-700">
