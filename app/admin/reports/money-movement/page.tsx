@@ -2,7 +2,8 @@
 
 import { Fragment, useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ChevronDown, ChevronRight, Loader2, Plus, RefreshCw, Undo2 } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronRight, Loader2, Plus, Receipt, RefreshCw, Undo2 } from 'lucide-react'
+import BillPaymentDialog from '@/components/payouts/BillPaymentDialog'
 import { LEDGER_CATEGORIES, ledgerCategoryLabel } from '@/lib/payouts/ledger'
 import { PAYMENT_METHOD_OPTIONS } from '@/lib/transactions/constants'
 import { useAuth } from '@/lib/context/AuthContext'
@@ -106,6 +107,7 @@ export default function MoneyMovementPage() {
   // enough to push the ledger itself off the screen, and the ledger is what
   // the page is for. The headline says whether it is worth opening.
   const [crcOpen, setCrcOpen] = useState(false)
+  const [payingBills, setPayingBills] = useState(false)
   // Undoing a transfer. Without this the reversal endpoint has no way in, and
   // a transfer recorded by mistake can only be unpicked by hand in the
   // database, which is how a ledger stops being a ledger.
@@ -346,8 +348,8 @@ export default function MoneyMovementPage() {
         )}
 
         {startOpen && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div className="bg-white w-full sm:max-w-sm rounded-t-xl sm:rounded-xl shadow-xl max-h-[92vh] sm:max-h-[85vh] overflow-y-auto">
               <div className="px-5 py-4 border-b border-luxury-gray-5">
                 <h3 className="text-sm font-semibold text-luxury-gray-1">Start the ledger</h3>
                 <p className="text-xs text-luxury-gray-3 mt-0.5">
@@ -373,9 +375,9 @@ export default function MoneyMovementPage() {
                   twice.
                 </p>
               </div>
-              <div className="flex justify-end gap-2 px-5 py-4 border-t border-luxury-gray-5">
-                <button onClick={() => setStartOpen(false)} disabled={starting} className="btn btn-secondary text-xs">Cancel</button>
-                <button onClick={startLedger} disabled={starting || !startBalance} className="btn btn-primary text-xs">
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 px-5 py-4 border-t border-luxury-gray-5">
+                <button onClick={() => setStartOpen(false)} disabled={starting} className="btn btn-secondary text-xs w-full sm:w-auto justify-center">Cancel</button>
+                <button onClick={startLedger} disabled={starting || !startBalance} className="btn btn-primary text-xs w-full sm:w-auto justify-center">
                   {starting ? 'Starting...' : 'Start the ledger'}
                 </button>
               </div>
@@ -448,7 +450,35 @@ export default function MoneyMovementPage() {
               No money moved in or out of the account for these. What changed is what the
               deal owes us.
             </p>
-            <table className="w-full text-sm">
+            <div className="md:hidden space-y-2">
+              {crcChanges.map((c: any) => (
+                <div key={c.transaction_id} className="inner-card">
+                  <div className="flex items-start justify-between gap-2">
+                    <Link
+                      href={`/admin/transactions/${c.transaction_id}?tab=activity`}
+                      className="text-sm text-luxury-accent hover:underline min-w-0"
+                    >
+                      {c.address || 'A deal'}
+                    </Link>
+                    <span
+                      className={
+                        c.difference >= 0
+                          ? 'text-sm font-medium text-green-700 tabular-nums flex-shrink-0'
+                          : 'text-sm font-medium text-red-700 tabular-nums flex-shrink-0'
+                      }
+                    >
+                      {c.difference >= 0 ? '+' : ''}
+                      {formatCurrency(c.difference)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-luxury-gray-3 mt-0.5">
+                    {formatCurrency(c.was)} to {formatCurrency(c.now)}
+                    {c.edits > 1 && `, ${c.edits} changes`}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <table className="w-full text-sm hidden md:table">
               <thead>
                 <tr>
                   <th className="th-luxury text-left">Deal</th>
@@ -528,8 +558,8 @@ export default function MoneyMovementPage() {
         )}
 
         <div className="container-card mb-6">
-          <div className="flex flex-wrap items-end gap-4">
-            <div>
+          <div className="flex flex-wrap items-end gap-3 sm:gap-4">
+            <div className="flex-1 min-w-[9rem] sm:flex-none">
               <label className="block text-xs text-luxury-gray-3 uppercase tracking-wide mb-1">From</label>
               <input
                 type="date"
@@ -538,7 +568,7 @@ export default function MoneyMovementPage() {
                 className="input-luxury"
               />
             </div>
-            <div>
+            <div className="flex-1 min-w-[9rem] sm:flex-none">
               <label className="block text-xs text-luxury-gray-3 uppercase tracking-wide mb-1">To</label>
               <input
                 type="date"
@@ -551,6 +581,15 @@ export default function MoneyMovementPage() {
               {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
               Refresh
             </button>
+            {hasPermission('can_manage_ledger') && (
+              <button
+                onClick={() => setPayingBills(true)}
+                className="btn btn-secondary flex items-center gap-2"
+              >
+                <Receipt size={14} />
+                Record a bill payment
+              </button>
+            )}
             {hasPermission('can_manage_ledger') && (
               <button onClick={() => setAdding(true)} className="btn btn-primary flex items-center gap-2">
                 <Plus size={14} />
@@ -577,7 +616,134 @@ export default function MoneyMovementPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Phone: one card per line. Six columns do not survive a phone,
+                and the ones that matter most - what happened, how much, and
+                the balance it left behind - are the ones a squeezed table
+                drops first. In and Out become one signed figure, because a
+                line is never both. Everything the desktop row can do is here
+                too: expanding the deals behind a payment, the flagged
+                warnings, and undoing a sweep. */}
+            <div className="md:hidden space-y-2">
+              {rows.map(row => {
+                const isOpen = expanded.has(row.id)
+                const hasChildren = row.children.length > 0
+                return (
+                  <div key={row.id} className="inner-card">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-luxury-gray-1">
+                          {row.category_label}
+                        </p>
+                        <p className="text-xs text-luxury-gray-3">{formatDate(row.entry_date)}</p>
+                      </div>
+                      <div className="flex-shrink-0 text-right">
+                        <p
+                          className={
+                            row.direction === 'in'
+                              ? 'text-sm font-semibold text-green-700 tabular-nums'
+                              : row.direction === 'out'
+                              ? 'text-sm font-semibold text-red-700 tabular-nums'
+                              : 'text-sm font-semibold text-luxury-gray-2 tabular-nums'
+                          }
+                        >
+                          {row.direction === 'in' ? '+' : row.direction === 'out' ? '-' : ''}
+                          {formatCurrency(row.amount)}
+                        </p>
+                        <p className="text-xs text-luxury-gray-3 tabular-nums">
+                          {formatCurrency(row.balance_after ?? 0)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-luxury-gray-2 mt-1.5">
+                      {row.description}
+                      {row.payment_method_label && (
+                        <span className="text-luxury-gray-3"> by {row.payment_method_label}</span>
+                      )}
+                    </p>
+                    {(row.property_address || row.agent_name) && (
+                      <p className="text-xs text-luxury-gray-3 mt-0.5">
+                        {[row.agent_name, row.property_address].filter(Boolean).join(' - ')}
+                      </p>
+                    )}
+                    {row.notes && (
+                      <p className="text-xs text-luxury-gray-3 mt-0.5">{row.notes}</p>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
+                      {hasChildren && (
+                        <button
+                          onClick={() => toggle(row.id)}
+                          className="text-xs text-luxury-accent hover:underline inline-flex items-center gap-1"
+                          aria-expanded={isOpen}
+                        >
+                          {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                          {isOpen ? 'Hide' : 'Show'} the {row.children.length}{' '}
+                          {row.category === 'agent_payout' || row.category === 'external_payout'
+                            ? `payment${row.children.length === 1 ? '' : 's'}`
+                            : `deal${row.children.length === 1 ? '' : 's'}`}
+                        </button>
+                      )}
+                      {row.warnings.length > 0 && (
+                        <span className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
+                          {row.warnings.length} flagged
+                        </span>
+                      )}
+                      {row.category === 'sweep' && hasPermission('can_manage_sweeps') && (
+                        <button
+                          onClick={() => { setUndoing(row); setUndoReason('') }}
+                          className="text-xs text-luxury-gray-3 hover:text-luxury-accent inline-flex items-center gap-1"
+                        >
+                          <Undo2 size={12} /> Undo
+                        </button>
+                      )}
+                    </div>
+
+                    {isOpen && row.warnings.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-luxury-gray-5 space-y-1">
+                        <p className="text-xs text-amber-700 font-medium">Flagged at the time</p>
+                        {row.warnings.map((w, i) => (
+                          <p key={`${w.transaction_id}-${i}`} className="text-xs text-amber-700">
+                            {w.property_address || 'A deal'}: {w.warning}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                    {isOpen && row.children.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-luxury-gray-5 space-y-1">
+                        {row.children.map(child => (
+                          <div key={child.id} className="flex justify-between gap-3 text-xs">
+                            <span className="min-w-0">
+                              {child.transaction_id ? (
+                                <Link
+                                  href={`/admin/transactions/${child.transaction_id}`}
+                                  className="text-luxury-accent hover:underline"
+                                >
+                                  {child.property_address || child.description}
+                                </Link>
+                              ) : (
+                                <span className="text-luxury-gray-2">
+                                  {child.property_address || child.description}
+                                </span>
+                              )}
+                              {child.agent_name && (
+                                <span className="text-luxury-gray-3"> - {child.agent_name}</span>
+                              )}
+                            </span>
+                            <span className="text-luxury-gray-2 tabular-nums whitespace-nowrap">
+                              {formatCurrency(child.amount)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-luxury-gray-5">
@@ -717,13 +883,18 @@ export default function MoneyMovementPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </div>
       </div>
 
+      {payingBills && (
+        <BillPaymentDialog onClose={() => setPayingBills(false)} onSaved={load} />
+      )}
+
       {adding && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white w-full sm:max-w-sm rounded-t-xl sm:rounded-xl shadow-xl max-h-[92vh] sm:max-h-[85vh] overflow-y-auto">
             <div className="px-5 py-4 border-b border-luxury-gray-5">
               <h3 className="text-sm font-semibold text-luxury-gray-1">Add a line</h3>
               <p className="text-xs text-luxury-gray-3 mt-0.5">
@@ -800,14 +971,14 @@ export default function MoneyMovementPage() {
                 </div>
               </div>
             </div>
-            <div className="flex justify-end gap-2 px-5 py-4 border-t border-luxury-gray-5">
-              <button onClick={() => setAdding(false)} className="btn btn-secondary text-xs">
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 px-5 py-4 border-t border-luxury-gray-5">
+              <button onClick={() => setAdding(false)} className="btn btn-secondary text-xs w-full sm:w-auto justify-center">
                 Cancel
               </button>
               <button
                 onClick={addEntry}
                 disabled={addSaving || !addAmount || !addDescription}
-                className="btn btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
+                className="btn btn-primary text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 w-full sm:w-auto"
               >
                 {addSaving ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
                 Add the line
@@ -818,8 +989,8 @@ export default function MoneyMovementPage() {
       )}
 
       {undoing && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white w-full sm:max-w-sm rounded-t-xl sm:rounded-xl shadow-xl max-h-[92vh] sm:max-h-[85vh] overflow-y-auto">
             <div className="px-5 py-4 border-b border-luxury-gray-5">
               <h3 className="text-sm font-semibold text-luxury-gray-1">Undo this transfer</h3>
               <p className="text-xs text-luxury-gray-3 mt-0.5">
@@ -844,14 +1015,14 @@ export default function MoneyMovementPage() {
                 This records the undo. Move the money back in the bank as well.
               </p>
             </div>
-            <div className="flex justify-end gap-2 px-5 py-4 border-t border-luxury-gray-5">
-              <button onClick={() => setUndoing(null)} className="btn btn-secondary text-xs">
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 px-5 py-4 border-t border-luxury-gray-5">
+              <button onClick={() => setUndoing(null)} className="btn btn-secondary text-xs w-full sm:w-auto justify-center">
                 Cancel
               </button>
               <button
                 onClick={undo}
                 disabled={undoSaving}
-                className="btn btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
+                className="btn btn-primary text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 w-full sm:w-auto"
               >
                 {undoSaving ? <Loader2 size={12} className="animate-spin" /> : <Undo2 size={12} />}
                 Undo the transfer

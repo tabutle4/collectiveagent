@@ -61,9 +61,15 @@ export default function SweepDialog({
   // nobody chose, and the point of this screen is that the record says what
   // actually happened.
   const [paymentMethod, setPaymentMethod] = useState('')
-  // For deals whose share left the account before the ledger was opened. Marks
-  // them as moved without recording a transfer today, because the opening
-  // balance already accounts for that money.
+  // For a deal whose share is not sitting in the payouts account waiting to be
+  // moved. Two ways that happens, and the checkbox covers both: the money left
+  // before the ledger was opened, so the opening balance already accounts for
+  // it; or the closing funds were deposited straight to income and title paid
+  // everyone, so the share never passed through payouts at all. The second is
+  // the ordinary case at this brokerage.
+  //
+  // Either way there is nothing to record as moving today, so this marks the
+  // deals and writes no ledger line.
   const [alreadyMoved, setAlreadyMoved] = useState(false)
   // What actually left the bank. Starts as what the ticked deals add up to,
   // which is the ordinary case, and is editable because it routinely is not.
@@ -272,7 +278,7 @@ export default function SweepDialog({
               className="mt-0.5"
             />
             <span className="text-xs text-luxury-gray-2">
-              This money already left, before the ledger was opened. Just mark the deals, do not
+              This money already left or was deposited to income. Just mark the deals, do not
               record a transfer.
             </span>
           </label>

@@ -1865,6 +1865,29 @@ CREATE TABLE public.recurring_bills (
   notes text,
   CONSTRAINT recurring_bills_pkey PRIMARY KEY (id)
 );
+-- One row per recurring bill run actually paid. recurring_bills holds what a
+-- bill USUALLY costs; this holds what actually left, because Payload ACH fees
+-- vary monthly and rent changes mid-lease. bill_name is a snapshot so a rename
+-- never rewrites history, and both foreign keys are ON DELETE SET NULL so the
+-- payment record outlives the bill definition and the ledger line it produced.
+CREATE TABLE public.bill_payments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  recurring_bill_id uuid,
+  bill_name text NOT NULL,
+  amount numeric NOT NULL,
+  paid_date date NOT NULL,
+  payment_method text,
+  reference text,
+  ledger_entry_id uuid,
+  account text NOT NULL DEFAULT 'payouts'::text,
+  notes text,
+  recorded_by uuid,
+  recorded_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT bill_payments_pkey PRIMARY KEY (id),
+  CONSTRAINT bill_payments_recurring_bill_id_fkey FOREIGN KEY (recurring_bill_id) REFERENCES public.recurring_bills(id) ON DELETE SET NULL,
+  CONSTRAINT bill_payments_ledger_entry_id_fkey FOREIGN KEY (ledger_entry_id) REFERENCES public.brokerage_ledger(id) ON DELETE SET NULL,
+  CONSTRAINT bill_payments_recorded_by_fkey FOREIGN KEY (recorded_by) REFERENCES public.users(id)
+);
 -- Point-in-time record of where the payouts account stood when a period was
 -- closed. Written by the reconciliation save and the nightly snapshot cron.
 -- Present in the live database but missing from this file until now.

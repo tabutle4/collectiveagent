@@ -180,14 +180,14 @@ export default function ReconciliationPage() {
         ) : !data ? null : (
           <>
             <div className="container-card mb-6">
-              <div className="flex items-start justify-between mb-4">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
                 <div>
                   <h2 className="text-lg font-semibold text-luxury-gray-1">Three pots</h2>
                   <p className="text-xs text-luxury-gray-3">
                     Type what the bank and Payload show. Each pot has to match on its own.
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0">
                   {data.all_tie ? (
                     <span className="text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded inline-flex items-center gap-1">
                       <CheckCircle size={12} /> All three tie
@@ -204,7 +204,81 @@ export default function ReconciliationPage() {
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
+              {/* Phone: one card per pot. The desktop table below is five
+                  columns wide, and the one that matters most on a phone is
+                  the box you type into, which is the easiest to lose when a
+                  table is squeezed. Same data, same order, stacked. */}
+              <div className="md:hidden space-y-3">
+                {data.pots.map((pot, i) => {
+                  const value = i === 0 ? available : i === 1 ? onHold : payloadHold
+                  const setter = i === 0 ? setAvailable : i === 1 ? setOnHold : setPayloadHold
+                  return (
+                    <div key={pot.label} className="inner-card">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <p className="text-sm font-semibold text-luxury-gray-1">{pot.label}</p>
+                        {pot.ties ? (
+                          <span className="text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded flex-shrink-0">
+                            Ties
+                          </span>
+                        ) : (
+                          <span className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded flex-shrink-0">
+                            Off by {formatCurrency(Math.abs(pot.difference))}
+                          </span>
+                        )}
+                      </div>
+                      <label className="field-label">What the statement says</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        inputMode="decimal"
+                        value={value}
+                        onChange={e => setter(e.target.value)}
+                        readOnly={!hasPermission('can_manage_reconciliation')}
+                        className="input-luxury text-right w-full mb-2"
+                      />
+                      <div className="flex justify-between text-xs">
+                        <span className="text-luxury-gray-3">What the app says</span>
+                        <span className="text-luxury-gray-1 tabular-nums">{formatCurrency(pot.app)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs mt-1">
+                        <span className="text-luxury-gray-3">Difference</span>
+                        <span
+                          className={
+                            pot.ties
+                              ? 'text-luxury-gray-3 tabular-nums'
+                              : 'text-red-700 font-medium tabular-nums'
+                          }
+                        >
+                          {formatCurrency(pot.difference)}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+                <div className="inner-card">
+                  <p className="text-sm font-semibold text-luxury-gray-1 mb-2">Total</p>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-luxury-gray-3">Statement</span>
+                    <span className="font-semibold text-luxury-gray-1 tabular-nums">
+                      {formatCurrency(data.totals.typed)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs mt-1">
+                    <span className="text-luxury-gray-3">App</span>
+                    <span className="font-semibold text-luxury-gray-1 tabular-nums">
+                      {formatCurrency(data.totals.app)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs mt-1">
+                    <span className="text-luxury-gray-3">Difference</span>
+                    <span className="font-semibold text-luxury-gray-1 tabular-nums">
+                      {formatCurrency(data.totals.typed - data.totals.app)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-luxury-gray-5">
@@ -273,7 +347,7 @@ export default function ReconciliationPage() {
                 </table>
               </div>
 
-              <div className="flex items-center justify-between mt-4">
+              <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 mt-4">
                 <p className="text-xs text-luxury-gray-3">
                   {data.last_typed_at
                     ? `Last saved ${new Date(data.last_typed_at).toLocaleString('en-US')}`
@@ -284,7 +358,11 @@ export default function ReconciliationPage() {
                     not. They could read the page and press a button that
                     403s. */}
                 {hasPermission('can_manage_reconciliation') ? (
-                  <button onClick={save} disabled={saving} className="btn btn-primary flex items-center gap-2">
+                  <button
+                    onClick={save}
+                    disabled={saving}
+                    className="btn btn-primary flex items-center justify-center gap-2 w-full sm:w-auto"
+                  >
                     {saving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
                     Save reconciliation
                   </button>
@@ -373,7 +451,39 @@ export default function ReconciliationPage() {
                   Every line has been matched to a statement.
                 </p>
               ) : (
-                <div className="overflow-x-auto">
+                <>
+                {/* Phone: the tick box and the amount are the whole job here,
+                    so they lead. The date sits under the detail rather than in
+                    its own column. */}
+                <div className="md:hidden space-y-2">
+                  {data.outstanding.map(row => (
+                    <label
+                      key={row.id}
+                      className="inner-card flex items-start gap-3 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checkedOff.has(row.id)}
+                        onChange={() => toggle(row.id)}
+                        disabled={!hasPermission('can_manage_reconciliation')}
+                        className="h-4 w-4 mt-0.5 flex-shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm text-luxury-gray-2 min-w-0">{row.description}</p>
+                          <span className="text-sm text-luxury-gray-1 tabular-nums flex-shrink-0">
+                            {formatCurrency(row.amount)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-luxury-gray-3 mt-0.5">
+                          {formatDate(row.entry_date)}
+                        </p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-luxury-gray-5">
@@ -407,6 +517,7 @@ export default function ReconciliationPage() {
                     </tbody>
                   </table>
                 </div>
+                </>
               )}
             </div>
           </>

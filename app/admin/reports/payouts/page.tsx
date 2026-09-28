@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { RefreshCw, Plus, Trash2, Save, ChevronDown, ChevronUp, ExternalLink, Check, X, ArrowRightLeft, CalendarDays } from 'lucide-react'
+import { RefreshCw, Plus, Trash2, Save, ChevronDown, ChevronUp, ExternalLink, Check, X, ArrowRightLeft, CalendarDays, Receipt } from 'lucide-react'
+import BillPaymentDialog from '@/components/payouts/BillPaymentDialog'
 import Link from 'next/link'
 import { useAuth } from '@/lib/context/AuthContext'
 import MarkPaidPanelModal from '@/components/transactions/MarkPaidPanelModal'
@@ -551,19 +552,26 @@ function PayoutsTable({ rows, title, subtitle, emptyMessage, showWaitingOn, coll
 
   return (
     <div className="container-card mb-5">
-      <button className="w-full flex items-center justify-between" onClick={onToggle}>
-        <div className="flex items-center gap-3">
-          <div className="text-left">
-            <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">{title}</h2>
-            {subtitle && <p className="text-xs text-luxury-gray-3 normal-case">{subtitle}</p>}
+      {/* The three totals wrap under the title on a phone rather than
+          competing with it for one line. The chevron stays pinned to the
+          title row, which is what the thumb goes for. */}
+      <button className="w-full text-left" onClick={onToggle}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="text-left min-w-0">
+              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">{title}</h2>
+              {subtitle && <p className="text-xs text-luxury-gray-3 normal-case">{subtitle}</p>}
+            </div>
+            <span className="text-xs text-luxury-gray-3 flex-shrink-0">({rows.length})</span>
           </div>
-          <span className="text-xs text-luxury-gray-3">({rows.length})</span>
+          <span className="flex-shrink-0 mt-0.5">
+            {collapsed ? <ChevronDown size={14} className="text-luxury-gray-3" /> : <ChevronUp size={14} className="text-luxury-gray-3" />}
+          </span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 sm:mt-1">
           <span className="text-xs text-luxury-gray-2">Checks: <span className="font-semibold text-luxury-gray-1">{fmt(checkTotal)}</span></span>
           <span className="text-xs text-luxury-gray-2">Agents: <span className="font-semibold text-luxury-gray-1">{fmt(agentTot)}</span></span>
           <span className="text-xs text-luxury-gray-2">Our share: <span className="font-semibold text-luxury-gray-1">{fmt(crcTotal)}</span></span>
-          {collapsed ? <ChevronDown size={14} className="text-luxury-gray-3" /> : <ChevronUp size={14} className="text-luxury-gray-3" />}
         </div>
       </button>
 
@@ -684,6 +692,7 @@ export default function PayoutsReportPage() {
   const [ledgerBalance, setLedgerBalance] = useState(0)
   const [ledgerStarted, setLedgerStarted] = useState(false)
   const [billsDue14, setBillsDue14] = useState(0)
+  const [payingBills, setPayingBills] = useState(false)
   const [payExpense, setPayExpense] = useState<{ id: string; description: string; amount: number | null } | null>(null)
   const [payAmount, setPayAmount] = useState('')
   const [payDate, setPayDate] = useState('')
@@ -1074,8 +1083,8 @@ export default function PayoutsReportPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-6">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <h1 className="page-title">PAYOUTS REPORT</h1>
           <Link href="/admin/reports/all-payouts" className="text-xs text-luxury-accent hover:underline">
             View All Payouts →
@@ -1087,11 +1096,11 @@ export default function PayoutsReportPage() {
             Bank Reconciliation →
           </Link>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setDayViewOpen(true)} className="btn btn-secondary text-xs flex items-center gap-1.5">
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={() => setDayViewOpen(true)} className="btn btn-secondary text-xs flex items-center justify-center gap-1.5 flex-1 lg:flex-none">
             <CalendarDays size={13} /> What happened today
           </button>
-          <button onClick={load} className="btn btn-secondary text-xs flex items-center gap-1.5">
+          <button onClick={load} className="btn btn-secondary text-xs flex items-center justify-center gap-1.5 flex-1 lg:flex-none">
             <RefreshCw size={13} /> Refresh
           </button>
         </div>
@@ -1509,6 +1518,19 @@ export default function PayoutsReportPage() {
                   transfer is decided knowing what is about to leave.
                 </p>
               )}
+              {/* Recording one lives here as well as on Money Movement,
+                  because this is the screen where the figure above prompts the
+                  thought. Same dialog, so the record cannot differ by which
+                  screen it was made from. */}
+              {hasPermission('can_manage_ledger') && (
+                <button
+                  onClick={() => setPayingBills(true)}
+                  className="btn btn-secondary text-xs flex items-center justify-center gap-1.5 mt-2 w-full sm:w-auto"
+                >
+                  <Receipt size={12} />
+                  Record a bill payment
+                </button>
+              )}
               {hasPermission('can_manage_sweeps') && (
                 <button
                   onClick={() => setSweepOpen(true)}
@@ -1535,6 +1557,10 @@ export default function PayoutsReportPage() {
         />
       )}
 
+      {payingBills && (
+        <BillPaymentDialog onClose={() => setPayingBills(false)} onSaved={load} />
+      )}
+
       {dayViewOpen && <DayView onClose={() => setDayViewOpen(false)} />}
 
       {/* Agent Mark Paid Modal */}
@@ -1553,8 +1579,8 @@ export default function PayoutsReportPage() {
           editable because the figure that actually leaves the bank routinely
           differs from the one that was reserved. */}
       {payExpense && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white w-full sm:max-w-sm rounded-t-xl sm:rounded-xl shadow-xl max-h-[92vh] sm:max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b border-luxury-gray-5">
               <div>
                 <h2 className="text-sm font-semibold text-luxury-gray-1">Record This As Paid</h2>
@@ -1563,7 +1589,7 @@ export default function PayoutsReportPage() {
               <button onClick={() => setPayExpense(null)} className="text-luxury-gray-3 hover:text-luxury-gray-1"><X size={16} /></button>
             </div>
             <div className="px-5 py-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="field-label">Amount that left *</label>
                   <input type="number" step="0.01" className="input-luxury text-xs" value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="0.00" />
@@ -1588,8 +1614,8 @@ export default function PayoutsReportPage() {
 
       {/* External Mark Paid Modal */}
       {externalMarkPaid && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white w-full sm:max-w-sm rounded-t-xl sm:rounded-xl shadow-xl max-h-[92vh] sm:max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b border-luxury-gray-5">
               <div>
                 <h2 className="text-sm font-semibold text-luxury-gray-1">Mark External Paid</h2>
@@ -1598,7 +1624,7 @@ export default function PayoutsReportPage() {
               <button onClick={() => setExternalMarkPaid(null)} className="text-luxury-gray-3 hover:text-luxury-gray-1"><X size={16} /></button>
             </div>
             <div className="px-5 py-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="field-label">Payment date *</label>
                   <input type="date" className="input-luxury text-xs" value={externalMarkPaidDate} onChange={e => setExternalMarkPaidDate(e.target.value)} />
@@ -1627,8 +1653,8 @@ export default function PayoutsReportPage() {
 
       {/* Mark Paid Modal (PM fee / landlord) */}
       {markPaidItem && markPaidType && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white w-full sm:max-w-md rounded-t-lg sm:rounded-lg shadow-xl max-h-[92vh] sm:max-h-[85vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-luxury-gray-1">
                 Mark {markPaidType === 'landlord' ? 'Landlord Disbursement' : 'PM Fee'} as Paid
@@ -1660,7 +1686,7 @@ export default function PayoutsReportPage() {
                 </select>
               </div>
             </div>
-            <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+            <div className="p-6 border-t border-gray-200 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
               <button
                 onClick={closeMarkPaid}
                 className="btn btn-secondary"
