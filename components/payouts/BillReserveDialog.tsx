@@ -2,46 +2,44 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Loader2, Receipt } from 'lucide-react'
-import { PAYMENT_METHOD_OPTIONS } from '@/lib/transactions/constants'
 
-// Recording bills as paid.
+// Putting a recurring bill into Also In Payouts by picking it.
 //
-// Deliberately not a list of what is due. A bill that is due has not left the
-// bank, and a screen that pre-ticks the month's bills invites recording money
-// that never moved. So: every active bill is offered, none is ticked, and
-// nothing is written until somebody picks.
+// This reserves, it does not pay. The row it creates holds its amount back
+// from the bottom line and nothing reaches the ledger, because nothing has
+// left the bank yet. Paying is the Paid button already on each row in Also In
+// Payouts, which asks what actually left and writes the ledger line then.
 //
-// The amount is prefilled with what the bill usually costs and is editable,
-// because Payload's ACH fees vary every month and rent changes mid-lease. What
-// gets recorded is what actually left; the stored figure is never touched.
+// Keeping those two acts apart is the point. A bill that is due has not been
+// paid, and a screen that recorded it as paid the moment it was scheduled
+// would be stating a payment nobody made.
 //
-// Shared between Money Movement and the Payouts Report. The same act from two
-// screens has to produce the same record, and two copies of this would drift.
+// Nothing is pre-ticked. The amount defaults to what the bill usually costs
+// and is editable, because a reservation is a guess and Payload's fees vary;
+// the figure that ends up on the ledger is typed again at Paid time, so a
+// wrong guess here cannot become a wrong ledger line later.
 
 type Bill = {
   id: string
   name: string
   usual_amount: number
-  account: string
-  last_paid: { amount: number; paid_date: string } | null
+  /** Already waiting in Also In Payouts, so it cannot be reserved again. */
+  pending: boolean
+  last_paid: { amount: number; paid_at: string } | null
 }
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0)
 
-function todayCentral(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
-}
-
-function shortDate(d: string): string {
-  const [y, m, day] = d.split('-').map(Number)
-  return new Date(y, (m || 1) - 1, day || 1).toLocaleDateString('en-US', {
+function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
+    timeZone: 'America/Chicago',
   })
 }
 
-export default function BillPaymentDialog({
+export default function BillReserveDialog({
   onClose,
   onSaved,
 }: {
@@ -57,15 +55,12 @@ export default function BillPaymentDialog({
   const [picked, setPicked] = useState<Set<string>>(new Set())
   /** Keyed by bill id. Held as strings so a half-typed figure is not clobbered. */
   const [amounts, setAmounts] = useState<Record<string, string>>({})
-  const [paidDate, setPaidDate] = useState(todayCentral())
-  const [method, setMethod] = useState('')
-  const [reference, setReference] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/admin/bill-payments')
+      const res = await fetch('/api/admin/payout-expenses')
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Could not load the bills')
       const list: Bill[] = json.bills || []
@@ -105,20 +100,17 @@ export default function BillPaymentDialog({
     setSaving(true)
     setError(null)
     try {
-      const res = await fetch('/api/admin/bill-payments', {
+      const ids = bills.filter(b => picked.has(b.id)).map(b => b.id)
+      const res = await fetch('/api/admin/payout-expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          paid_date: paidDate,
-          payment_method: method || null,
-          reference: reference || null,
-          bills: bills
-            .filter(b => picked.has(b.id))
-            .map(b => ({ recurring_bill_id: b.id, amount: Number(amounts[b.id]) })),
+          recurring_bill_ids: ids,
+          amounts: Object.fromEntries(ids.map(id => [id, Number(amounts[id])])),
         }),
       })
       const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'Could not record those')
+      if (!res.ok) throw new Error(json.error || 'Could not add those')
       onSaved()
       onClose()
     } catch (e: any) {
@@ -127,14 +119,16 @@ export default function BillPaymentDialog({
     }
   }
 
+  const selectable = bills.filter(b => !b.pending)
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="bg-white w-full sm:max-w-md rounded-t-xl sm:rounded-xl shadow-xl max-h-[92vh] sm:max-h-[85vh] flex flex-col">
         <div className="px-5 py-4 border-b border-luxury-gray-5">
-          <h3 className="text-sm font-semibold text-luxury-gray-1">Record a bill payment</h3>
+          <h3 className="text-sm font-semibold text-luxury-gray-1">Add a bill to Also In Payouts</h3>
           <p className="text-xs text-luxury-gray-3 mt-0.5">
-            Pick what you paid and correct the amount if it came to something else. Each one
-            becomes a line on the ledger.
+            This holds the money back. Press Paid on the row later, when it has actually left, and
+            the ledger line is written then.
           </p>
         </div>
 
@@ -147,10 +141,26 @@ export default function BillPaymentDialog({
             <p className="text-sm text-luxury-gray-3 py-6 text-center">
               No active bills are set up. Add them in Settings, under Recurring Bills.
             </p>
+          ) : selectable.length === 0 ? (
+            <p className="text-sm text-luxury-gray-3 py-6 text-center">
+              Every bill is already waiting in Also In Payouts.
+            </p>
           ) : (
             <div className="space-y-2">
               {bills.map(b => {
                 const on = picked.has(b.id)
+                if (b.pending) {
+                  return (
+                    <div key={b.id} className="inner-card opacity-60">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-luxury-gray-1">{b.name}</p>
+                        <span className="text-xs text-luxury-gray-3 flex-shrink-0">
+                          Already waiting
+                        </span>
+                      </div>
+                    </div>
+                  )
+                }
                 return (
                   <div key={b.id} className={on ? 'inner-card' : 'inner-card opacity-70'}>
                     <label className="flex items-start gap-3 cursor-pointer">
@@ -166,7 +176,7 @@ export default function BillPaymentDialog({
                           Usually {fmt(b.usual_amount)}
                           {b.last_paid
                             ? ` - last paid ${fmt(b.last_paid.amount)} on ${shortDate(
-                                b.last_paid.paid_date
+                                b.last_paid.paid_at
                               )}`
                             : ' - never recorded'}
                         </p>
@@ -174,7 +184,7 @@ export default function BillPaymentDialog({
                     </label>
                     {on && (
                       <div className="mt-2 pl-7">
-                        <label className="field-label">What actually left *</label>
+                        <label className="field-label">Hold back *</label>
                         <input
                           type="number"
                           step="0.01"
@@ -189,46 +199,6 @@ export default function BillPaymentDialog({
                   </div>
                 )
               })}
-            </div>
-          )}
-
-          {!loading && bills.length > 0 && (
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="field-label">Date it left</label>
-                <input
-                  type="date"
-                  value={paidDate}
-                  onChange={e => setPaidDate(e.target.value)}
-                  className="input-luxury w-full text-xs"
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="field-label">How it moved</label>
-                  <select
-                    value={method}
-                    onChange={e => setMethod(e.target.value)}
-                    className="select-luxury w-full text-xs"
-                  >
-                    <option value="">Not recorded</option>
-                    {PAYMENT_METHOD_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="field-label">Bank reference (optional)</label>
-                  <input
-                    type="text"
-                    value={reference}
-                    onChange={e => setReference(e.target.value)}
-                    className="input-luxury w-full text-xs"
-                  />
-                </div>
-              </div>
             </div>
           )}
         </div>
@@ -257,7 +227,7 @@ export default function BillPaymentDialog({
               className="btn btn-primary text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 w-full sm:w-auto"
             >
               {saving ? <Loader2 size={12} className="animate-spin" /> : <Receipt size={12} />}
-              Record {picked.size > 0 ? fmt(total) : 'the payment'}
+              Hold back {picked.size > 0 ? fmt(total) : 'the bill'}
             </button>
           </div>
         </div>

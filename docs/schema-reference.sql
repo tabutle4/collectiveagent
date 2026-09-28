@@ -1844,8 +1844,12 @@ CREATE TABLE public.payout_expenses (
   status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'released'::text, 'paid'::text])),
   released_at timestamp with time zone,
   released_by uuid,
+  -- Set when the reservation was made by picking a recurring bill rather than
+  -- typing one. Null for a hand-entered earmark, which is the ordinary case.
+  recurring_bill_id uuid,
   CONSTRAINT payout_expenses_pkey PRIMARY KEY (id),
-  CONSTRAINT payout_expenses_released_by_fkey FOREIGN KEY (released_by) REFERENCES public.users(id)
+  CONSTRAINT payout_expenses_released_by_fkey FOREIGN KEY (released_by) REFERENCES public.users(id),
+  CONSTRAINT payout_expenses_recurring_bill_id_fkey FOREIGN KEY (recurring_bill_id) REFERENCES public.recurring_bills(id) ON DELETE SET NULL
 );
 -- Bills paid out of the payouts account on a schedule. The sweep reserves
 -- against these so the account is never swept below what is already owed.
@@ -1870,6 +1874,10 @@ CREATE TABLE public.recurring_bills (
 -- vary monthly and rent changes mid-lease. bill_name is a snapshot so a rename
 -- never rewrites history, and both foreign keys are ON DELETE SET NULL so the
 -- payment record outlives the bill definition and the ledger line it produced.
+-- SUPERSEDED, and empty. Bills are now reserved in payout_expenses and paid
+-- from there, which writes the ledger line. Nothing reads or writes this table
+-- any more. Left in place rather than dropped because destructive changes go in
+-- their own migration; drop it once you are sure nothing wants it.
 CREATE TABLE public.bill_payments (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   recurring_bill_id uuid,

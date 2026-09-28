@@ -2,8 +2,7 @@
 
 import { Fragment, useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ChevronDown, ChevronRight, Loader2, Plus, Receipt, RefreshCw, Undo2 } from 'lucide-react'
-import BillPaymentDialog from '@/components/payouts/BillPaymentDialog'
+import { ArrowLeft, ChevronDown, ChevronRight, Loader2, Plus, RefreshCw, Undo2 } from 'lucide-react'
 import { LEDGER_CATEGORIES, ledgerCategoryLabel } from '@/lib/payouts/ledger'
 import { PAYMENT_METHOD_OPTIONS } from '@/lib/transactions/constants'
 import { useAuth } from '@/lib/context/AuthContext'
@@ -107,7 +106,6 @@ export default function MoneyMovementPage() {
   // enough to push the ledger itself off the screen, and the ledger is what
   // the page is for. The headline says whether it is worth opening.
   const [crcOpen, setCrcOpen] = useState(false)
-  const [payingBills, setPayingBills] = useState(false)
   // Undoing a transfer. Without this the reversal endpoint has no way in, and
   // a transfer recorded by mistake can only be unpicked by hand in the
   // database, which is how a ledger stops being a ledger.
@@ -582,15 +580,6 @@ export default function MoneyMovementPage() {
               Refresh
             </button>
             {hasPermission('can_manage_ledger') && (
-              <button
-                onClick={() => setPayingBills(true)}
-                className="btn btn-secondary flex items-center gap-2"
-              >
-                <Receipt size={14} />
-                Record a bill payment
-              </button>
-            )}
-            {hasPermission('can_manage_ledger') && (
               <button onClick={() => setAdding(true)} className="btn btn-primary flex items-center gap-2">
                 <Plus size={14} />
                 Add a line
@@ -887,10 +876,6 @@ export default function MoneyMovementPage() {
           )}
         </div>
       </div>
-
-      {payingBills && (
-        <BillPaymentDialog onClose={() => setPayingBills(false)} onSaved={load} />
-      )}
 
       {adding && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">

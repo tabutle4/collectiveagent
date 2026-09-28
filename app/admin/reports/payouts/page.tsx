@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { RefreshCw, Plus, Trash2, Save, ChevronDown, ChevronUp, ExternalLink, Check, X, ArrowRightLeft, CalendarDays, Receipt } from 'lucide-react'
-import BillPaymentDialog from '@/components/payouts/BillPaymentDialog'
+import BillReserveDialog from '@/components/payouts/BillReserveDialog'
 import Link from 'next/link'
 import { useAuth } from '@/lib/context/AuthContext'
 import MarkPaidPanelModal from '@/components/transactions/MarkPaidPanelModal'
@@ -1260,14 +1260,14 @@ export default function PayoutsReportPage() {
 
         {!expCollapsed && (
           <div className="mt-4">
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex flex-wrap items-center gap-2 mb-4">
               <input
                 type="text"
                 placeholder="Description"
                 value={newDesc}
                 onChange={e => setNewDesc(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && addExpense()}
-                className="input-luxury text-xs flex-1"
+                className="input-luxury text-xs flex-1 min-w-[10rem]"
               />
               <input
                 type="number"
@@ -1284,6 +1284,18 @@ export default function PayoutsReportPage() {
               >
                 <Plus size={12} /> Add
               </button>
+              {/* The same list, filled from the recurring bills rather than
+                  retyped. Gated on the permission the create route actually
+                  requires, not the ledger one: this writes a reservation, and
+                  pressing Paid on the row later is what writes the ledger. */}
+              {hasPermission('can_manage_checks') && (
+                <button
+                  onClick={() => setPayingBills(true)}
+                  className="btn btn-secondary text-xs px-3 flex items-center gap-1 flex-shrink-0"
+                >
+                  <Receipt size={12} /> Add a bill
+                </button>
+              )}
             </div>
             {expenses.length === 0 ? (
               <p className="text-xs text-luxury-gray-3 text-center py-4">No items. Add expenses above.</p>
@@ -1518,19 +1530,6 @@ export default function PayoutsReportPage() {
                   transfer is decided knowing what is about to leave.
                 </p>
               )}
-              {/* Recording one lives here as well as on Money Movement,
-                  because this is the screen where the figure above prompts the
-                  thought. Same dialog, so the record cannot differ by which
-                  screen it was made from. */}
-              {hasPermission('can_manage_ledger') && (
-                <button
-                  onClick={() => setPayingBills(true)}
-                  className="btn btn-secondary text-xs flex items-center justify-center gap-1.5 mt-2 w-full sm:w-auto"
-                >
-                  <Receipt size={12} />
-                  Record a bill payment
-                </button>
-              )}
               {hasPermission('can_manage_sweeps') && (
                 <button
                   onClick={() => setSweepOpen(true)}
@@ -1558,7 +1557,7 @@ export default function PayoutsReportPage() {
       )}
 
       {payingBills && (
-        <BillPaymentDialog onClose={() => setPayingBills(false)} onSaved={load} />
+        <BillReserveDialog onClose={() => setPayingBills(false)} onSaved={load} />
       )}
 
       {dayViewOpen && <DayView onClose={() => setDayViewOpen(false)} />}
