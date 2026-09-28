@@ -6798,12 +6798,20 @@ export default function AdminTransactionDetailPage() {
                               >
                                 {e.summary}
                               </p>
+                              {/* Who, on its own line and on every entry.
+                                  It used to ride along with the amount, which
+                                  meant a change with no dollar movement -- a
+                                  status, a cleared field -- showed no name at
+                                  all. The question "who did this" does not
+                                  only get asked about money. */}
                               {e.delta !== null && e.delta !== 0 && (
                                 <p className="text-xs text-luxury-gray-3 mt-0.5">
                                   {e.delta > 0 ? 'Up' : 'Down'} {fmt$(Math.abs(e.delta))}
-                                  {e.actor_name ? ` - ${e.actor_name}` : ''}
                                 </p>
                               )}
+                              <p className="text-xs text-luxury-gray-3 mt-0.5">
+                                {e.actor_name || 'System'}
+                              </p>
                             </div>
                           </div>
                         ))}

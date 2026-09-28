@@ -2,13 +2,28 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { recomputeOfficeNet } from '@/lib/transactions/cascade'
+import { stampActivityActor, activityStampPoint } from '@/lib/transactions/activityActor'
 
 export const dynamic = 'force-dynamic'
 
 // Recompute listing_side_commission or buying_side_commission from
 // base_commission + sum(additional_income rows for that side).
 // Delegates full gross + office_net recompute to avoid duplicated math.
-async function recomputeSide(transactionId: string, side: 'listing' | 'buying') {
+// actorId: the logged-in person, so the history rows this produces carry a
+// name. Every write handler in this file funnels through here, which is why
+// the stamp lives here rather than being repeated three times.
+//
+// Noting the time at the top covers everything, because the stamp claims rows
+// by transaction_id rather than by table. migrations/checks/16 attaches the
+// logging trigger to four tables - transactions, transaction_internal_agents,
+// transaction_external_brokerages and agent_debts - and a row from any of them
+// carrying this deal's id is this caller's to claim.
+async function recomputeSide(
+  transactionId: string,
+  side: 'listing' | 'buying',
+  actorId?: string | null
+) {
+  const since = activityStampPoint()
   const baseField = side === 'listing' ? 'listing_base_commission' : 'buying_base_commission'
   const sideField = side === 'listing' ? 'listing_side_commission' : 'buying_side_commission'
 
@@ -38,6 +53,8 @@ async function recomputeSide(transactionId: string, side: 'listing' | 'buying') 
   // replaces a duplicated copy of the office_net formula so the math can never
   // drift between the two routes again.
   await recomputeOfficeNet(transactionId)
+
+  await stampActivityActor({ transactionId, since, actorId })
 }
 
 export async function GET(
@@ -89,7 +106,7 @@ export async function POST(
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    await recomputeSide(id, side as 'listing' | 'buying')
+    await recomputeSide(id, side as 'listing' | 'buying', auth.user?.id || null)
 
     return NextResponse.json({ row: data })
   } catch (err: any) {
@@ -109,7 +126,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'side required' }, { status: 400 })
   }
   try {
-    await recomputeSide(id, side as 'listing' | 'buying')
+    await recomputeSide(id, side as 'listing' | 'buying', auth.user?.id || null)
     return NextResponse.json({ ok: true })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
@@ -144,7 +161,7 @@ export async function DELETE(
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    await recomputeSide(id, row.side as 'listing' | 'buying')
+    await recomputeSide(id, row.side as 'listing' | 'buying', auth.user?.id || null)
 
     return NextResponse.json({ ok: true })
   } catch (err: any) {

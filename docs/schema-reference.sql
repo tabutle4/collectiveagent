@@ -698,6 +698,7 @@ CREATE TABLE public.transaction_activity (
   new_value text,
   actor_id uuid,
   details jsonb,
+  actor_label text,
   CONSTRAINT transaction_activity_pkey PRIMARY KEY (id),
   CONSTRAINT transaction_activity_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES public.transactions(id) ON DELETE CASCADE,
   CONSTRAINT transaction_activity_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.users(id)

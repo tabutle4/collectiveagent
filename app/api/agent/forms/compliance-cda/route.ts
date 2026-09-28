@@ -11,6 +11,7 @@ import { feeCodeFromRepresenting, feeCodeFromRetainerType } from '@/lib/transact
 import { applyRetainerShell, retainerProspectName } from '@/lib/transactions/retainerShell'
 import { createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
 import { ensurePrimaryTia, autoCascadeTransaction, recomputeOfficeNet } from '@/lib/transactions/cascade'
+import { stampActivityActor, activityStampPoint } from '@/lib/transactions/activityActor'
 import { syncEcommissionRecords } from '@/lib/transactions/ecommissionSync'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 import { findDuplicateTransactions, findPartialAddressMatches } from '@/lib/transactions/dedupe'
@@ -961,7 +962,17 @@ export async function POST(request: NextRequest) {
           // overstate by the full advance. recomputeOfficeNet is idempotent, so
           // running it twice costs nothing.
           if (recordsInserted) {
+            const since = activityStampPoint()
             await recomputeOfficeNet(txn.id)
+            // Whoever submitted the form. Usually the agent; with
+            // can_submit_forms_for_agents it is the office member who
+            // submitted on their behalf, and that is the right name for an
+            // audit trail - it records who acted, not who it was done for.
+            await stampActivityActor({
+              transactionId: txn.id,
+              since,
+              actorId: auth.user?.id || null,
+            })
           }
         }
         // External referral on a resubmission: the fee is charged to the agent's

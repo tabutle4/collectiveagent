@@ -84,10 +84,11 @@ export async function GET(
       old_value: string | null
       new_value: string | null
       actor_id: string | null
+      actor_label: string | null
       details: any
     }>(
       'transaction_activity',
-      'id, occurred_at, source_table, record_id, event_type, field, old_value, new_value, actor_id, details',
+      'id, occurred_at, source_table, record_id, event_type, field, old_value, new_value, actor_id, actor_label, details',
       {
         filters: [{ type: 'eq', column: 'transaction_id', value: id }],
         orderBy: { column: 'occurred_at', ascending: false },
@@ -137,9 +138,11 @@ export async function GET(
       }
     }
 
-    // Anyone the app itself recorded as having done something. Null on every
-    // trigger row, because the database sees one service credential rather
-    // than a person.
+    // Anyone the app recorded as having done something. The trigger that
+    // writes these rows cannot know who was logged in, so the route that made
+    // the edit claims them afterwards (lib/transactions/activityActor).
+    // actor_id is a person; actor_label is an automatic job, which has no user
+    // row to point at. Neither means nothing claimed it.
     const actorIds = Array.from(
       new Set((rows || []).map(r => r.actor_id).filter((v): v is string => !!v))
     )
@@ -149,11 +152,21 @@ export async function GET(
         id: string
         first_name: string | null
         last_name: string | null
-      }>('users', 'id, first_name, last_name', {
-        filters: [{ type: 'in', column: 'id', value: actorIds }],
-      })
+        preferred_first_name: string | null
+        preferred_last_name: string | null
+      }>(
+        'users',
+        'id, first_name, last_name, preferred_first_name, preferred_last_name',
+        { filters: [{ type: 'in', column: 'id', value: actorIds }] }
+      )
       for (const a of actors || []) {
-        const name = `${a.first_name || ''} ${a.last_name || ''}`.trim()
+        // Preferred name first, matching how every other screen addresses
+        // somebody - including the agent lookup twenty lines above this one.
+        // Until now nothing displayed this name, so the difference never
+        // showed; it does from here on.
+        const name = `${a.preferred_first_name || a.first_name || ''} ${
+          a.preferred_last_name || a.last_name || ''
+        }`.trim()
         if (name) actorById.set(a.id, name)
       }
     }
@@ -197,7 +210,9 @@ export async function GET(
         // True for the figure Courtney actually asks about; everything else is
         // the reason behind it.
         headline: !!(r.field && HEADLINE_FIELDS.has(r.field)),
-        actor_name: r.actor_id ? actorById.get(r.actor_id) || null : null,
+        // A person's name, else the job's name, else nothing and the screen
+        // says System. Reading actor_id first is what makes them exclusive.
+        actor_name: r.actor_id ? actorById.get(r.actor_id) || null : r.actor_label || null,
         source_table: r.source_table,
         details: r.details ?? null,
       }

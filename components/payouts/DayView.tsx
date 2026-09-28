@@ -28,6 +28,15 @@ interface Row {
   children: Row[]
 }
 
+interface CrcChange {
+  transaction_id: string
+  address: string | null
+  was: number
+  now: number
+  difference: number
+  edits: number
+}
+
 interface Totals {
   opening: number
   in: number
@@ -66,6 +75,8 @@ export default function DayView({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState<Set<string>>(new Set())
+  const [crcChanges, setCrcChanges] = useState<CrcChange[]>([])
+  const [crcTotal, setCrcTotal] = useState(0)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -76,6 +87,8 @@ export default function DayView({ onClose }: { onClose: () => void }) {
       if (!res.ok) throw new Error(json.error || 'Could not load that day')
       setRows(json.entries || [])
       setTotals(json.totals || { opening: 0, in: 0, out: 0, swept: 0, closing: 0 })
+      setCrcChanges(json.crc_changes || [])
+      setCrcTotal(Number(json.crc_change_total || 0))
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -226,6 +239,55 @@ export default function DayView({ onClose }: { onClose: () => void }) {
             <span className="font-semibold text-luxury-gray-1">Ended the day with</span>
             <span className="font-bold text-luxury-gray-1 tabular-nums">{fmt(totals.closing)}</span>
           </div>
+
+          {/* Deals whose share of the money changed today.
+              Below the closing balance on purpose, and outside the running
+              total, because none of this moved the account by a penny. It
+              changes what a deal owes us, which is the other half of the
+              question somebody is asking when they open this screen and the
+              figure is not what they expected.
+
+              One line per deal, from where the figure started the day to
+              where it ended up, so a number edited three times over a morning
+              reads as the one move it actually was. */}
+          {!loading && crcChanges.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-luxury-gray-5">
+              <div className="flex items-baseline justify-between mb-1">
+                <p className="text-sm font-semibold text-luxury-gray-1">
+                  Our cut changed on {crcChanges.length} deal
+                  {crcChanges.length === 1 ? '' : 's'}
+                </p>
+                <span
+                  className={
+                    crcTotal >= 0
+                      ? 'text-sm font-semibold text-green-700 tabular-nums'
+                      : 'text-sm font-semibold text-red-700 tabular-nums'
+                  }
+                >
+                  {crcTotal >= 0 ? '+' : ''}
+                  {fmt(crcTotal)}
+                </span>
+              </div>
+              <p className="text-xs text-luxury-gray-3 mb-2">
+                No money moved for these. What changed is what the deal owes us.
+              </p>
+              <div className="space-y-1">
+                {crcChanges.map(c => (
+                  <div key={c.transaction_id} className="flex justify-between gap-3 text-xs">
+                    <Link
+                      href={`/admin/transactions/${c.transaction_id}?tab=activity`}
+                      className="text-luxury-accent hover:underline min-w-0"
+                    >
+                      {c.address || 'A deal'}
+                    </Link>
+                    <span className="text-luxury-gray-2 tabular-nums whitespace-nowrap">
+                      {fmt(c.was)} to {fmt(c.now)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="border-t border-luxury-gray-5 px-5 py-3 flex items-center justify-between">

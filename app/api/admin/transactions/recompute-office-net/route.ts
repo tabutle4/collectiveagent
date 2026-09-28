@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
 import { recomputeOfficeNet } from '@/lib/transactions/cascade'
+import { stampActivityActor, activityStampPoint } from '@/lib/transactions/activityActor'
 import { CUTOVER_DATE } from '@/lib/payouts/ledger'
 
 export const dynamic = 'force-dynamic'
@@ -128,8 +129,14 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Labelled as the job rather than as whoever pressed the button. Somebody
+    // running a recompute over three hundred deals did not decide anything
+    // about any one of them, and putting a person's name against all of them
+    // would read, six months later, as if they had edited each one by hand.
     for (const id of slice) {
+      const since = activityStampPoint()
       await recomputeOfficeNet(id)
+      await stampActivityActor({ transactionId: id, since, actorLabel: 'Recompute job' })
     }
 
     const { data: after } = await supabaseAdmin

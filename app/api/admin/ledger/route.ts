@@ -46,6 +46,21 @@ type LedgerRow = {
   notes: string | null
   children: LedgerRow[]
   /**
+   * The account balance immediately after this line, oldest line first.
+   *
+   * Computed here and not in the browser. The browser only receives
+   * entry_date, which is a DATE with no time on it, so every line sharing a
+   * day compares equal and a sort leaves them in whatever order they arrived -
+   * newest first. Accumulating a running balance over that produces a column
+   * where each figure belongs to a different line than the one it sits on, and
+   * an account that reads as deeply overdrawn on any day whose opening balance
+   * was entered last. The order and the opening figure both live here, so the
+   * arithmetic does too.
+   *
+   * Zero on children: only parents move the account.
+   */
+  balance_after: number
+  /**
    * On a sweep: what the screen was warning about when it was confirmed.
    * Recording these and never showing them would be half a control, so they
    * come back with the entry.
@@ -76,6 +91,7 @@ function shape(
     reconciled: !!r.reconciled,
     notes: r.notes ?? null,
     children,
+    balance_after: 0,
     warnings,
   }
 }
@@ -127,11 +143,22 @@ export async function GET(request: NextRequest) {
       if (r.parent_entry_id) (childrenByParent[r.parent_entry_id] ||= []).push(r)
     }
 
+    // Newest first, which is how a person reads a register.
+    //
+    // The opening balance is pinned to the bottom of its own day regardless of
+    // when it was typed in. It is not an event that happened during that day,
+    // it is what the account held before the day started, so every other line
+    // on that date comes after it. Entered last - which is normal, because the
+    // bank's figure arrives after the day's work - it would otherwise sort to
+    // the top and the running balance would spend the day negative before
+    // jumping up at the end.
+    const openingRank = (r: any) => (r.category === 'opening_balance' ? 1 : 0)
     const parents = all
       .filter(r => !r.parent_entry_id)
       .sort(
         (a, b) =>
           String(b.entry_date).localeCompare(String(a.entry_date)) ||
+          openingRank(a) - openingRank(b) ||
           String(b.created_at || '').localeCompare(String(a.created_at || ''))
       )
 
@@ -251,6 +278,21 @@ export async function GET(request: NextRequest) {
     const opening = (priorRows || [])
       .filter(r => !r.parent_entry_id)
       .reduce((s, r) => s + signedAmount(r.category, Number(r.amount || 0)), 0)
+
+    // The running balance, walked oldest first and written onto each line.
+    // entries is newest first, so this goes backwards through it.
+    //
+    // The last figure written is the newest line's, and it should match
+    // totals.closing below: both are opening plus the same signed movement
+    // over the same rows. They are summed in opposite directions and floating
+    // point addition is not associative, so a sub-cent difference is possible
+    // in principle; anything visible at cent resolution means one of the two
+    // is wrong.
+    let running = opening
+    for (let i = entries.length - 1; i >= 0; i--) {
+      running += signedAmount(entries[i].category, entries[i].amount)
+      entries[i].balance_after = Math.round(running * 100) / 100
+    }
 
     const movement = entries.reduce((s, e) => s + signedAmount(e.category, e.amount), 0)
 

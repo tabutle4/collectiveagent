@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { FUNDS_DESTINATIONS } from '@/lib/payouts/ledger'
-import { requirePermission } from '@/lib/api-auth'
+import { requirePermission, type AuthResult } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
+import { stampActivityActor, activityStampPoint } from '@/lib/transactions/activityActor'
 import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
 import { Resend } from 'resend'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
@@ -844,10 +845,56 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+/**
+ * Every edit a person makes to a deal comes through here, under forty-odd
+ * actions with return statements scattered all through them.
+ *
+ * The history rows those edits produce are written by a database trigger,
+ * which cannot know who was logged in. Rather than thread the logged-in user
+ * down through recomputeOfficeNet and the twenty-six things that call it, the
+ * work is done in one place: note the time, run the action whatever it turns
+ * out to be, then put this person's name on whatever history appeared.
+ *
+ * Auth stays here, first, before any await, so the shape of the handler still
+ * matches every other route. The action body below takes the result rather
+ * than re-checking it.
+ */
+export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission(request, 'can_edit_transactions')
   if (auth.error) return auth.error
 
+  const since = activityStampPoint()
+  const response = await handleTransactionPost(request, ctx, auth)
+
+  // After the action, not during: the trigger has finished writing by now.
+  //
+  // Awaited, which costs this response one indexed UPDATE. Not worth avoiding:
+  // a promise left running after the response returns can be killed when the
+  // serverless function is frozen, and history that records the change but not
+  // who made it is the thing this whole mechanism exists to prevent.
+  //
+  // Only on a successful action. A rejected edit wrote nothing, so there is
+  // nothing of this person's to claim, and stamping anyway would let a failed
+  // request put their name on rows another writer produced inside the window
+  // that activityStampPoint deliberately leaves open.
+  if (response.ok) {
+    try {
+      const { id } = await ctx.params
+      await stampActivityActor({ transactionId: id, since, actorId: auth.user?.id || null })
+    } catch {
+      // stampActivityActor already swallows its own errors; this guards only
+      // against params rejecting, which would be a broken request anyway.
+    }
+  }
+
+  return response
+}
+
+async function handleTransactionPost(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+  auth: AuthResult
+) {
   try {
     const { id } = await params
     const body = await request.json()

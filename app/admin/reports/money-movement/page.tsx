@@ -31,6 +31,8 @@ interface LedgerRow {
   reconciled: boolean
   notes: string | null
   children: LedgerRow[]
+  /** The account balance after this line. Worked out by the API. */
+  balance_after: number
   warnings: { transaction_id: string | null; property_address: string | null; warning: string }[]
 }
 
@@ -100,6 +102,10 @@ export default function MoneyMovementPage() {
   const [from, setFrom] = useState(daysAgo(30))
   const [to, setTo] = useState(today())
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  // Collapsed by default. Over a wide date range this list runs long
+  // enough to push the ledger itself off the screen, and the ledger is what
+  // the page is for. The headline says whether it is worth opening.
+  const [crcOpen, setCrcOpen] = useState(false)
   // Undoing a transfer. Without this the reversal endpoint has no way in, and
   // a transfer recorded by mistake can only be unpicked by hand in the
   // database, which is how a ledger stops being a ledger.
@@ -240,17 +246,11 @@ export default function MoneyMovementPage() {
     })
   }
 
-  // The API sends newest first, which is how a person reads a register. A
-  // running balance has to accumulate oldest first, so build it once here and
-  // look it up rather than recomputing per row.
-  const ascending = [...rows].sort((a, b) => a.entry_date.localeCompare(b.entry_date))
-  const balanceAfter: Record<string, number> = {}
-  let running = totals.opening
-  for (const r of ascending) {
-    if (r.direction === 'in') running += r.amount
-    else if (r.direction === 'out') running -= r.amount
-    balanceAfter[r.id] = Math.round(running * 100) / 100
-  }
+  // The balance on each line is worked out by the API and read straight off
+  // the row. It used to be built here by sorting on entry_date, which is a
+  // date with no time on it: every line sharing a day tied, kept the order it
+  // arrived in - newest first - and the column ended up showing each line the
+  // balance belonging to a different line.
 
   // Catch-up is idempotent, so pressing it twice is harmless. It exists
   // because "is the ledger current?" is a question asked while looking at the
@@ -422,7 +422,14 @@ export default function MoneyMovementPage() {
           <div className="container-card mb-6">
             <div className="flex items-baseline justify-between mb-3">
               <h2 className="text-sm font-semibold text-luxury-gray-1">
-                Our cut changed on {crcChanges.length} deal{crcChanges.length === 1 ? '' : 's'}
+                <button
+                  onClick={() => setCrcOpen(v => !v)}
+                  className="inline-flex items-center gap-1 hover:text-luxury-accent"
+                  aria-expanded={crcOpen}
+                >
+                  {crcOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  Our cut changed on {crcChanges.length} deal{crcChanges.length === 1 ? '' : 's'}
+                </button>
               </h2>
               <span
                 className={
@@ -435,6 +442,8 @@ export default function MoneyMovementPage() {
                 {formatCurrency(crcChangeTotal)} overall
               </span>
             </div>
+            {crcOpen && (
+              <>
             <p className="text-xs text-luxury-gray-3 mb-3">
               No money moved in or out of the account for these. What changed is what the
               deal owes us.
@@ -484,6 +493,8 @@ export default function MoneyMovementPage() {
                 ))}
               </tbody>
             </table>
+              </>
+            )}
           </div>
         )}
 
@@ -644,7 +655,7 @@ export default function MoneyMovementPage() {
                             {row.direction === 'out' ? formatCurrency(row.amount) : ''}
                           </td>
                           <td className="py-3 px-4 text-right text-luxury-gray-1">
-                            {formatCurrency(balanceAfter[row.id] ?? 0)}
+                            {formatCurrency(row.balance_after ?? 0)}
                             {row.category === 'sweep' && hasPermission('can_manage_sweeps') && (
                               <button
                                 onClick={() => { setUndoing(row); setUndoReason('') }}
