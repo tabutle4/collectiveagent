@@ -54,6 +54,8 @@
 
 import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { titleDirectTransactionIds } from '@/lib/payouts/titleDirect'
+import { depositPostingDate, isNotCleared } from '@/lib/payouts/holds'
+import { getCentralDateString } from '@/lib/timezone'
 import { DEFAULT_LEDGER_ACCOUNT, entryTypeForCategory, type LedgerCategory } from '@/lib/payouts/ledger'
 import { normalizePaymentMethod } from '@/lib/transactions/constants'
 
@@ -65,7 +67,7 @@ const MANAGED_PREFIXES = [
   'payout_batch:',
 ] as const
 
-export type PostingCounts = { added: number; reversed: number }
+export type PostingCounts = { added: number; reversed: number; updated: number }
 
 export type PostingResult = {
   started: boolean
@@ -75,16 +77,31 @@ export type PostingResult = {
   external_payouts: PostingCounts
   /** The Payload batch lines that group payouts into one bank debit. */
   batches: PostingCounts
-  /** Lines whose source stopped qualifying but which are reconciled, so they were left alone. */
+  /**
+   * Lines the sync could not act on, each with the reason. Two kinds: a line
+   * whose source stopped qualifying but which is reconciled, and a reconciled
+   * line whose check now says a different amount or date.
+   */
   left_for_review: string[]
 }
 
-const empty = (): PostingCounts => ({ added: 0, reversed: 0 })
+const empty = (): PostingCounts => ({ added: 0, reversed: 0, updated: 0 })
 
 /** A date column may arrive as a date or a timestamp. The ledger stores dates. */
 function dateOnly(v: string | null | undefined): string | null {
   if (!v) return null
   return String(v).slice(0, 10)
+}
+
+/**
+ * Dollars for a description a person reads, with the symbol.
+ *
+ * The symbol is not decoration. Sweep and bill lines already write money into
+ * this same description column with one (`covering $6,309.39`), and a deposit
+ * line sitting beside them without one reads as a different kind of number.
+ */
+function usd(n: number): string {
+  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function money(v: unknown): number {
@@ -159,12 +176,15 @@ export async function syncPayoutsLedger(recordedBy?: string | null): Promise<Pos
     property_address: string | null
     check_from: string | null
     check_amount: number | string | null
+    hold_amount: number | string | null
+    received_date: string | null
+    deposited_date: string | null
     cleared_date: string | null
     status: string | null
     payment_method: string | null
   }>(
     'checks_received',
-    'id, transaction_id, property_address, check_from, check_amount, cleared_date, status, payment_method',
+    'id, transaction_id, property_address, check_from, check_amount, hold_amount, received_date, deposited_date, cleared_date, status, payment_method',
     { filters: [{ type: 'eq', column: 'funds_destination', value: 'payouts' }] }
   )
 
@@ -182,6 +202,12 @@ export async function syncPayoutsLedger(recordedBy?: string | null): Promise<Pos
   // deposit must not post either way.
   const titleDirectTxnIds = await titleDirectTransactionIds()
 
+  // Central, not UTC. After about 7pm Texas time UTC has rolled into tomorrow,
+  // and a check clearing tomorrow would read as already cleared, releasing a
+  // hold into the balance a day early. lib/payouts/holds.ts makes the same
+  // choice for the same reason.
+  const today = getCentralDateString()
+
   // Existing derived lines, by external_id, so we can tell added from present
   // and spot lines whose source stopped qualifying.
   const existingRows = await fetchAllRows<{
@@ -190,13 +216,22 @@ export async function syncPayoutsLedger(recordedBy?: string | null): Promise<Pos
     reconciled: boolean | null
     amount: number | string | null
     parent_entry_id: string | null
-  }>('brokerage_ledger', 'id, external_id, reconciled, amount, parent_entry_id', {
+    entry_date: string | null
+    description: string | null
+  }>('brokerage_ledger', 'id, external_id, reconciled, amount, parent_entry_id, entry_date, description', {
     filters: [{ type: 'eq', column: 'account', value: DEFAULT_LEDGER_ACCOUNT }],
   })
 
   const managed = new Map<
     string,
-    { id: string; reconciled: boolean; amount: number; parentEntryId: string | null }
+    {
+      id: string
+      reconciled: boolean
+      amount: number
+      parentEntryId: string | null
+      entryDate: string | null
+      description: string | null
+    }
   >()
   for (const row of existingRows || []) {
     const key = row.external_id
@@ -207,21 +242,35 @@ export async function syncPayoutsLedger(recordedBy?: string | null): Promise<Pos
       reconciled: row.reconciled === true,
       amount: money(row.amount),
       parentEntryId: row.parent_entry_id ?? null,
+      entryDate: row.entry_date ? String(row.entry_date).slice(0, 10) : null,
+      description: row.description ?? null,
     })
   }
 
   const wanted = new Map<string, DerivedLine>()
 
   // ── Deposits ──────────────────────────────────────────────────────────────
-  // Money is in the bank on the clear date. Tara's rule, and it is also the
-  // only date that is reliably present: 77 of 332 payouts checks carry no
-  // deposited_date at all, so keying off that would silently skip them.
+  // A deposit posts on the day the check is deposited, for the amount that is
+  // actually spendable: the face value less whatever the bank is holding. Once
+  // the hold comes off the line becomes the full amount. Tara's rule, stated
+  // directly, replacing a clear-date rule this file used to attribute to her.
+  //
+  // The balance therefore means one thing everywhere: money that can be spent.
+  // That is what keeps the payouts report and the reconciliation screen honest
+  // without either of them needing to know about this file. Both read
+  // `balance + holds + payload` to reach total funds, and each of those three
+  // is now a separate pot rather than two views of the same dollars.
+  //
+  // The held portion is not hidden. It is written into the description, so a
+  // line reading 275.00 still says the check was 1,676.00 with 1,401.00 held,
+  // and the register can be read against a bank statement without opening the
+  // deal.
   //
   // A rejected check never landed, so it is not a deposit and never becomes
   // one.
   for (const c of checks || []) {
-    const cleared = dateOnly(c.cleared_date)
-    if (!cleared || cleared < start) continue
+    const postDate = dateOnly(depositPostingDate(c))
+    if (!postDate || postDate < start) continue
     if (c.status === 'rejected') continue
     // Split at the closing table. Title paid someone on this deal direct, so
     // the check never arrived here as one sum and the brokerage's share went
@@ -237,14 +286,39 @@ export async function syncPayoutsLedger(recordedBy?: string | null): Promise<Pos
     // nobody can action. A channel that always has something in it is a
     // channel people stop reading.
     if (c.transaction_id && titleDirectTxnIds.has(c.transaction_id)) continue
-    const amount = money(c.check_amount)
-    if (amount <= 0) continue
+
+    // Held only while the check has not cleared. isNotCleared is the same
+    // test computeAutoHolds uses, so the slice this line leaves out is exactly
+    // the slice the holds list reports, and the two can never drift into
+    // counting the same dollars twice or missing them entirely.
+    const face = money(c.check_amount)
+    if (face <= 0) continue
+
+    // Payload is excluded here for the same reason computeAutoHolds excludes
+    // it: a Payload payment is counted under pending Payload, and taking a
+    // hold off it as well would remove the held slice from both pots at once.
+    //
+    // Clamped to the face value. A hold above the face is bad data, not a
+    // negative deposit: 37 of 349 payouts checks carry a hold at or above
+    // their own amount, one of them a 21,333.50 hold on a 2,408.50 check.
+    // Without the clamp those post as a negative credit the day they are
+    // entered with a future clear date.
+    const holdable = c.payment_method !== 'payload' && isNotCleared(c, today)
+    const held = holdable ? Math.max(0, Math.min(money(c.hold_amount), face)) : 0
+    const amount = money(face - held)
+
+    // Deliberately NOT `if (amount <= 0) continue`. A check held in full is
+    // still a check that arrived, and skipping it here drops the key out of
+    // `wanted`, which makes the withdrawal loop below DELETE the line that is
+    // already posted for it. The deposit would vanish from the register until
+    // the hold came off. A 0.00 line carrying the hold in its description says
+    // what happened and contributes nothing to the balance, which is correct.
     const label = c.property_address || c.check_from || 'Check received'
     wanted.set(`deposit:${c.id}`, {
       external_id: `deposit:${c.id}`,
-      entry_date: cleared,
+      entry_date: postDate,
       category: 'deposit',
-      description: label,
+      description: held > 0 ? `${label} (${usd(face)} deposited, ${usd(held)} on hold)` : label,
       amount,
       transaction_id: c.transaction_id || null,
       agent_id: null,
@@ -487,6 +561,54 @@ export async function syncPayoutsLedger(recordedBy?: string | null): Promise<Pos
     }
     parentIdByKey.set(key, created.id)
     result.batches.added++
+  }
+
+  // ── Keep a posted deposit equal to its check ──────────────────────────────
+  // Until now a line was inserted once and never touched again, which was
+  // survivable while a deposit's date and amount were both fixed by the time
+  // it posted. Neither is fixed any more. A check posts for its spendable
+  // slice on the day it is deposited, and grows to its face value on the day
+  // the hold comes off, so the line has to follow it. A corrected
+  // deposited_date has to move it too.
+  //
+  // Deposits only. Payout lines keep the behaviour they have always had,
+  // because widening this to every managed prefix would rewrite historical
+  // payout lines across the whole ledger on the first run, which is not a
+  // change anybody asked for and not one to make by side effect.
+  //
+  // A reconciled line is left alone and reported. Changing the amount or the
+  // date of a line already agreed against a bank statement is the one thing
+  // this file must never do quietly.
+  for (const line of wanted.values()) {
+    if (!line.external_id.startsWith('deposit:')) continue
+    const existing = managed.get(line.external_id)
+    if (!existing) continue
+
+    const patch: Record<string, any> = {}
+    if (existing.entryDate && existing.entryDate !== line.entry_date) {
+      patch.entry_date = line.entry_date
+      // The insert path sets bank_date from the same value. Moving one without
+      // the other leaves the line claiming two different days.
+      patch.bank_date = line.entry_date
+    }
+    if (money(existing.amount) !== money(line.amount)) patch.amount = line.amount
+    if ((existing.description ?? '') !== line.description) patch.description = line.description
+    if (Object.keys(patch).length === 0) continue
+
+    if (existing.reconciled) {
+      result.left_for_review.push(
+        `${line.external_id} (reconciled at ${usd(existing.amount)} on ${existing.entryDate}, and the check now says ${usd(line.amount)} on ${line.entry_date})`
+      )
+      continue
+    }
+
+    patch.updated_at = new Date().toISOString()
+    const { error } = await supabaseAdmin
+      .from('brokerage_ledger')
+      .update(patch)
+      .eq('id', existing.id)
+    if (error) throw error
+    result.deposits.updated++
   }
 
   // ── Insert what is missing ────────────────────────────────────────────────

@@ -276,11 +276,21 @@ export default function MoneyMovementPage() {
       (json.agent_payouts?.reversed || 0) +
       (json.external_payouts?.reversed || 0) +
       (json.batches?.reversed || 0)
+    // Corrections to lines that were already posted. Without this the sync can
+    // rewrite a line's date and amount, move the balance, and still report
+    // "Already up to date" - which is the one sentence that would stop anybody
+    // looking for the change.
+    const corrected =
+      (json.deposits?.updated || 0) +
+      (json.agent_payouts?.updated || 0) +
+      (json.external_payouts?.updated || 0) +
+      (json.batches?.updated || 0)
     const review: string[] = json.left_for_review || []
-    const base =
-      added === 0 && removed === 0
-        ? 'Already up to date.'
-        : `Added ${added} line${added === 1 ? '' : 's'}${removed ? `, removed ${removed}` : ''}.`
+    const parts: string[] = []
+    if (added > 0) parts.push(`Added ${added} line${added === 1 ? '' : 's'}`)
+    if (removed > 0) parts.push(`removed ${removed}`)
+    if (corrected > 0) parts.push(`corrected ${corrected}`)
+    const base = parts.length === 0 ? 'Already up to date.' : `${parts.join(', ')}.`
     // Saying "Already up to date" while the sync knows some records could not
     // be posted is a false statement on the one screen anybody checks.
     setSyncNote(

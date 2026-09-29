@@ -25,6 +25,8 @@ export type HoldCheck = {
   check_from?: string | null
   check_amount?: number | string | null
   hold_amount?: number | string | null
+  received_date?: string | null
+  deposited_date?: string | null
   cleared_date?: string | null
   status?: string | null
   payment_method?: string | null
@@ -35,6 +37,36 @@ export type HoldLine = { check_id: string; label: string; amount: number }
 
 export function isNotCleared(c: HoldCheck, today: string): boolean {
   return (!c.cleared_date || c.cleared_date > today) && c.status !== 'rejected'
+}
+
+/**
+ * The date a check's money reaches the bank, which is the date its deposit
+ * posts to the ledger.
+ *
+ * Tara's rule: a deposited check counts toward the balance on the day it is
+ * deposited, less whatever the bank is holding. The clear date records when
+ * the hold comes off; it is not what decides whether the money arrived. The
+ * ledger used to post on the clear date and credited that rule to her, which
+ * was wrong twice over: a check deposited today showed nothing in the ledger,
+ * while computeAutoHolds below was already treating part of that same check as
+ * deposited and held. The two halves of the screen disagreed about whether the
+ * money existed at all.
+ *
+ * Payload is the exception, and not an arbitrary one: a Payload payment sits
+ * at the processor rather than in the account, so there is nothing to deposit
+ * until the funding sync stamps it cleared. computePayloadPending counts it in
+ * the meantime, and posting it on a deposit date would put the same dollars in
+ * the ledger and in pending Payload at once.
+ *
+ * received_date is a fallback, not a second source of truth: it is non-null on
+ * all 349 payouts checks, while deposited_date is missing on 78, every one of
+ * them predating the ledger. Returns null when no date is usable, and the
+ * caller skips the check rather than inventing one.
+ */
+export function depositPostingDate(c: HoldCheck): string | null {
+  const pick = (v: string | null | undefined) => (v ? String(v).slice(0, 10) : null)
+  if (c.payment_method === 'payload') return pick(c.cleared_date)
+  return pick(c.deposited_date) || pick(c.received_date)
 }
 
 /**
