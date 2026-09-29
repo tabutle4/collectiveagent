@@ -83,6 +83,7 @@ const POST_CLOSING_STATUS_OPTIONS = [
 const FUNDING_STATUS_OPTIONS = [
   { value: '', label: 'Not set' },
   { value: 'wire_form_sent', label: 'Wire Form Sent' },
+  { value: 'wire_verified', label: 'Instructions Verified' },
   { value: 'wire', label: 'Wired' },
   { value: 'check', label: 'Check Received' },
   { value: 'funded', label: 'Funded' },

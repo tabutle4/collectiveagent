@@ -8,6 +8,7 @@
 // dollar, which is the class of bug this whole build exists to remove.
 
 import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
+import { titleDirectTransactionIds } from '@/lib/payouts/titleDirect'
 import { getCentralDateString } from '@/lib/timezone'
 import { signedAmount, DEFAULT_LEDGER_ACCOUNT } from '@/lib/payouts/ledger'
 import { computeAutoHolds, computePayloadPending, type HoldCheck, type PayloadPending } from '@/lib/payouts/holds'
@@ -126,8 +127,18 @@ export async function currentPosition(): Promise<PayoutsPosition> {
   const ledger = ledgerState.balance
 
   // Only a deal whose money actually landed in this account can be unswept.
+  //
+  // A payouts-destined check is not enough on its own. When title paid an
+  // agent or the other brokerage at the closing table, the check was split
+  // there and our share went to income, so there is nothing here to sweep and
+  // counting it would overstate what is waiting to move.
+  const titleDirectTxnIds = await titleDirectTransactionIds()
   const payoutsTxnIds = Array.from(
-    new Set((checks || []).map(c => c.transaction_id).filter((v): v is string => !!v))
+    new Set(
+      (checks || [])
+        .map(c => c.transaction_id)
+        .filter((v): v is string => !!v && !titleDirectTxnIds.has(v))
+    )
   )
   let unsweptAmount = 0
   let unsweptDeals = 0

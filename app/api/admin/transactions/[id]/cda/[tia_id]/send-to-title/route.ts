@@ -218,6 +218,38 @@ export async function POST(
       ],
     })
 
+    // The wiring instructions went out with the CDA, so the Needs CDA report
+    // should say so without anyone retyping it. Only reached on a real send:
+    // sendMailAs throws on failure and the catch below turns that into a 500.
+    //
+    // Only fills in a blank. Funding status is a workflow the office advances
+    // past this point by hand (wire form sent, then wired or check received,
+    // then funded), and this route is deliberately re-sendable when title
+    // loses the email or the contact changes. Overwriting on every send would
+    // walk a deal that is already Wired or Funded back to Wire Form Sent.
+    //
+    // Read then write rather than one conditional update, for legibility. Two
+    // people sending the same CDA at once would both write the same value, so
+    // the race is harmless.
+    try {
+      const { data: txnNow } = await supabaseAdmin
+        .from('transactions')
+        .select('funding_status')
+        .eq('id', id)
+        .maybeSingle()
+      if (!txnNow?.funding_status) {
+        await supabaseAdmin
+          .from('transactions')
+          .update({ funding_status: 'wire_form_sent', updated_at: new Date().toISOString() })
+          .eq('id', id)
+      }
+    } catch (stampErr: any) {
+      // Best effort. The email is already gone, and failing the request here
+      // would tell the sender it did not send when it did. The office can set
+      // the status by hand on the report either way.
+      console.warn('send-to-title could not stamp funding status:', stampErr?.message || stampErr)
+    }
+
     return NextResponse.json({ success: true, sent_to: to, cc })
   } catch (err: any) {
     console.error('send-to-title POST error:', err)

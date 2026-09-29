@@ -7,6 +7,7 @@ import { Search, X, ExternalLink, Image, Loader2, Plus, Download, ArrowRightLeft
 import { useAuth } from '@/lib/context/AuthContext'
 import AddCheckModal from '@/components/transactions/AddCheckModal'
 import MoveCheckModal from '@/components/checks/MoveCheckModal'
+import { INCOMING_PAYMENT_METHOD_OPTIONS, paymentMethodLabel } from '@/lib/transactions/constants'
 
 interface AgentRow {
   agent_id: string
@@ -274,10 +275,9 @@ export default function ChecksPage() {
               <label className="field-label">Type</label>
               <select value={methodFilter} onChange={e => setMethodFilter(e.target.value)} className="select-luxury w-full">
                 <option value="">All</option>
-                <option value="check">Check</option>
-                <option value="zelle">Zelle</option>
-                <option value="payload">Payload</option>
-                <option value="ecommission">eCommission</option>
+                {INCOMING_PAYMENT_METHOD_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
               </select>
             </div>
 
@@ -497,7 +497,9 @@ function MobileCard({ check: c, isAdmin, onMoveCheck }: { check: CheckRow; isAdm
 
       <div className="px-4 pb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
         {statusBadge(c.status)}
-        {c.payment_method && <span className="text-xs text-luxury-gray-3 capitalize">{c.payment_method}</span>}
+        {c.payment_method && (
+          <span className="text-xs text-luxury-gray-3">{paymentMethodLabel(c.payment_method)}</span>
+        )}
         {c.check_number && <span className="text-xs text-luxury-gray-3">#{c.check_number}</span>}
       </div>
 

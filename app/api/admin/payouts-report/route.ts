@@ -11,6 +11,7 @@ import { ledgerBalance } from '@/lib/payouts/position'
 import { DEFAULT_LEDGER_ACCOUNT } from '@/lib/payouts/ledger'
 import { billsDueWithin, billsDueTotal, type RecurringBill } from '@/lib/payouts/bills'
 import { syncPayoutsLedgerQuietly } from '@/lib/payouts/posting'
+import { titleDirectTransactionIds } from '@/lib/payouts/titleDirect'
 
 export const dynamic = 'force-dynamic'
 
@@ -109,6 +110,11 @@ export async function GET(request: NextRequest) {
     )
 
     const allChecks = [...checks, ...standaloneChecks]
+
+    // Deals where title paid an agent or the other brokerage at the closing
+    // table. Their share never reached the payouts account, so they are not
+    // unswept money however their check is flagged.
+    const titleDirectTxnIds = await titleDirectTransactionIds()
 
     // For each check with a transaction, get internal agents and external brokerages
     const txnIds = [...new Set(allChecks.map(c => c.transaction_id).filter(Boolean))]
@@ -450,8 +456,13 @@ export async function GET(request: NextRequest) {
         // Funds cleared is a property of the whole deal, not of this one check.
         // A deal funded by two checks is not cleared until both are.
         funds_cleared: fundsCleared,
+        // Every row on this report is built from a payouts-destined check, so
+        // the answer was hardcoded true. That holds unless title paid someone
+        // at the closing table, which splits the check there and sends our
+        // share to income: then nothing reached this account and the deal was
+        // paid at closing, not left unswept.
         office_net_state: officeNetState({
-          hasPayoutsCheck: true,
+          hasPayoutsCheck: !(check.transaction_id && titleDirectTxnIds.has(check.transaction_id)),
           sweptAt: txn?.office_net_swept_at ?? null,
         }),
         office_net_swept_at: txn?.office_net_swept_at ?? null,

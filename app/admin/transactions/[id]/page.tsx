@@ -49,7 +49,7 @@ import LowCommissionFlagPanel from '@/components/transactions/LowCommissionFlagP
 import AddAgentModal from '@/components/transactions/AddAgentModal'
 import AgentBillingPanel from '@/components/transactions/AgentBillingPanel'
 import AgentCardFinancials, { OverridableField } from '@/components/transactions/AgentCardFinancials'
-import { AGENT_ROLE_OPTIONS, SIDE_OPTIONS, CONTACT_TYPES, PAYMENT_METHOD_OPTIONS, paymentMethodLabel } from '@/lib/transactions/constants'
+import { AGENT_ROLE_OPTIONS, SIDE_OPTIONS, CONTACT_TYPES, PAYMENT_METHOD_OPTIONS, INCOMING_PAYMENT_METHOD_OPTIONS, paymentMethodLabel } from '@/lib/transactions/constants'
 import { getTransactionTypeLabel } from '@/lib/transactions/transactionTypes'
 import { FIELD_GROUPS, hasValue } from '@/lib/compliance/fieldGroups'
 
@@ -2332,6 +2332,7 @@ export default function AdminTransactionDetailPage() {
   const [agentCalcData, setAgentCalcData] = useState<Record<string, any>>({}) // agent_id -> calc result
   const [agentLeadSources, setAgentLeadSources] = useState<Record<string, string>>({}) // agent_id -> lead_source
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [deleteBrokerageConfirm, setDeleteBrokerageConfirm] = useState<string | null>(null)
   const [autoCalcApplied, setAutoCalcApplied] = useState<Set<string>>(new Set()) // Track which agents have had auto-calc applied
 
   // Contacts state
@@ -2624,6 +2625,73 @@ export default function AdminTransactionDetailPage() {
   }, [data?.transaction?.office_gross, data?.transaction?.status, data?.agents, agentLeadSources, id, autoCalcApplied, agentCalcData, basisForRow])
 
   // ── Actions ─────────────────────────────────────────────────────────────────
+
+  // payoutBrokerages is loaded by its own lazy fetch on the Check & Payouts
+  // tab, so loadData() alone leaves it stale. Anything that changes a
+  // brokerage has to refresh both: loadData() for the pipeline rail's Paid Out
+  // gate, which reads externalBrokerages off the main payload, and this for
+  // the Balance figure, which reads payoutBrokerages. PayoutModal.onSaved does
+  // the same pair; this is that pair, named.
+  const refreshPayoutBrokerages = async () => {
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}?section=external_brokerages`)
+      const d = res.ok ? await res.json() : { external_brokerages: [] }
+      setPayoutBrokerages(d.external_brokerages || [])
+    } catch {
+      // Best effort. The figures come back on the next tab switch.
+    }
+  }
+
+  const deleteExternalBrokerage = async (brokerageId: string) => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete_external_brokerage',
+          brokerage_id: brokerageId,
+        }),
+      })
+      if (res.ok) {
+        setDeleteBrokerageConfirm(null)
+        await loadData()
+        await refreshPayoutBrokerages()
+      } else {
+        const d = await res.json().catch(() => ({}))
+        alert(d.error || 'Failed to remove brokerage')
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Who paid this brokerage. The payouts ledger reads it, so it is saved on
+  // change rather than behind an edit toggle, and it stays editable on a paid
+  // row: the 38 rows that predate the column all default to Collective Realty
+  // Co., and the ones title actually paid can only be corrected afterwards.
+  const setBrokerageFundingSource = async (brokerageId: string, value: string) => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update_external_brokerage',
+          brokerage_id: brokerageId,
+          updates: { funding_source: value },
+        }),
+      })
+      if (res.ok) {
+        await refreshPayoutBrokerages()
+      } else {
+        const d = await res.json().catch(() => ({}))
+        alert(d.error || 'Failed to save who funded this brokerage')
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const deleteInternalAgent = async (internalAgentId: string) => {
     setSaving(true)
@@ -5651,10 +5719,9 @@ export default function AdminTransactionDetailPage() {
                                     updateCheck(check.id, { payment_method: e.target.value })
                                   }}
                                 >
-                                  <option value="check">Check</option>
-                                  <option value="zelle">Zelle</option>
-                                  <option value="payload">Payload</option>
-                                  <option value="ecommission">eCommission</option>
+                                  {INCOMING_PAYMENT_METHOD_OPTIONS.map(opt => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                  ))}
                                 </select>
                               </div>
                               <div>
@@ -6259,19 +6326,77 @@ export default function AdminTransactionDetailPage() {
                     {payoutBrokerages.length > 0 && (
                       <div className="space-y-2 mb-2">
                         {payoutBrokerages.map((b: any) => (
-                          <div key={b.id} className="inner-card flex items-center justify-between">
-                            <div>
-                              <p className="text-xs font-semibold text-luxury-gray-1">{b.brokerage_name}</p>
-                              <p className="text-xs text-luxury-gray-3">
-                                {b.brokerage_role?.replace(/_/g, ' ')} · {b.payment_status || 'pending'}
-                              </p>
-                              {b.payment_date && (
-                                <p className="text-xs text-luxury-gray-3">{fmtDate(b.payment_date)}</p>
-                              )}
+                          <div key={b.id} className="inner-card">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-xs font-semibold text-luxury-gray-1">{b.brokerage_name}</p>
+                                <p className="text-xs text-luxury-gray-3">
+                                  {b.brokerage_role?.replace(/_/g, ' ')} · {b.payment_status || 'pending'}
+                                </p>
+                                {b.payment_date && (
+                                  <p className="text-xs text-luxury-gray-3">{fmtDate(b.payment_date)}</p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold text-luxury-gray-1">
+                                  {fmt$(parseFloat(b.commission_amount || 0))}
+                                </span>
+                                <button
+                                  onClick={() => setDeleteBrokerageConfirm(b.id)}
+                                  className="p-1.5 rounded border border-luxury-gray-5 hover:border-red-300 hover:bg-red-50 transition-colors"
+                                  title="Remove brokerage"
+                                >
+                                  <Trash2 size={14} className="text-luxury-gray-3 hover:text-red-500" />
+                                </button>
+                              </div>
                             </div>
-                            <span className="text-xs font-semibold text-luxury-gray-1">
-                              {fmt$(parseFloat(b.commission_amount || 0))}
-                            </span>
+
+                            {/* Who actually paid them. Editable after the fact,
+                                and on a paid row, because the payouts ledger
+                                reads it: Title keeps the payment out of the
+                                ledger, since no CRC account moved. */}
+                            <div className="mt-2">
+                              <label className="field-label">Funded from</label>
+                              <select
+                                className="select-luxury text-xs"
+                                value={b.funding_source || 'crc'}
+                                onChange={e => setBrokerageFundingSource(b.id, e.target.value)}
+                                disabled={saving}
+                              >
+                                {/* Only the two the ledger understands. The
+                                    agent-side control also offers Referral
+                                    Collective, but nothing here branches on
+                                    it, so an outside brokerage marked that way
+                                    would post to the CRC payouts ledger as if
+                                    CRC had paid it. Left out until the ledger
+                                    can tell the two entities apart. */}
+                                <option value="crc">Collective Realty Co.</option>
+                                <option value="title_direct">Title</option>
+                              </select>
+                            </div>
+
+                            {deleteBrokerageConfirm === b.id && (
+                              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                                <p className="text-xs text-red-700 mb-2">
+                                  Remove {b.brokerage_name} from this transaction?
+                                </p>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => deleteExternalBrokerage(b.id)}
+                                    disabled={saving}
+                                    className="btn text-xs px-3 py-1 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                                  >
+                                    {saving ? 'Removing...' : 'Remove'}
+                                  </button>
+                                  <button
+                                    onClick={() => setDeleteBrokerageConfirm(null)}
+                                    className="btn btn-secondary text-xs px-3 py-1"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>

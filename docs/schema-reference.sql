@@ -683,6 +683,7 @@ CREATE TABLE public.transaction_external_brokerages (
   notes text,
   side text CHECK ((side = ANY (ARRAY['buyer'::text, 'seller'::text, 'tenant'::text, 'landlord'::text])) OR side IS NULL),
   payload_funding_id text,
+  funding_source text DEFAULT 'crc'::text,
   CONSTRAINT transaction_external_brokerages_pkey PRIMARY KEY (id),
   CONSTRAINT transaction_external_brokerages_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES public.transactions(id)
 );

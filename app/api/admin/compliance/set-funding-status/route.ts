@@ -9,9 +9,17 @@ export const dynamic = 'force-dynamic'
 // FUNDING_STATUSES below, or null to clear)
 // The Needs CDA tab mirrors the Brokermint CDA report, where funding status
 // is workflow state the office advances by hand (wire form sent -> wired /
-// check received -> funded). Nothing else in the app writes this column, so
-// this is its one writer. Same permission as the rest of the tracker.
-const FUNDING_STATUSES = ['wire_form_sent', 'wire', 'check', 'funded']
+// check received -> funded). Same permission as the rest of the tracker.
+//
+// No longer the only writer: sending a CDA to title also sends the wiring
+// instructions, and that route fills in wire_form_sent when the field is still
+// blank. It only ever fills a blank, so a status set here always wins.
+//
+// wire_verified sits between the instructions going out and the money landing:
+// title has confirmed the wiring instructions they received are the real ones.
+// Set by hand, never by the send route, because nothing in the app can observe
+// the confirmation.
+const FUNDING_STATUSES = ['wire_form_sent', 'wire_verified', 'wire', 'check', 'funded']
 
 export async function POST(request: NextRequest) {
   const auth = await requirePermission(request, 'can_review_compliance')

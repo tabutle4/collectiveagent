@@ -3,6 +3,7 @@ import { FUNDS_DESTINATIONS } from '@/lib/payouts/ledger'
 import { requirePermission, type AuthResult } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { stampActivityActor, activityStampPoint } from '@/lib/transactions/activityActor'
+import { syncPayoutsLedgerQuietly } from '@/lib/payouts/posting'
 import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
 import { Resend } from 'resend'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
@@ -2051,6 +2052,14 @@ async function handleTransactionPost(
         .eq('id', brokerage_id)
       if (error) throw error
       await recomputeOfficeNet(id)
+      // Who funded this brokerage decides whether the payouts ledger carries a
+      // line for it, so a change here has to reach the ledger. Without this,
+      // marking an already-paid brokerage as Title leaves the stale payout line
+      // in place until the nightly run. Only on a funding change, so ordinary
+      // field edits do not pay for a sync they cannot affect.
+      if (updates && Object.prototype.hasOwnProperty.call(updates, 'funding_source')) {
+        await syncPayoutsLedgerQuietly(auth.user?.id || null)
+      }
       return NextResponse.json({ success: true })
     }
 
@@ -3924,11 +3933,11 @@ async function handleTransactionPost(
 
     // ── Mark brokerage paid (TEB) ────────────────────────────────────────────
     if (action === 'mark_brokerage_paid') {
-      const { brokerage_id, payment_date, payment_method, payment_reference } = body
+      const { brokerage_id, payment_date, payment_method, payment_reference, funding_source } = body
 
       const { data: teb } = await supabase
         .from('transaction_external_brokerages')
-        .select('payment_status')
+        .select('payment_status, funding_source')
         .eq('id', brokerage_id)
         .single()
 
@@ -3946,10 +3955,24 @@ async function handleTransactionPost(
           payment_date: payment_date || null,
           payment_method: payment_method || null,
           payment_reference: payment_reference || null,
+          // The row's own value wins over the default when the caller does not
+          // send one. Defaulting straight to crc would wipe a Title setting
+          // made on the deal page, and the sync below would then post an
+          // external payout for money that never left the payouts account,
+          // which is the exact error this patch exists to remove. The agent
+          // side has the same shape and its caller preserves the value by hand
+          // (reconcile-payouts passes row.funding_source); this does it here so
+          // no caller has to remember.
+          funding_source: funding_source || teb?.funding_source || 'crc',
           updated_at: new Date().toISOString(),
         })
         .eq('id', brokerage_id)
       if (error) throw error
+      // The payouts ledger derives an external payout from this row, so it is
+      // brought up to date now rather than at the next nightly run. Best
+      // effort: the brokerage has been paid either way. Matches what the
+      // payouts report's own mark-external-paid already does.
+      await syncPayoutsLedgerQuietly(auth.user?.id || null)
       return NextResponse.json({ success: true })
     }
 

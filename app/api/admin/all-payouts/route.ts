@@ -7,6 +7,7 @@ import {
 } from '@/lib/transactions/transactionTypes'
 import { effectiveAgentNet } from '@/lib/transactions/funding'
 import { officeNetState, type OfficeNetState } from '@/lib/payouts/ledger'
+import { titleDirectTransactionIds } from '@/lib/payouts/titleDirect'
 
 export const dynamic = 'force-dynamic'
 
@@ -168,6 +169,14 @@ export async function GET(request: NextRequest) {
     const dealsWithPayoutsMoney = new Set(
       (payoutsChecks || []).map(c => c.transaction_id).filter(Boolean) as string[]
     )
+
+    // A payouts-destined check is not the same as our share landing here. When
+    // title paid an agent or the other brokerage at the closing table, the
+    // check was split there and the brokerage's part went to income, so the
+    // deal belongs with the others that were paid at closing rather than
+    // reading as money still waiting to be moved.
+    const titleDirectTxnIds = await titleDirectTransactionIds()
+    for (const id of titleDirectTxnIds) dealsWithPayoutsMoney.delete(id)
 
     // Get agent names for internal agents (sales/lease side)
     const agentIds = [...new Set(internalAgents.map(a => a.agent_id).filter(Boolean))]

@@ -12,6 +12,7 @@ import {
   sidesBadge,
 } from '@/lib/payouts/sweep'
 import { entryTypeForCategory, DEFAULT_LEDGER_ACCOUNT } from '@/lib/payouts/ledger'
+import { titleDirectTransactionIds } from '@/lib/payouts/titleDirect'
 
 // Money as it belongs on a ledger line: always two decimals.
 //
@@ -70,6 +71,13 @@ async function loadSweepable(): Promise<SweepDeal[]> {
   const txnIds = Object.keys(byTxn)
   if (txnIds.length === 0) return []
 
+  // A payouts-destined check is not proof our share reached this account. When
+  // title paid an agent or the other brokerage at the table, the check was
+  // split there and the brokerage's part went to income, which is exactly the
+  // case the ledger stopped posting. The deal still appears below, refused,
+  // rather than being dropped from the list.
+  const titleDirectTxnIds = await titleDirectTransactionIds()
+
   const txns = await fetchAllRows<{
     id: string
     property_address: string | null
@@ -120,14 +128,15 @@ async function loadSweepable(): Promise<SweepDeal[]> {
       }
 
       const officeNet = Number(t.office_net || 0)
-      const refusal = sweepRefusal(officeNet)
+      const titleDirect = titleDirectTxnIds.has(t.id)
+      const refusal = sweepRefusal(officeNet, titleDirect)
 
       return {
         transaction_id: t.id,
         property_address: t.property_address,
         office_net: officeNet,
         gates,
-        ready: isSweepReady(gates, officeNet),
+        ready: isSweepReady(gates, officeNet, titleDirect),
         refusal,
         waiting_on: waitingOn(gates),
         sides_badge: sidesBadge(gates),

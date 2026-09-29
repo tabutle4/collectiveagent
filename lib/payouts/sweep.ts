@@ -76,7 +76,23 @@ export function waitingOn(g: SweepGates): string[] {
  * The one hard stop. Returns a reason when the deal must not be swept at all,
  * or null when it may be. Everything else warns.
  */
-export function sweepRefusal(officeNet: number): string | null {
+export const TITLE_DIRECT_SWEEP_REFUSAL =
+  'Title paid someone at the closing table on this deal, so our share went to income rather than into the payouts account. There is nothing here to move.'
+
+export function sweepRefusal(officeNet: number, titleDirect = false): string | null {
+  // Title paid someone at the closing table, so our share went to income and
+  // never sat in the payouts account. Sweeping would post an outflow against a
+  // deposit that the ledger deliberately does not record, understating the
+  // account by this deal's office net.
+  //
+  // Refused rather than filtered out of the list. A deal that disappears with
+  // no explanation is money nobody asks about again, and on the uncommon deal
+  // where title pays one party direct and still sends the rest here, that is
+  // the wrong outcome. Defaults to false so every existing caller keeps its
+  // current behaviour until it has the answer to pass.
+  if (titleDirect) {
+    return TITLE_DIRECT_SWEEP_REFUSAL
+  }
   if (!Number.isFinite(officeNet)) {
     return 'Office net is not a number on this deal'
   }
@@ -94,8 +110,8 @@ export function sweepRefusal(officeNet: number): string | null {
  * can move it without thinking. An unready deal is still tickable by hand, with
  * its warning shown, unless `sweepRefusal` says otherwise.
  */
-export function isSweepReady(g: SweepGates, officeNet: number): boolean {
-  if (sweepRefusal(officeNet)) return false
+export function isSweepReady(g: SweepGates, officeNet: number, titleDirect = false): boolean {
+  if (sweepRefusal(officeNet, titleDirect)) return false
   return g.fundsCleared && checklistComplete(g) && g.sidesComplete >= g.sidesExpected
 }
 

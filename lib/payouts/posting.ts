@@ -30,8 +30,9 @@
 // agree with the payouts statement. Two rules follow, and they are a pair:
 // either one on its own leaves the balance further out than having neither.
 //
-//   - An agent row marked `funding_source = 'title_direct'` posts nothing. The
-//     money went from title to the agent; no CRC account saw it.
+//   - An agent row or an outside brokerage row marked
+//     `funding_source = 'title_direct'` posts nothing. The money went from
+//     title to the payee; no CRC account saw it.
 //   - A check on a deal where title paid anyone direct posts no deposit. That
 //     check was split at the table and never arrived as one sum, so there is no
 //     single figure to credit. What actually reaches this account is the
@@ -52,6 +53,7 @@
 // top of it would count the same money twice.
 
 import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
+import { titleDirectTransactionIds } from '@/lib/payouts/titleDirect'
 import { DEFAULT_LEDGER_ACCOUNT, entryTypeForCategory, type LedgerCategory } from '@/lib/payouts/ledger'
 import { normalizePaymentMethod } from '@/lib/transactions/constants'
 
@@ -170,23 +172,15 @@ export async function syncPayoutsLedger(recordedBy?: string | null): Promise<Pos
     (checks || []).map(c => c.transaction_id).filter((v): v is string => !!v)
   )
 
-  // Deals where title paid an agent at the closing table.
+  // Deals where title paid someone at the closing table, agents and outside
+  // brokerages alike.
   //
-  // Read separately rather than off the agent rows fetched further down,
-  // because that read is filtered to `payment_status = 'paid'` and this
-  // question is not about whether anyone has been paid yet. A deal whose
-  // title-paid agent is still sitting unmarked splits its check exactly the
-  // same way, and the deposit must not post either way.
-  const titleDirectRows = await fetchAllRows<{
-    id: string
-    transaction_id: string | null
-  }>('transaction_internal_agents', 'id, transaction_id', {
-    filters: [{ type: 'eq', column: 'funding_source', value: 'title_direct' }],
-  })
-
-  const titleDirectTxnIds = new Set(
-    (titleDirectRows || []).map(r => r.transaction_id).filter((v): v is string => !!v)
-  )
+  // Read separately from the paid rows fetched further down, because those
+  // reads are filtered to `payment_status = 'paid'` and this question is not
+  // about whether anyone has been paid yet. A deal whose title-paid agent is
+  // still sitting unmarked splits its check exactly the same way, and the
+  // deposit must not post either way.
+  const titleDirectTxnIds = await titleDirectTransactionIds()
 
   // Existing derived lines, by external_id, so we can tell added from present
   // and spot lines whose source stopped qualifying.
@@ -229,22 +223,20 @@ export async function syncPayoutsLedger(recordedBy?: string | null): Promise<Pos
     const cleared = dateOnly(c.cleared_date)
     if (!cleared || cleared < start) continue
     if (c.status === 'rejected') continue
-    // Split at the closing table. Title paid an agent on this deal direct,
-    // so the check never arrived here as one sum and the brokerage's share
-    // went to income. Crediting the full amount books income money as payouts
+    // Split at the closing table. Title paid someone on this deal direct, so
+    // the check never arrived here as one sum and the brokerage's share went
+    // to income. Crediting the full amount books income money as payouts
     // money; crediting the remainder books a smaller amount of income money as
     // payouts money. Neither is a deposit into this account. Nothing posts,
     // and the transfer from income stands as the credit.
     //
-    // Surfaced rather than dropped quietly. On the uncommon deal where title
-    // pays one agent direct and still sends the rest here, this is the line
-    // that did not post, and reconciling it needs someone to know that.
-    if (c.transaction_id && titleDirectTxnIds.has(c.transaction_id)) {
-      result.left_for_review.push(
-        `deposit:${c.id} (title paid an agent on this deal direct, so the check did not land here as one sum; the transfer from income is the credit)`
-      )
-      continue
-    }
+    // Not pushed to left_for_review. This is a rule, not an exception: it
+    // fires on every run for every title-split deal and never resolves, so
+    // reporting it would leave a permanent "needs a look" on the money
+    // movement screen and a nightly warning in the cron log, for something
+    // nobody can action. A channel that always has something in it is a
+    // channel people stop reading.
+    if (c.transaction_id && titleDirectTxnIds.has(c.transaction_id)) continue
     const amount = money(c.check_amount)
     if (amount <= 0) continue
     const label = c.property_address || c.check_from || 'Check received'
@@ -362,6 +354,7 @@ export async function syncPayoutsLedger(recordedBy?: string | null): Promise<Pos
     brokerage_name: string | null
     agent_name: string | null
     commission_amount: number | string | null
+    funding_source: string | null
     payment_status: string | null
     payment_date: string | null
     payment_method: string | null
@@ -369,11 +362,16 @@ export async function syncPayoutsLedger(recordedBy?: string | null): Promise<Pos
     payload_funding_id: string | null
   }>(
     'transaction_external_brokerages',
-    'id, transaction_id, brokerage_name, agent_name, commission_amount, payment_status, payment_date, payment_method, payment_reference, payload_funding_id',
+    'id, transaction_id, brokerage_name, agent_name, commission_amount, funding_source, payment_status, payment_date, payment_method, payment_reference, payload_funding_id',
     { filters: [{ type: 'eq', column: 'payment_status', value: 'paid' }] }
   )
 
   for (const e of externals || []) {
+    // Title paid this brokerage at the closing table. Same reasoning as the
+    // agent loop above: no CRC account moved, so the payouts ledger has
+    // nothing to record. The payment is still on the deal and on the payouts
+    // report, which are the screens that answer whether they were paid.
+    if (e.funding_source === 'title_direct') continue
     const paid = dateOnly(e.payment_date)
     if (!paid || paid < start) continue
     if (!e.transaction_id || !payoutsTxnIds.has(e.transaction_id)) continue
