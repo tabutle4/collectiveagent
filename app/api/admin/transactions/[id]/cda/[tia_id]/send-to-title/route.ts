@@ -237,17 +237,36 @@ export async function POST(
         .select('funding_status')
         .eq('id', id)
         .maybeSingle()
-      if (!txnNow?.funding_status) {
-        await supabaseAdmin
-          .from('transactions')
-          .update({ funding_status: 'wire_form_sent', updated_at: new Date().toISOString() })
-          .eq('id', id)
+
+      // cda_status is set here, unconditionally, because this route is the only
+      // thing in the app that actually sends a CDA to title, and the report
+      // labels that status "Sent to Title". A resend is still a send to title,
+      // so it re-stamps rather than only filling a blank; the date moving to
+      // the latest send is the honest answer.
+      const patch: Record<string, any> = {
+        cda_status: 'sent',
+        cda_completed_at: new Date().toISOString(),
+        cda_completed_by: auth.user?.id || null,
+        updated_at: new Date().toISOString(),
       }
+      // Funding status only fills a blank, for the reasons above.
+      if (!txnNow?.funding_status) patch.funding_status = 'wire_form_sent'
+
+      // The error is read and rethrown on purpose. supabase-js resolves with
+      // { data, error } rather than throwing, so without this the catch below
+      // could never fire and a failed stamp would be invisible. cda_status now
+      // has exactly one writer, so a silent failure here means the CDA really
+      // went to title and the report says it did not.
+      const { error: stampError } = await supabaseAdmin
+        .from('transactions')
+        .update(patch)
+        .eq('id', id)
+      if (stampError) throw stampError
     } catch (stampErr: any) {
       // Best effort. The email is already gone, and failing the request here
       // would tell the sender it did not send when it did. The office can set
       // the status by hand on the report either way.
-      console.warn('send-to-title could not stamp funding status:', stampErr?.message || stampErr)
+      console.warn('send-to-title could not stamp CDA or funding status:', stampErr?.message || stampErr)
     }
 
     return NextResponse.json({ success: true, sent_to: to, cc })

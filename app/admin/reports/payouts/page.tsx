@@ -692,6 +692,7 @@ export default function PayoutsReportPage() {
   const [ledgerBalance, setLedgerBalance] = useState(0)
   const [ledgerStarted, setLedgerStarted] = useState(false)
   const [billsDue14, setBillsDue14] = useState(0)
+  const [billsDueReserved, setBillsDueReserved] = useState(0)
   const [payingBills, setPayingBills] = useState(false)
   const [payExpense, setPayExpense] = useState<{ id: string; description: string; amount: number | null } | null>(null)
   const [payAmount, setPayAmount] = useState('')
@@ -753,6 +754,7 @@ export default function PayoutsReportPage() {
       setLedgerBalance(Number(json.ledger_balance || 0))
       setLedgerStarted(!!json.ledger_started)
       setBillsDue14(Number(json.bills_due_14_days || 0))
+      setBillsDueReserved(Number(json.bills_due_reserved || 0))
       setHolds(json.settings?.funds_on_hold?.toString() || '')
       setAutoPayloadTotal(json.pending_payload_total || 0)
       setPayloadBreakdown(json.payload_breakdown || { commission_link: 0, retainer_link: 0, pm_rent: 0, other: 0 })
@@ -1524,10 +1526,17 @@ export default function PayoutsReportPage() {
                   Recheck our share on every deal
                 </button>
               )}
-              {billsDue14 > 0 && (
+              {(billsDue14 > 0 || billsDueReserved > 0) && (
                 <p className="text-xs text-luxury-gray-3 mt-2">
                   Bills due in the next 14 days: {fmt(billsDue14)}. Not subtracted, shown so a
                   transfer is decided knowing what is about to leave.
+                  {billsDueReserved > 0 && (
+                    <>
+                      {' '}
+                      A further {fmt(billsDueReserved)} is due in the same window but already held
+                      back below, so it is not counted here.
+                    </>
+                  )}
                 </p>
               )}
               {hasPermission('can_manage_sweeps') && (

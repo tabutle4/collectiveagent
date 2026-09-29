@@ -4,6 +4,7 @@ import { requirePermission, type AuthResult } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { stampActivityActor, activityStampPoint } from '@/lib/transactions/activityActor'
 import { syncPayoutsLedgerQuietly } from '@/lib/payouts/posting'
+import { pickEditableTebFields } from '@/lib/transactions/externalBrokerage'
 import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
 import { Resend } from 'resend'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
@@ -83,22 +84,6 @@ const LOCKED_TIA_FIELDS = new Set([
   'pre_split_deductions',
   'pre_split_deductions_description',
   'manual_split',
-])
-
-const LOCKED_TEB_FIELDS = new Set([
-  'brokerage_name',
-  'brokerage_role',
-  'brokerage_ein',
-  'federal_id_type',
-  'federal_id_number',
-  'commission_amount',
-  'amount_1099_reportable',
-  'w9_on_file',
-  'w9_date_received',
-  'broker_name',
-  'agent_name',
-  'agent_email',
-  'agent_phone',
 ])
 
 // ─── Gate helpers ────────────────────────────────────────────────────────────
@@ -2030,26 +2015,36 @@ async function handleTransactionPost(
     if (action === 'update_external_brokerage') {
       const { brokerage_id, updates } = body
 
+      // Scoped to this deal, matching delete_external_brokerage below. Without
+      // it the row is found by its own id alone, so a request naming any
+      // brokerage id writes to it, including one on someone else's deal.
       const { data: current } = await supabase
         .from('transaction_external_brokerages')
         .select('payment_status')
         .eq('id', brokerage_id)
-        .single()
+        .eq('transaction_id', id)
+        .maybeSingle()
 
-      if (current?.payment_status === 'paid') {
-        const blocked = Object.keys(updates || {}).filter(k => LOCKED_TEB_FIELDS.has(k))
-        if (blocked.length > 0) {
-          return NextResponse.json(
-            { error: `This brokerage is marked paid. Unmark paid first to edit: ${blocked.join(', ')}` },
-            { status: 409 }
-          )
-        }
+      if (!current) {
+        return NextResponse.json(
+          { error: 'That brokerage is not on this transaction' },
+          { status: 404 }
+        )
+      }
+
+      const picked = pickEditableTebFields(updates, current.payment_status === 'paid')
+      if (!picked.ok) {
+        return NextResponse.json(
+          { error: `This brokerage is marked paid. Unmark paid first to edit: ${picked.blocked.join(', ')}` },
+          { status: 409 }
+        )
       }
 
       const { error } = await supabase
         .from('transaction_external_brokerages')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update({ ...picked.fields, updated_at: new Date().toISOString() })
         .eq('id', brokerage_id)
+        .eq('transaction_id', id)
       if (error) throw error
       await recomputeOfficeNet(id)
       // Who funded this brokerage decides whether the payouts ledger carries a
@@ -3933,15 +3928,29 @@ async function handleTransactionPost(
 
     // ── Mark brokerage paid (TEB) ────────────────────────────────────────────
     if (action === 'mark_brokerage_paid') {
+      // Marking an outside brokerage paid moves money state and posts a line
+      // to the payouts ledger, so it takes the same permission as voiding or
+      // processing a payout rather than the route's broader edit permission.
+      // This action had no caller that anyone could reach until now, which is
+      // why the gap never showed.
+      const payoutAuth = await requirePermission(request, 'can_process_payouts')
+      if (payoutAuth.error) return payoutAuth.error
       const { brokerage_id, payment_date, payment_method, payment_reference, funding_source } = body
 
       const { data: teb } = await supabase
         .from('transaction_external_brokerages')
         .select('payment_status, funding_source')
         .eq('id', brokerage_id)
-        .single()
+        .eq('transaction_id', id)
+        .maybeSingle()
 
-      if (teb?.payment_status === 'paid') {
+      if (!teb) {
+        return NextResponse.json(
+          { error: 'That brokerage is not on this transaction' },
+          { status: 404 }
+        )
+      }
+      if (teb.payment_status === 'paid') {
         return NextResponse.json(
           { error: 'Already marked paid. Unmark first.' },
           { status: 409 }
@@ -3967,6 +3976,7 @@ async function handleTransactionPost(
           updated_at: new Date().toISOString(),
         })
         .eq('id', brokerage_id)
+        .eq('transaction_id', id)
       if (error) throw error
       // The payouts ledger derives an external payout from this row, so it is
       // brought up to date now rather than at the next nightly run. Best
@@ -3978,15 +3988,26 @@ async function handleTransactionPost(
 
     // ── Unmark brokerage paid (TEB) ──────────────────────────────────────────
     if (action === 'unmark_brokerage_paid') {
+      // Same reasoning as mark_brokerage_paid: this takes a ledger line back
+      // out, so it is a payout permission, not an edit permission.
+      const payoutAuth = await requirePermission(request, 'can_process_payouts')
+      if (payoutAuth.error) return payoutAuth.error
       const { brokerage_id } = body
 
       const { data: teb } = await supabase
         .from('transaction_external_brokerages')
         .select('payment_status')
         .eq('id', brokerage_id)
-        .single()
+        .eq('transaction_id', id)
+        .maybeSingle()
 
-      if (teb?.payment_status !== 'paid') {
+      if (!teb) {
+        return NextResponse.json(
+          { error: 'That brokerage is not on this transaction' },
+          { status: 404 }
+        )
+      }
+      if (teb.payment_status !== 'paid') {
         return NextResponse.json({ error: 'Not marked paid' }, { status: 409 })
       }
 
@@ -4000,7 +4021,13 @@ async function handleTransactionPost(
           updated_at: new Date().toISOString(),
         })
         .eq('id', brokerage_id)
+        .eq('transaction_id', id)
       if (error) throw error
+      // The payouts ledger derives an external payout from a paid row, so
+      // taking the row out of paid has to take the line out too. Mark Paid
+      // posts it; without the matching sync here, unmarking would leave the
+      // line standing until the nightly run.
+      await syncPayoutsLedgerQuietly(auth.user?.id || null)
       return NextResponse.json({ success: true })
     }
 
@@ -4346,16 +4373,23 @@ async function handleTransactionPost(
           .from('transaction_internal_agents')
           .update({ agent_statement_sent: true, agent_statement_sent_date: new Date().toISOString() })
           .eq('id', internal_agent_id)
-      } else if (email_type === 'cda') {
-        await supabase
-          .from('transactions')
-          .update({
-            cda_status: 'sent',
-            cda_completed_at: new Date().toISOString(),
-            cda_completed_by: auth.user?.id || null,
-          })
-          .eq('id', id)
       }
+      // Emailing the CDA to the agent no longer moves cda_status. The label on
+      // the Needs CDA report is "Sent to Title", and this is not that: it is
+      // the agent's copy. Sending it here used to set the column, so the report
+      // said a deal had gone to title when nobody had sent it there, while an
+      // actual send to title left no trace at all. The title send stamps it
+      // now.
+      //
+      // Note what this costs: emailing the CDA to the agent now leaves no
+      // trace anywhere. There is no cda-sent column on the agent row and the
+      // button does not change its label, unlike the statement button, which
+      // reads Resend once agent_statement_sent_date is set. That is the price
+      // of the column meaning what it says; a cda_sent_to_agent_at column
+      // would buy it back.
+      //
+      // Statuses already sitting at 'sent' from this path are left alone: there
+      // is no way after the fact to tell those from real title sends.
 
       return NextResponse.json({ success: true, sent_to: preview.to, cc: preview.cc })
     }

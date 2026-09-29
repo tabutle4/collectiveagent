@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { normalizeTransactionEntryFields } from '@/lib/transactions/utils'
+import { pickEditableTebFields } from '@/lib/transactions/externalBrokerage'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { computeCommission } from '@/lib/transactions/math'
@@ -377,10 +378,41 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // ── Update external brokerage ────────────────────────────────────────────
     if (action === 'update_external_brokerage') {
       const { brokerage_id, updates } = body
+
+      // Same three rules as the admin route, from the same module. This one
+      // had none of them: no paid-row lock, no field allow-list and no check
+      // that the brokerage belongs to this deal, which made it a way around
+      // every protection the admin route applies to the same table.
+      const { data: current } = await supabase
+        .from('transaction_external_brokerages')
+        .select('payment_status')
+        .eq('id', brokerage_id)
+        .eq('transaction_id', id)
+        .maybeSingle()
+
+      if (!current) {
+        return NextResponse.json(
+          { error: 'That brokerage is not on this transaction' },
+          { status: 404 }
+        )
+      }
+
+      const picked = pickEditableTebFields(
+        normalizeTransactionEntryFields(updates || {}),
+        current.payment_status === 'paid'
+      )
+      if (!picked.ok) {
+        return NextResponse.json(
+          { error: `This brokerage is marked paid. Unmark paid first to edit: ${picked.blocked.join(', ')}` },
+          { status: 409 }
+        )
+      }
+
       const { error } = await supabase
         .from('transaction_external_brokerages')
-        .update({ ...normalizeTransactionEntryFields(updates || {}), updated_at: new Date().toISOString() })
+        .update({ ...picked.fields, updated_at: new Date().toISOString() })
         .eq('id', brokerage_id)
+        .eq('transaction_id', id)
       if (error) throw error
       return NextResponse.json({ success: true })
     }

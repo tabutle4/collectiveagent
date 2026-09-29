@@ -514,10 +514,51 @@ export async function GET(request: NextRequest) {
         ],
       }
     )
-    const billOccurrences = billsDueWithin(billRows || [], today, 14)
+    // A bill that already has money held back for it is not money about to
+    // leave: it left the sweepable balance the moment it was reserved, and it
+    // gets paid from Also In Payouts. Counting it here as well describes the
+    // same dollars twice, on the very line someone reads before deciding what
+    // to transfer.
+    //
+    // `expenses` is the active earmark list fetched above, so this costs no
+    // extra query. Reserved occurrences are reported separately rather than
+    // dropped, so the screen can say what is held rather than quietly shrinking
+    // a figure someone knows the shape of.
+    // Counted per reservation, not per bill. A reservation holds ONE payment,
+    // and a bill can fall twice inside fourteen days: Payroll 1 is the 15th and
+    // the last day of the month, so a window straddling both contains two
+    // occurrences against a single earmark. Matching on bill id alone would
+    // suppress both and hide a real payment from the figure entirely, which is
+    // the wrong direction on a line read before deciding a transfer.
+    //
+    // The earliest occurrence is the one treated as held, so the payment still
+    // to come is the later one.
+    const reservationsByBill = new Map<string, number>()
+    for (const e of (expenses || []) as any[]) {
+      const billId = e?.recurring_bill_id
+      if (!billId) continue
+      reservationsByBill.set(billId, (reservationsByBill.get(billId) || 0) + 1)
+    }
+    const allBillOccurrences = billsDueWithin(billRows || [], today, 14)
+    const remainingReservations = new Map(reservationsByBill)
+    const billOccurrences: typeof allBillOccurrences = []
+    const reservedOccurrences: typeof allBillOccurrences = []
+    for (const occurrence of [...allBillOccurrences].sort((a, b) =>
+      String(a.due_date).localeCompare(String(b.due_date))
+    )) {
+      const left = remainingReservations.get(occurrence.bill_id) || 0
+      if (left > 0) {
+        remainingReservations.set(occurrence.bill_id, left - 1)
+        reservedOccurrences.push(occurrence)
+      } else {
+        billOccurrences.push(occurrence)
+      }
+    }
     const billsDue = {
       total: billsDueTotal(billOccurrences),
       lines: billOccurrences,
+      reserved_total: billsDueTotal(reservedOccurrences),
+      reserved_lines: reservedOccurrences,
     }
 
     // Pending PM agent referral fees (payee_type = 'agent', status = 'pending').
@@ -674,6 +715,10 @@ export async function GET(request: NextRequest) {
       // is not owed to anyone yet.
       bills_due_14_days: billsDue.total,
       bills_due_lines: billsDue.lines,
+      // Due in the same window but already held back in Also In Payouts, so
+      // they are not in the figure above.
+      bills_due_reserved: billsDue.reserved_total,
+      bills_due_reserved_lines: billsDue.reserved_lines,
     })
   } catch (error: any) {
     console.error('Payouts report error:', error)

@@ -2333,6 +2333,13 @@ export default function AdminTransactionDetailPage() {
   const [agentLeadSources, setAgentLeadSources] = useState<Record<string, string>>({}) // agent_id -> lead_source
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleteBrokerageConfirm, setDeleteBrokerageConfirm] = useState<string | null>(null)
+  const [brokerageMarkPaid, setBrokerageMarkPaid] = useState<{
+    id: string | null
+    date: string
+    method: string
+    reference: string
+    fundingSource: string
+  }>({ id: null, date: '', method: 'check', reference: '', fundingSource: 'crc' })
   const [autoCalcApplied, setAutoCalcApplied] = useState<Set<string>>(new Set()) // Track which agents have had auto-calc applied
 
   // Contacts state
@@ -2639,6 +2646,78 @@ export default function AdminTransactionDetailPage() {
       setPayoutBrokerages(d.external_brokerages || [])
     } catch {
       // Best effort. The figures come back on the next tab switch.
+    }
+  }
+
+  // Mark Paid for an outside brokerage. The server action existed all along
+  // but its only caller was a component nothing mounts, so there was no way to
+  // do this from the app at all.
+  //
+  // Funding source is collected here rather than left for afterwards, because
+  // the payouts ledger reads it the moment the row turns paid: a title-paid
+  // brokerage recorded as ours posts a payout for money that never left the
+  // account. It defaults to the row's existing value so a correction made on
+  // the card above is not undone by marking it paid.
+  const openBrokerageMarkPaid = (b: any) => {
+    setBrokerageMarkPaid({
+      id: b.id,
+      date: new Date().toISOString().split('T')[0],
+      method: b.payment_method || 'check',
+      reference: b.payment_reference || '',
+      fundingSource: b.funding_source || 'crc',
+    })
+  }
+
+  const closeBrokerageMarkPaid = () => {
+    setBrokerageMarkPaid({ id: null, date: '', method: 'check', reference: '', fundingSource: 'crc' })
+  }
+
+  const markBrokeragePaid = async () => {
+    if (!brokerageMarkPaid.id || !brokerageMarkPaid.date) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'mark_brokerage_paid',
+          brokerage_id: brokerageMarkPaid.id,
+          payment_date: brokerageMarkPaid.date,
+          payment_method: brokerageMarkPaid.method || null,
+          payment_reference: brokerageMarkPaid.reference || null,
+          funding_source: brokerageMarkPaid.fundingSource,
+        }),
+      })
+      if (res.ok) {
+        closeBrokerageMarkPaid()
+        await loadData()
+        await refreshPayoutBrokerages()
+      } else {
+        const d = await res.json().catch(() => ({}))
+        alert(d.error || 'Failed to mark the brokerage paid')
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const unmarkBrokeragePaid = async (brokerageId: string) => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unmark_brokerage_paid', brokerage_id: brokerageId }),
+      })
+      if (res.ok) {
+        await loadData()
+        await refreshPayoutBrokerages()
+      } else {
+        const d = await res.json().catch(() => ({}))
+        alert(d.error || 'Failed to unmark the brokerage')
+      }
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -6341,6 +6420,30 @@ export default function AdminTransactionDetailPage() {
                                 <span className="text-xs font-semibold text-luxury-gray-1">
                                   {fmt$(parseFloat(b.commission_amount || 0))}
                                 </span>
+                                {/* Same gate as the agent payout controls above
+                                    in this card. Marking an outside brokerage
+                                    paid posts to the payouts ledger, so it is
+                                    a payout action, not an edit. The route
+                                    checks the same permission itself. */}
+                                {userPermissions.includes('can_process_payouts') && (
+                                  b.payment_status === 'paid' ? (
+                                    <button
+                                      onClick={() => unmarkBrokeragePaid(b.id)}
+                                      disabled={saving}
+                                      className="btn btn-secondary text-xs px-3 py-1 disabled:opacity-50"
+                                    >
+                                      Unmark Paid
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => openBrokerageMarkPaid(b)}
+                                      disabled={saving}
+                                      className="btn btn-primary text-xs px-3 py-1 disabled:opacity-50"
+                                    >
+                                      Mark Paid
+                                    </button>
+                                  )
+                                )}
                                 <button
                                   onClick={() => setDeleteBrokerageConfirm(b.id)}
                                   className="p-1.5 rounded border border-luxury-gray-5 hover:border-red-300 hover:bg-red-50 transition-colors"
@@ -6350,6 +6453,70 @@ export default function AdminTransactionDetailPage() {
                                 </button>
                               </div>
                             </div>
+
+                            {brokerageMarkPaid.id === b.id && (
+                              <div className="mt-3 pt-3 border-t border-luxury-gray-5 space-y-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="field-label">Payment date</label>
+                                    <input
+                                      type="date"
+                                      className="input-luxury text-xs"
+                                      value={brokerageMarkPaid.date}
+                                      onChange={e => setBrokerageMarkPaid(p => ({ ...p, date: e.target.value }))}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="field-label">Method</label>
+                                    <select
+                                      className="select-luxury text-xs"
+                                      value={brokerageMarkPaid.method}
+                                      onChange={e => setBrokerageMarkPaid(p => ({ ...p, method: e.target.value }))}
+                                    >
+                                      {PAYMENT_METHOD_OPTIONS.map(opt => (
+                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="field-label">Reference</label>
+                                    <input
+                                      type="text"
+                                      className="input-luxury text-xs"
+                                      placeholder="Optional"
+                                      value={brokerageMarkPaid.reference}
+                                      onChange={e => setBrokerageMarkPaid(p => ({ ...p, reference: e.target.value }))}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="field-label">Funded from</label>
+                                    <select
+                                      className="select-luxury text-xs"
+                                      value={brokerageMarkPaid.fundingSource}
+                                      onChange={e => setBrokerageMarkPaid(p => ({ ...p, fundingSource: e.target.value }))}
+                                    >
+                                      <option value="crc">Collective Realty Co.</option>
+                                      <option value="title_direct">Title</option>
+                                    </select>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={markBrokeragePaid}
+                                    disabled={saving || !brokerageMarkPaid.date}
+                                    className="btn btn-primary text-xs px-3 py-1 disabled:opacity-50"
+                                  >
+                                    {saving ? 'Saving...' : 'Mark Paid'}
+                                  </button>
+                                  <button
+                                    onClick={closeBrokerageMarkPaid}
+                                    className="btn btn-secondary text-xs px-3 py-1"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
 
                             {/* Who actually paid them. Editable after the fact,
                                 and on a paid row, because the payouts ledger
