@@ -4,7 +4,7 @@ import { requirePermission, type AuthResult } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { stampActivityActor, activityStampPoint } from '@/lib/transactions/activityActor'
 import { syncPayoutsLedgerQuietly } from '@/lib/payouts/posting'
-import { pickEditableTebFields } from '@/lib/transactions/externalBrokerage'
+import { pickEditableTebFields, tebUpdateTouchesLedger } from '@/lib/transactions/externalBrokerage'
 import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
 import { Resend } from 'resend'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
@@ -1510,6 +1510,20 @@ async function handleTransactionPost(
         }
       }
 
+      // Same rule as the outside-brokerage path: moving an agent row's payment
+      // status is the money action that Mark Paid and Void perform, and it
+      // takes the same permission. payment_status is not in LOCKED_TIA_FIELDS,
+      // so the payout modal could change it here under the route's broader
+      // edit permission, which is the larger of the two money paths.
+      if (
+        updates &&
+        Object.prototype.hasOwnProperty.call(updates, 'payment_status') &&
+        updates.payment_status !== current?.payment_status
+      ) {
+        const payoutAuth = await requirePermission(request, 'can_process_payouts')
+        if (payoutAuth.error) return payoutAuth.error
+      }
+
       // ── Server-authoritative percentage-based referral basis ─────────────
       // When the FE saves a referral_agent row with basis_input_mode =
       // 'percentage', the dollar agent_basis is derived server-side from
@@ -2040,6 +2054,18 @@ async function handleTransactionPost(
         )
       }
 
+      // Changing payment status through this action is the same money move as
+      // Mark Paid, so it takes the same permission. The payout modal writes
+      // payment_status here, which made it a way around the gate on the
+      // dedicated mark and unmark actions.
+      if (
+        Object.prototype.hasOwnProperty.call(picked.fields, 'payment_status') &&
+        picked.fields.payment_status !== current.payment_status
+      ) {
+        const payoutAuth = await requirePermission(request, 'can_process_payouts')
+        if (payoutAuth.error) return payoutAuth.error
+      }
+
       const { error } = await supabase
         .from('transaction_external_brokerages')
         .update({ ...picked.fields, updated_at: new Date().toISOString() })
@@ -2047,12 +2073,12 @@ async function handleTransactionPost(
         .eq('transaction_id', id)
       if (error) throw error
       await recomputeOfficeNet(id)
-      // Who funded this brokerage decides whether the payouts ledger carries a
-      // line for it, so a change here has to reach the ledger. Without this,
-      // marking an already-paid brokerage as Title leaves the stale payout line
-      // in place until the nightly run. Only on a funding change, so ordinary
-      // field edits do not pay for a sync they cannot affect.
-      if (updates && Object.prototype.hasOwnProperty.call(updates, 'funding_source')) {
+      // Payment status and funding source both decide whether the ledger
+      // carries a line for this brokerage, so either one changing has to reach
+      // it. Without this, a brokerage marked paid in the modal waits for the
+      // nightly run while the same brokerage marked paid on the card posts at
+      // once, and the two screens disagree for a day.
+      if (tebUpdateTouchesLedger(picked.fields)) {
         await syncPayoutsLedgerQuietly(auth.user?.id || null)
       }
       return NextResponse.json({ success: true })

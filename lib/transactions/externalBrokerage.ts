@@ -75,6 +75,23 @@ export const LOCKED_TEB_FIELDS = new Set([
   'agent_phone',
 ])
 
+/**
+ * Fields whose change decides whether the payouts ledger carries a line for
+ * this brokerage, and so must be followed by a sync.
+ *
+ * payment_status because the ledger derives an external payout only from a
+ * paid row. funding_source because a title-paid brokerage posts nothing: the
+ * money went from title to them and no CRC account moved.
+ */
+export const LEDGER_AFFECTING_TEB_FIELDS = ['payment_status', 'funding_source'] as const
+
+/** True when an already-narrowed update carries a field the ledger reads. */
+export function tebUpdateTouchesLedger(fields: Record<string, any>): boolean {
+  return LEDGER_AFFECTING_TEB_FIELDS.some(f =>
+    Object.prototype.hasOwnProperty.call(fields, f)
+  )
+}
+
 export type TebUpdateResult =
   | { ok: true; fields: Record<string, any> }
   | { ok: false; blocked: string[] }

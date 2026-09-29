@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { normalizeTransactionEntryFields } from '@/lib/transactions/utils'
-import { pickEditableTebFields } from '@/lib/transactions/externalBrokerage'
+import { pickEditableTebFields, tebUpdateTouchesLedger } from '@/lib/transactions/externalBrokerage'
+import { syncPayoutsLedgerQuietly } from '@/lib/payouts/posting'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { computeCommission } from '@/lib/transactions/math'
@@ -408,12 +409,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         )
       }
 
+      // Same two rules as the admin route: changing payment status is a payout
+      // action, and either ledger-reading field changing has to reach the
+      // ledger. This route had neither, so it was the loosest way to mark an
+      // outside brokerage paid.
+      if (
+        Object.prototype.hasOwnProperty.call(picked.fields, 'payment_status') &&
+        picked.fields.payment_status !== current.payment_status
+      ) {
+        const payoutAuth = await requirePermission(request, 'can_process_payouts')
+        if (payoutAuth.error) return payoutAuth.error
+      }
+
       const { error } = await supabase
         .from('transaction_external_brokerages')
         .update({ ...picked.fields, updated_at: new Date().toISOString() })
         .eq('id', brokerage_id)
         .eq('transaction_id', id)
       if (error) throw error
+      if (tebUpdateTouchesLedger(picked.fields)) {
+        await syncPayoutsLedgerQuietly(auth.user?.id || null)
+      }
       return NextResponse.json({ success: true })
     }
     

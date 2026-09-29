@@ -12,6 +12,8 @@ interface PayoutModalProps {
   agents: any[]
   onClose: () => void
   onSaved: () => void
+  /** Whether the viewer may move a row to or from Paid. */
+  canProcessPayouts?: boolean
 }
 
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
@@ -35,15 +37,23 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function PaymentFields({
   status, date, method, reference,
-  onChange,
+  onChange, canProcessPayouts,
 }: {
   status: string; date: string; method: string; reference: string
   onChange: (field: string, value: string) => void
+  /** Moving a row to or from Paid is a payout action, gated like Mark Paid. */
+  canProcessPayouts?: boolean
 }) {
   return (
     <>
       <Field label="Payment Status">
-        <select className="select-luxury text-xs" value={status} onChange={e => onChange('payment_status', e.target.value)}>
+        <select
+          className="select-luxury text-xs"
+          value={status}
+          disabled={canProcessPayouts === false}
+          title={canProcessPayouts === false ? 'Only a broker, operations or TC user can change payment status' : undefined}
+          onChange={e => onChange('payment_status', e.target.value)}
+        >
           <option value="pending">Pending</option>
           <option value="paid">Paid</option>
           <option value="not_applicable">N/A</option>
@@ -293,7 +303,7 @@ function MoreBrokerageDetails({
   )
 }
 
-export default function PayoutModal({ transactionId, agents, onClose, onSaved }: PayoutModalProps) {
+export default function PayoutModal({ transactionId, agents, onClose, onSaved, canProcessPayouts }: PayoutModalProps) {
   const [allUsers, setAllUsers]                   = useState<any[]>([])
   const [brokerages, setBrokerages]               = useState<any[]>([])
   const [loading, setLoading]                     = useState(true)
@@ -700,6 +710,7 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
                           </select>
                         </Field>
                         <PaymentFields
+                          canProcessPayouts={canProcessPayouts}
                           status={f.payment_status} date={f.payment_date}
                           method={f.payment_method} reference={f.payment_reference}
                           onChange={(field, val) => setAgentF(a.id, field, val)}
@@ -725,6 +736,7 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
                         </select>
                       </Field>
                       <PaymentFields
+                          canProcessPayouts={canProcessPayouts}
                         status={row.payment_status} date={row.payment_date}
                         method={row.payment_method} reference={row.payment_reference}
                         onChange={(field, val) => setNewAgentF(row._id, field, val)}
@@ -783,6 +795,7 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
                           <input type="number" step="0.01" className="input-luxury text-xs" value={f.commission_amount} onChange={e => setBrokerageF(b.id, 'commission_amount', e.target.value)} placeholder="0.00" />
                         </Field>
                         <PaymentFields
+                          canProcessPayouts={canProcessPayouts}
                           status={f.payment_status} date={f.payment_date}
                           method={f.payment_method} reference={f.payment_reference}
                           onChange={(field, val) => setBrokerageF(b.id, field, val)}
@@ -822,6 +835,7 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
                         <input type="number" step="0.01" className="input-luxury text-xs" value={row.commission_amount} onChange={e => setNewBrokerageF(row._id, 'commission_amount', e.target.value)} placeholder="0.00" />
                       </Field>
                       <PaymentFields
+                          canProcessPayouts={canProcessPayouts}
                         status={row.payment_status} date={row.payment_date}
                         method={row.payment_method} reference={row.payment_reference}
                         onChange={(field, val) => setNewBrokerageF(row._id, field, val)}

@@ -7903,6 +7903,7 @@ export default function AdminTransactionDetailPage() {
         <PayoutModal
           transactionId={id}
           agents={data.agents || []}
+          canProcessPayouts={userPermissions.includes('can_process_payouts')}
           onClose={() => setShowPayoutModal(false)}
           onSaved={() => {
             setShowPayoutModal(false)
