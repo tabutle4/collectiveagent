@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { Resend } from 'resend'
 import { pmRepairSubmittedEmail } from '@/lib/email/pm-layout'
 import { isRepairCategory } from '@/lib/pm/repairCategories'
+import { fetchActiveLease } from '@/lib/pm/activeLease'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -118,20 +119,15 @@ export async function POST(request: NextRequest) {
     // and put it on another landlord's dashboard. Those three fields are now
     // ignored. This mirrors how the tenant dashboard picks the lease it shows
     // (active, most recently created) so the repair lands on the same one.
-    const { data: leases, error: leaseError } = await supabase
-      .from('pm_leases')
-      .select('id, property_id, landlord_id')
-      .eq('tenant_id', session.user_id)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(1)
+    const { lease: activeLease, error: leaseError } = await fetchActiveLease(
+      supabase,
+      session.user_id
+    )
 
     if (leaseError) {
       console.error('Error looking up tenant lease:', leaseError)
       return NextResponse.json({ error: leaseError.message }, { status: 500 })
     }
-
-    const activeLease = leases?.[0]
 
     if (!activeLease) {
       return NextResponse.json(

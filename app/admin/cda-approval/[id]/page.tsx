@@ -278,7 +278,7 @@ export default function CdaApprovalPage() {
 
         {data.agents.map((a: any) => (
           <div key={a.id} className="container-card">
-            <h2 className="section-title mb-3">CDA — {a.name} ({a.role})</h2>
+            <h2 className="section-title mb-3">CDA - {a.name} ({a.role})</h2>
             <iframe
               src={`/api/admin/transactions/${id}/cda/${a.id}`}
               className="w-full rounded border border-luxury-gray-5/40"

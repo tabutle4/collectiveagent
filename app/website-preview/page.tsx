@@ -119,7 +119,7 @@ useEffect(() => {
   ];
 
   const testimonials = [
-    { quote: "Courtney doesn't just sell homes—she orchestrates seamless transitions. From the first showing to final signing, every detail was handled with precision and care.", name: 'Twila B.', title: 'First-Time Homebuyer', image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop' },
+    { quote: "Courtney doesn't just sell homes - she orchestrates seamless transitions. From the first showing to final signing, every detail was handled with precision and care.", name: 'Twila B.', title: 'First-Time Homebuyer', image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop' },
     { quote: "Our home sold in 9 days, $40K over asking. The marketing was stunning and Courtney's negotiation skills are world-class. We couldn't believe the results.", name: 'Eric R.', title: 'Home Seller', image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop' },
     { quote: "As an investor acquiring my fifth property, I need an agent who moves fast and understands ROI. Courtney has been instrumental in building my portfolio.", name: 'Moneasia T.', title: 'Real Estate Investor', image: 'https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=150&h=150&fit=crop' },
   ];

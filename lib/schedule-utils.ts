@@ -1,5 +1,5 @@
 // lib/schedule-utils.ts
-// Shared utilities for coaching schedule – used by API routes and components.
+// Shared utilities for coaching schedule - used by API routes and components.
 
 export const RECURRENCE_TYPES = [
   { value: 'weekly',         label: 'Every week' },
@@ -43,11 +43,11 @@ export function getRecurrenceLabel(recurrenceType: string): string {
   switch (recurrenceType) {
     case 'weekly':          return 'Weekly'
     case 'biweekly':        return 'Every other week (2nd & 4th)'
-    case 'monthly-first':   return 'Monthly – 1st'
-    case 'monthly-second':  return 'Monthly – 2nd'
-    case 'monthly-third':   return 'Monthly – 3rd'
-    case 'monthly-fourth':  return 'Monthly – 4th'
-    case 'monthly-last':    return 'Monthly – Last'
+    case 'monthly-first':   return 'Monthly - 1st'
+    case 'monthly-second':  return 'Monthly - 2nd'
+    case 'monthly-third':   return 'Monthly - 3rd'
+    case 'monthly-fourth':  return 'Monthly - 4th'
+    case 'monthly-last':    return 'Monthly - Last'
     default:                return 'Weekly'
   }
 }
@@ -87,7 +87,7 @@ function renderPlatform(platform: string): string {
   return platform
 }
 
-/** Render description – if it is a URL, wrap as a hyperlink. */
+/** Render description - if it is a URL, wrap as a hyperlink. */
 function renderDescription(description: string): string {
   if (/^https?:\/\//.test(description.trim())) {
     return `<a href="${description.trim()}" style="color:#0066cc;">More about this session</a>`

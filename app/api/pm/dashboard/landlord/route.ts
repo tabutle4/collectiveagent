@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { callerMayReadPortal } from '@/lib/pm/portalAccess'
+
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,7 +14,10 @@ export async function GET(request: NextRequest) {
     let landlordId: string | null = null
     
     if (userId) {
-      // Session-based: user_id is the landlord id
+      // Session-based: user_id is the landlord id, but only if the caller owns it
+      if (!(await callerMayReadPortal(request, supabase, userId, 'landlord'))) {
+        return NextResponse.json({ error: 'Not authorized to view this dashboard' }, { status: 403 })
+      }
       landlordId = userId
     } else if (token) {
       // Token-based: look up by dashboard_token

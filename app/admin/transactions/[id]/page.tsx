@@ -1847,7 +1847,7 @@ function ComplianceDocumentsTab({
                                 {pages.map((p: any, i: number) => (
                                   <div key={i} className="flex gap-1.5 mb-0.5">
                                     <span className="shrink-0 text-amber-600 font-semibold w-12">p.{p.page}</span>
-                                    <span>{p.document_name}{p.notes ? ` — ${p.notes}` : ''}</span>
+                                    <span>{p.document_name}{p.notes ? ` - ${p.notes}` : ''}</span>
                                   </div>
                                 ))}
                               </div>

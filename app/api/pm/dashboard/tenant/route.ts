@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { fetchActiveLease } from '@/lib/pm/activeLease'
+import { callerMayReadPortal } from '@/lib/pm/portalAccess'
+
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,7 +15,10 @@ export async function GET(request: NextRequest) {
     let tenantId: string | null = null
     
     if (userId) {
-      // Session-based: user_id is the tenant id
+      // Session-based: user_id is the tenant id, but only if the caller owns it
+      if (!(await callerMayReadPortal(request, supabase, userId, 'tenant'))) {
+        return NextResponse.json({ error: 'Not authorized to view this dashboard' }, { status: 403 })
+      }
       tenantId = userId
     } else if (token) {
       // Token-based: look up by dashboard_token
@@ -42,9 +48,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch active lease with property info and agreement flags
-    const { data: leases } = await supabase
-      .from('pm_leases')
-      .select(`
+    const { lease: activeLease } = await fetchActiveLease<any>(
+      supabase,
+      tenant.id,
+      `
         *,
         managed_properties (
           id,
@@ -59,13 +66,8 @@ export async function GET(request: NextRequest) {
             crc_holds_deposit
           )
         )
-      `)
-      .eq('tenant_id', tenantId)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(1)
-
-    const activeLease = leases?.[0]
+      `
+    )
     
     // Format lease for response
     const lease = activeLease ? {
