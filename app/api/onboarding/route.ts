@@ -50,16 +50,16 @@ export async function GET(request: NextRequest) {
           .select('id, label, display_order, agent_variant')
           .eq('is_active', true)
           .order('display_order'),
-        // The agent's own 32-item checklist. The office needs the items to
-        // tick one on an agent's behalf - the completions alone are not
-        // enough to render the list.
+        // The agent's own checklist, active items only. The office needs the
+        // items to tick one on an agent's behalf - the completions alone are
+        // not enough to render the list.
         supabaseAdmin
           .from('onboarding_checklist_items')
           .select('id, section, section_title, item_key, label, priority, display_order')
           .eq('is_active', true)
           .order('display_order'),
         // Both completion tables go through fetchAllRows -
-        // onboarding_checklist_completions is at 809 rows and climbing, and a
+        // onboarding_checklist_completions is at 891 rows and climbing, and a
         // bare select silently truncates at 1,000.
         userIds.length
           ? fetchAllRows(

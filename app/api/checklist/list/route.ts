@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { verifySessionToken } from '@/lib/session'
+import { supabaseAdmin } from '@/lib/supabase'
+import { requireAuth } from '@/lib/api-auth'
 
 export async function GET(request: NextRequest) {
+  // requireAuth rather than a bare verifySessionToken: it also confirms the
+  // session has not been revoked and the account is still active. A signed JWT
+  // on its own outlives both a logout and a deactivation.
+  const auth = await requireAuth(request)
+  if (auth.error) return auth.error
+
   try {
-    const sessionToken = request.cookies.get('ca_session')?.value
-    if (!sessionToken) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-    const session = await verifySessionToken(sessionToken)
-    if (!session) return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
+    // The caller's own checklist, always. A user_id in the query string is
+    // ignored: this route reads and writes only the session user's rows. The
+    // office ticks on an agent's behalf through /api/onboarding, which is gated
+    // on can_manage_onboarding.
+    const userId = auth.user.id
 
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('user_id') || session.user.id
-
-    const supabase = createClient()
+    const supabase = supabaseAdmin
 
     const [itemsRes, completionsRes] = await Promise.all([
       supabase
@@ -49,22 +53,22 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth(request)
+  if (auth.error) return auth.error
+
   try {
-    const sessionToken = request.cookies.get('ca_session')?.value
-    if (!sessionToken) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-    const session = await verifySessionToken(sessionToken)
-    if (!session) return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
-
     const body = await request.json()
-    const { action, user_id, checklist_item_id } = body
-    const userId = user_id || session.user.id
+    const { action, checklist_item_id } = body
+    // Same rule as the GET: the session user's own rows only. A user_id in the
+    // body is ignored rather than honored.
+    const userId = auth.user.id
 
-    const supabase = createClient()
+    const supabase = supabaseAdmin
 
     if (action === 'complete') {
       const { error } = await supabase
         .from('onboarding_checklist_completions')
-        .insert({ user_id: userId, checklist_item_id, completed_by: session.user.id })
+        .insert({ user_id: userId, checklist_item_id, completed_by: userId })
       if (error) throw error
       return NextResponse.json({ success: true })
     }

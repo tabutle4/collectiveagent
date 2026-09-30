@@ -120,6 +120,7 @@ CREATE TABLE public.users (
   w9_tin_status text,
   w9_form_id text,
   w9_signed_at timestamp with time zone,
+  checklist_completion_notified_at timestamp with time zone,
   payload_activation_id text,
   payload_payment_method_id text,
   ms_refresh_token text,
@@ -1284,7 +1285,7 @@ CREATE TABLE public.onboarding_checklist_items (
   second_link_text text,
   second_link_url text,
   display_order integer DEFAULT 0,
-  is_active boolean DEFAULT true,
+  is_active boolean NOT NULL DEFAULT true,
   CONSTRAINT onboarding_checklist_items_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.onboarding_checklist_completions (

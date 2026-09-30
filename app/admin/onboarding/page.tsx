@@ -68,7 +68,7 @@ export default function AdminOnboardingPage() {
   const [agents, setAgents] = useState<any[]>([])
   const [adminTasks, setAdminTasks] = useState<any[]>([])
   const [adminCompletions, setAdminCompletions] = useState<Record<string, Record<string, any>>>({})
-  // The agent's own 32-item checklist, so the office can tick on their
+  // The agent's own checklist, active items only, so the office can tick on their
   // behalf. Expanded per agent to keep the row compact.
   const [checklistItems, setChecklistItems] = useState<any[]>([])
   const [checklistCompletions, setChecklistCompletions] = useState<Record<string, Record<string, any>>>({})
