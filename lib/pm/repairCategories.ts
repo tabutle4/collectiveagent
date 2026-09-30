@@ -49,3 +49,15 @@ export function repairCategoryLabel(value: string | null | undefined): string {
   if (!value) return 'Uncategorized'
   return REPAIR_CATEGORIES.find(c => c.value === value)?.label || value
 }
+
+/**
+ * Display label for the tenant portal. Tenants pick from the longer, plainer
+ * wording ("Exterior / Yard", "Appliances"), so their own repair list has to
+ * echo the same wording back. Showing them the short admin label instead means
+ * a tenant files "Exterior / Yard" and then reads "Landscaping" on the card a
+ * second later, which looks like the wrong thing got filed.
+ */
+export function repairCategoryTenantLabel(value: string | null | undefined): string {
+  if (!value) return 'Uncategorized'
+  return REPAIR_CATEGORIES.find(c => c.value === value)?.tenantLabel || value
+}

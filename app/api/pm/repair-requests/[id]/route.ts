@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requirePermission } from '@/lib/api-auth'
+import { isRepairCategory } from '@/lib/pm/repairCategories'
 import { Resend } from 'resend'
 import { pmAdminMessageEmail } from '@/lib/email/pm-layout'
 
@@ -103,6 +104,10 @@ export async function PATCH(
       if (body[field] !== undefined) {
         updates[field] = body[field]
       }
+    }
+
+    if (updates.category !== undefined && !isRepairCategory(updates.category)) {
+      return NextResponse.json({ error: 'That category is not a valid repair category' }, { status: 400 })
     }
 
     // Handle numeric fields

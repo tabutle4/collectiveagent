@@ -100,8 +100,11 @@ Bare inline HTML email = rejected. Campaign emails always come from
 
 ## UI conventions
 
-- Tailwind with the `luxury-*` palette only (`luxury-gray-1..5`, `luxury-accent`,
-  `luxury-light`). `luxury-gray-6` does not exist. No default `text-gray-*`.
+- Tailwind with the `luxury-*` palette only (`luxury-gray-1..6`, `luxury-accent`,
+  `luxury-light`). No default `text-gray-*`. Note `luxury-gray-6` (#E5E5E5) IS
+  defined in tailwind.config.mjs and is the border color behind `input-luxury`,
+  `select-luxury`, `textarea-luxury`, `container-card` and `btn-secondary` - do
+  not flag it as invalid.
 - Icons: `lucide-react` only.
 - NO em dashes or en dashes in any user-facing string (UI, emails, toasts).
   Use a plain hyphen. This is enforced in CI.

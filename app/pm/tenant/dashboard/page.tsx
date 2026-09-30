@@ -27,7 +27,7 @@ import {
   ChevronRight,
   FileText
 } from 'lucide-react'
-import { REPAIR_CATEGORIES, repairCategoryLabel } from '@/lib/pm/repairCategories'
+import { REPAIR_CATEGORIES, repairCategoryTenantLabel } from '@/lib/pm/repairCategories'
 
 interface Invoice {
   id: string
@@ -876,7 +876,7 @@ function TenantDashboardContent() {
                   <div className="flex items-start justify-between mb-1">
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-luxury-gray-1 truncate">{repair.title}</p>
-                      <p className="text-xs text-luxury-gray-3">{repairCategoryLabel(repair.category)}</p>
+                      <p className="text-xs text-luxury-gray-3">{repairCategoryTenantLabel(repair.category)}</p>
                     </div>
                     <div className="flex items-center gap-2 ml-2">
                       {repair.messages && repair.messages.length > 0 && (
@@ -1010,7 +1010,7 @@ function TenantDashboardContent() {
                   <h3 className="text-lg font-semibold text-luxury-gray-1">{selectedRepair.title}</h3>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-xs text-luxury-gray-3">
-                      {repairCategoryLabel(selectedRepair.category)}
+                      {repairCategoryTenantLabel(selectedRepair.category)}
                     </span>
                     <span className="text-luxury-gray-4">•</span>
                     <span className={`text-xs capitalize ${

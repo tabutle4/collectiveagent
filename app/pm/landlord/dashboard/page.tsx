@@ -24,6 +24,7 @@ import {
   Loader2,
   Receipt
 } from 'lucide-react'
+import { repairCategoryLabel } from '@/lib/pm/repairCategories'
 
 interface Property {
   id: string
@@ -885,7 +886,7 @@ function LandlordDashboardContent() {
                         <div className="min-w-0">
                           <p className="font-medium text-luxury-gray-1">{repair.title}</p>
                           <p className="text-xs text-luxury-gray-3 mt-0.5">
-                            {repair.managed_properties?.property_address} • {repair.category}
+                            {repair.managed_properties?.property_address} • {repairCategoryLabel(repair.category)}
                           </p>
                         </div>
                         <span className={`text-xs capitalize font-medium ${statusStyle} shrink-0`}>
