@@ -28,9 +28,19 @@ export async function GET(request: NextRequest) {
 
     if (itemsRes.error) throw itemsRes.error
 
+    // Only return completions belonging to items that are still active.
+    // Retiring an item (is_active = false) leaves its completion rows behind on
+    // purpose, so the history survives. Items are filtered to active here but
+    // completions were not, which let the completed count exceed the item count
+    // and broke every "checklist finished" equality test downstream.
+    const activeItemIds = new Set((itemsRes.data || []).map((i: any) => i.id))
+    const completions = (completionsRes.data || []).filter((c: any) =>
+      activeItemIds.has(c.checklist_item_id)
+    )
+
     return NextResponse.json({
       items: itemsRes.data || [],
-      completions: completionsRes.data || [],
+      completions,
     })
   } catch (err: any) {
     console.error('Checklist list API error:', err)

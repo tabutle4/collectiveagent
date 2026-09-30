@@ -86,12 +86,20 @@ export async function GET(request: NextRequest) {
       is_referral: u.mls_choice === 'Referral Collective (No MLS)',
     }))
 
+    // Same active-item filter the agent-facing route applies. Without it the
+    // office tracker reads "32 of 31 complete" for anyone who ticked an item
+    // that has since been retired.
+    const activeChecklistItemIds = new Set((checklistItems || []).map((i: any) => i.id))
+    const activeChecklistCompletions = ((checklistCompletions as any[]) || []).filter((c: any) =>
+      activeChecklistItemIds.has(c.checklist_item_id)
+    )
+
     return NextResponse.json({
       agents,
       adminTasks: adminTasks || [],
       checklistItems: checklistItems || [],
       adminTaskCompletions,
-      checklistCompletions,
+      checklistCompletions: activeChecklistCompletions,
     })
   } catch (error) {
     return NextResponse.json({ error: 'Server error', details: String(error) }, { status: 500 })

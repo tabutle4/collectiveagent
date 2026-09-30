@@ -136,25 +136,32 @@ function MLSSetupCard({
         <div className="mt-4 pl-7 space-y-4">
           <div>
             <p className="text-xs font-semibold text-luxury-gray-2 mb-2">
-              Which MLS will you join?
+              Which MLS will you join or transfer into?
             </p>
             <div className="space-y-1.5">
-              {['HAR', 'MetroTex | NTREIS', 'Both'].map(opt => (
+              {[
+                { value: 'HAR', hint: 'Houston' },
+                { value: 'MetroTex | NTREIS', hint: 'Dallas' },
+                { value: 'Both', hint: 'Houston and Dallas' },
+              ].map(opt => (
                 <label
-                  key={opt}
-                  className="flex items-center gap-2 text-sm text-luxury-gray-2 cursor-pointer"
+                  key={opt.value}
+                  className="flex items-start gap-2 text-sm text-luxury-gray-2 cursor-pointer"
                 >
                   <input
                     type="radio"
-                    checked={mls === opt}
+                    checked={mls === opt.value}
                     onChange={() => {
-                      setMls(opt)
+                      setMls(opt.value)
                       setHarStatus(null)
                       setMetroStatus(null)
                     }}
-                    className="accent-luxury-accent"
+                    className="accent-luxury-accent mt-1"
                   />
-                  {opt}
+                  <span>
+                    {opt.value}
+                    <span className="block text-xs text-luxury-gray-3 mt-0.5">{opt.hint}</span>
+                  </span>
                 </label>
               ))}
             </div>
@@ -331,7 +338,7 @@ export default function AgentChecklistPage() {
 
       const total = (data.items || []).length
       const completed = (data.completions || []).length
-      if (total > 0 && completed === total && !confettiFired.current) {
+      if (total > 0 && completed >= total && !confettiFired.current) {
         confettiFired.current = true
         setShowComplete(true)
       }
@@ -372,7 +379,7 @@ export default function AgentChecklistPage() {
           [item.id]: { checklist_item_id: item.id, completed_at: new Date().toISOString() },
         }
         setCompletions(newCompletions)
-        if (Object.keys(newCompletions).length === items.length && !confettiFired.current) {
+        if (Object.keys(newCompletions).length >= items.length && !confettiFired.current) {
           confettiFired.current = true
           setShowComplete(true)
           fireConfetti()
