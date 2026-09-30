@@ -1280,6 +1280,14 @@ async function handleTransactionPost(
         await autoCascadeTransaction(id)
       }
 
+      // A check is the source of a payouts deposit line, so the ledger is out
+      // of date the moment one changes. Mark Paid and the external brokerage
+      // actions already sync for the same reason; the check actions never did,
+      // which is why a check entered in the morning was invisible on the
+      // register until the 10:45 UTC cron or a manual Catch up the ledger.
+      // Quiet: a ledger that cannot be posted must not fail the save that
+      // caused it, and the next sync picks up whatever this run missed.
+      await syncPayoutsLedgerQuietly(auth.user?.id || null)
       return NextResponse.json({ success: true })
     }
 
@@ -1305,6 +1313,14 @@ async function handleTransactionPost(
       // A check added to a deal whose compliance is already complete needs the
       // compliance date stamped on it too, or it would never get a pay-by date.
       await syncCheckComplianceDate(id)
+      // A check is the source of a payouts deposit line, so the ledger is out
+      // of date the moment one changes. Mark Paid and the external brokerage
+      // actions already sync for the same reason; the check actions never did,
+      // which is why a check entered in the morning was invisible on the
+      // register until the 10:45 UTC cron or a manual Catch up the ledger.
+      // Quiet: a ledger that cannot be posted must not fail the save that
+      // caused it, and the next sync picks up whatever this run missed.
+      await syncPayoutsLedgerQuietly(auth.user?.id || null)
       return NextResponse.json({ check: data })
     }
 
@@ -1342,6 +1358,17 @@ async function handleTransactionPost(
         await autoCascadeTransaction(priorTxnId)
         await syncCheckComplianceDate(priorTxnId)
       }
+      // A check is the source of a payouts deposit line, so the ledger is out
+      // of date the moment one changes. Mark Paid and the external brokerage
+      // actions already sync for the same reason; the check actions never did,
+      // which is why a check entered in the morning was invisible on the
+      // register until the 10:45 UTC cron or a manual Catch up the ledger.
+      // Quiet: a ledger that cannot be posted must not fail the save that
+      // caused it, and the next sync picks up whatever this run missed.
+      // One call covers both deals: the sync rebuilds every managed line for
+      // the whole payouts account, so the line follows the check to its new
+      // transaction_id without needing to be told which deal it left.
+      await syncPayoutsLedgerQuietly(auth.user?.id || null)
       return NextResponse.json({ success: true })
     }
 
@@ -1464,6 +1491,14 @@ async function handleTransactionPost(
       await supabase.from('check_payouts').delete().eq('check_id', check_id)
       const { error } = await supabase.from('checks_received').delete().eq('id', check_id).eq('transaction_id', id)
       if (error) throw error
+      // A check is the source of a payouts deposit line, so the ledger is out
+      // of date the moment one changes. Mark Paid and the external brokerage
+      // actions already sync for the same reason; the check actions never did,
+      // which is why a check entered in the morning was invisible on the
+      // register until the 10:45 UTC cron or a manual Catch up the ledger.
+      // Quiet: a ledger that cannot be posted must not fail the save that
+      // caused it, and the next sync picks up whatever this run missed.
+      await syncPayoutsLedgerQuietly(auth.user?.id || null)
       return NextResponse.json({ success: true })
     }
 

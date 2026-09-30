@@ -1085,26 +1085,34 @@ export default function PayoutsReportPage() {
 
   return (
     <div>
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-6">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <h1 className="page-title">PAYOUTS REPORT</h1>
-          <Link href="/admin/reports/all-payouts" className="text-xs text-luxury-accent hover:underline">
-            View All Payouts →
-          </Link>
-          <Link href="/admin/reports/money-movement" className="text-xs text-luxury-accent hover:underline">
-            Money Movement →
-          </Link>
-          <Link href="/admin/reports/reconciliation" className="text-xs text-luxury-accent hover:underline">
-            Bank Reconciliation →
-          </Link>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={() => setDayViewOpen(true)} className="btn btn-secondary text-xs flex items-center justify-center gap-1.5 flex-1 lg:flex-none">
-            <CalendarDays size={13} /> What happened today
-          </button>
-          <button onClick={load} className="btn btn-secondary text-xs flex items-center justify-center gap-1.5 flex-1 lg:flex-none">
-            <RefreshCw size={13} /> Refresh
-          </button>
+      {/* Heading on its own line, then one row carrying navigation on the
+          left and the actions on the right. Same shape as Money Movement and
+          Bank Reconciliation, and at the same breakpoint, so the three report
+          pages behave alike. This row carries more than theirs (three links
+          and two buttons), so the links group keeps flex-wrap: it drops to a
+          second line before it will push the buttons off the right edge. */}
+      <div className="mb-6">
+        <h1 className="page-title">PAYOUTS REPORT</h1>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <Link href="/admin/reports/all-payouts" className="text-xs text-luxury-accent hover:underline">
+              View All Payouts →
+            </Link>
+            <Link href="/admin/reports/money-movement" className="text-xs text-luxury-accent hover:underline">
+              Money Movement →
+            </Link>
+            <Link href="/admin/reports/reconciliation" className="text-xs text-luxury-accent hover:underline">
+              Bank Reconciliation →
+            </Link>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button onClick={() => setDayViewOpen(true)} className="btn btn-secondary text-xs flex items-center justify-center gap-1.5 flex-1 sm:flex-none">
+              <CalendarDays size={13} /> What happened today
+            </button>
+            <button onClick={load} className="btn btn-secondary text-xs flex items-center justify-center gap-1.5 flex-1 sm:flex-none">
+              <RefreshCw size={13} /> Refresh
+            </button>
+          </div>
         </div>
       </div>
 
