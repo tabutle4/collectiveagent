@@ -666,11 +666,26 @@ export async function GET(request: NextRequest) {
     // money is here and has not been moved, counted once per deal rather than
     // once per check. A deal whose office net has not been computed contributes
     // nothing and is listed instead, because a null is not a zero.
+    //
+    // Walks `rows`, NOT `activeRows`. Paying the agents does not move the
+    // brokerage's share: only a sweep does, and `office_net_state` already
+    // says whether that has happened. Filtering on the derived paid flag here
+    // hid every deal that was finished and settled, which is precisely the set
+    // most likely to be sitting unswept. On live data it was hiding $817.69
+    // across three closed deals and reporting $543.90 where $1,361.59 was
+    // actually waiting to move.
+    //
+    // It also put this figure at odds with the sweep it labels. loadSweepable
+    // in app/api/admin/sweeps/route.ts has never filtered on paid status, so
+    // the Move our share to income dialog listed deals this total did not
+    // count, and lib/payouts/position.ts computed the same figure a third way
+    // again. All three now agree: unswept, not cancelled, money in this
+    // account.
     const seenTxn = new Set<string>()
     let unsweptOfficeNet = 0
     const unsweptDeals: { transaction_id: string; address: string; amount: number }[] = []
     const officeNetUnknown: { transaction_id: string; address: string }[] = []
-    for (const r of activeRows) {
+    for (const r of rows) {
       if (!r.transaction_id || !r.is_anchor) continue
       if (seenTxn.has(r.transaction_id)) continue
       seenTxn.add(r.transaction_id)
