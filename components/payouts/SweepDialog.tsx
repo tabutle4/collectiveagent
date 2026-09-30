@@ -76,6 +76,12 @@ export default function SweepDialog({
   // Some of a deal's share is often already in the income account by the time
   // the sweep is recorded.
   const [actualAmount, setActualAmount] = useState('')
+  // Claiming the share without moving it. Stamps the deals and writes a
+  // directionless register line, so the money stays here to cover bills, or a
+  // title-split deal whose share went to income at closing can finally be
+  // cleared off the list instead of sitting on it refused for good.
+  const [keepInAccount, setKeepInAccount] = useState(false)
+  const [keepReason, setKeepReason] = useState<'covering_bills' | 'income_at_closing'>('covering_bills')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -137,7 +143,7 @@ export default function SweepDialog({
       ? null
       : Math.round((bottomLine - transferredNum) * 100) / 100
   const wouldGoShort =
-    !alreadyMoved && bottomLineAfter !== null && bottomLineAfter < 0 && transferredNum > 0
+    !alreadyMoved && !keepInAccount && bottomLineAfter !== null && bottomLineAfter < 0 && transferredNum > 0
 
   const record = async () => {
     setSaving(true)
@@ -153,6 +159,8 @@ export default function SweepDialog({
           payment_method: paymentMethod || null,
           already_moved: alreadyMoved,
           actual_amount: actualAmount === '' ? null : actualAmount,
+          keep_in_account: keepInAccount,
+          keep_reason: keepReason,
         }),
       })
       const json = await res.json()
@@ -212,13 +220,18 @@ export default function SweepDialog({
                   <label
                     key={d.transaction_id}
                     className={`inner-card flex items-start gap-3 cursor-pointer ${
-                      d.refusal ? 'opacity-60' : ''
+                      d.refusal && !keepInAccount ? 'opacity-60' : ''
                     }`}
                   >
+                    {/* A refused deal cannot be transferred, so it stays locked
+                        on the ordinary path. Settling it in place is a
+                        different act and the only way one ever comes off this
+                        list, so the box unlocks once that is what is being
+                        done. */}
                     <input
                       type="checkbox"
                       checked={isPicked}
-                      disabled={!!d.refusal}
+                      disabled={!!d.refusal && !keepInAccount}
                       onChange={() => toggle(d.transaction_id)}
                       className="h-4 w-4 mt-0.5"
                     />
@@ -274,7 +287,7 @@ export default function SweepDialog({
             <input
               type="checkbox"
               checked={alreadyMoved}
-              onChange={e => setAlreadyMoved(e.target.checked)}
+              onChange={e => { setAlreadyMoved(e.target.checked); if (e.target.checked) setKeepInAccount(false) }}
               className="mt-0.5"
             />
             <span className="text-xs text-luxury-gray-2">
@@ -282,6 +295,55 @@ export default function SweepDialog({
               record a transfer.
             </span>
           </label>
+          <label className="flex items-start gap-2 mb-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={keepInAccount}
+              onChange={e => {
+                const on = e.target.checked
+                setKeepInAccount(on)
+                if (on) {
+                  setAlreadyMoved(false)
+                  // Hidden from here on, and the route validates it before the
+                  // keep branch runs, so a leftover value would 400 about a
+                  // field that is no longer on screen.
+                  setActualAmount('')
+                }
+                // Unticking leaves the ordinary path selected, which refuses
+                // these outright. Dropping them here beats a 422 the person
+                // cannot act on.
+                else setPicked(prev => {
+                  const next = new Set(prev)
+                  for (const d of deals) if (d.refusal) next.delete(d.transaction_id)
+                  return next
+                })
+              }}
+              className="mt-0.5"
+            />
+            <span className="text-xs text-luxury-gray-2">
+              Keep this money where it is. Mark the deals as no longer ours to move, and move
+              nothing.
+            </span>
+          </label>
+          {keepInAccount && (
+            <div className="mb-3 pl-6">
+              <label className="field-label">Why</label>
+              <select
+                value={keepReason}
+                onChange={e => setKeepReason(e.target.value as 'covering_bills' | 'income_at_closing')}
+                className="select-luxury w-full text-xs"
+              >
+                <option value="covering_bills">It is staying here to cover bills</option>
+                <option value="income_at_closing">Title paid at closing, so it went to income</option>
+              </select>
+              <p className="text-xs text-luxury-gray-3 mt-2">
+                Nothing is transferred, so the balance does not change. The deals stop counting
+                as our share still in this account, and the register gets a line saying why.
+                This is also the only way to clear a deal the sweep refuses because title paid
+                at closing.
+              </p>
+            </div>
+          )}
           <div className="flex flex-wrap items-end gap-3 mb-3">
             <div className="w-40">
               <label className="field-label">Date it moved</label>
@@ -295,7 +357,7 @@ export default function SweepDialog({
             {/* Hidden when nothing is being recorded as moving today. The
                 already-left path writes no ledger line at all, so an amount
                 box there would be asking for a figure that is thrown away. */}
-            {!alreadyMoved && (
+            {!alreadyMoved && !keepInAccount && (
               <div className="w-40">
                 <label className="field-label">Amount that moved *</label>
                 <input
@@ -362,15 +424,19 @@ export default function SweepDialog({
                   </p>
                 </div>
               )}
-              <p className="text-xs text-luxury-gray-3 uppercase tracking-wide">Moving</p>
+              <p className="text-xs text-luxury-gray-3 uppercase tracking-wide">
+                {keepInAccount ? 'Claiming, not moving' : 'Moving'}
+              </p>
               <p className="text-lg font-bold text-luxury-gray-1">
-                {transferredValid ? fmt(transferredNum) : fmt(0)}
+                {keepInAccount ? fmt(total) : transferredValid ? fmt(transferredNum) : fmt(0)}
               </p>
               <p className="text-xs text-luxury-gray-3">
                 {chosen.length} deal{chosen.length === 1 ? '' : 's'}
                 {/* Both figures side by side, so a transfer smaller than the
-                    deals reads as deliberate rather than as a mistake. */}
-                {partial ? `, worth ${fmt(total)}` : ''}
+                    deals reads as deliberate rather than as a mistake. Never
+                    shown in keep mode, where nothing is being transferred for
+                    the deals to be measured against. */}
+                {!keepInAccount && partial ? `, worth ${fmt(total)}` : ''}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -379,16 +445,20 @@ export default function SweepDialog({
               </button>
               <button
                 onClick={record}
-                disabled={saving || chosen.length === 0 || (!alreadyMoved && !transferredValid)}
+                disabled={saving || chosen.length === 0 || (!alreadyMoved && !keepInAccount && !transferredValid)}
                 className="btn btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
               >
                 {saving ? <Loader2 size={12} className="animate-spin" /> : <ArrowRight size={12} />}
-                Record the transfer
+                {keepInAccount ? 'Mark these settled' : 'Record the transfer'}
               </button>
             </div>
           </div>
+          {/* The opposite instruction in keep mode. Telling somebody to go and
+              make the transfer is the one thing that must not happen here. */}
           <p className="text-xs text-luxury-gray-3 mt-2">
-            This records the move. Make the transfer in the bank as well.
+            {keepInAccount
+              ? 'Nothing moves in the bank. The money stays in this account.'
+              : 'This records the move. Make the transfer in the bank as well.'}
           </p>
         </div>
       </div>

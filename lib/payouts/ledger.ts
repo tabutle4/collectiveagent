@@ -43,6 +43,7 @@ export const LEDGER_CATEGORIES = [
   'transfer_in_expenses',
   'transfer_out',
   'earmark_release',
+  'sweep_kept',
   'adjustment_in',
   'adjustment_out',
   'sweep_reversal',
@@ -64,6 +65,7 @@ const CATEGORY_LABELS: Record<LedgerCategory, string> = {
   transfer_in_expenses: 'Moved in from the expenses account',
   transfer_out: 'Money moved out',
   earmark_release: 'Money set aside, released',
+  sweep_kept: 'Our share, claimed and kept in this account',
   adjustment_in: 'Correction, money added',
   adjustment_out: 'Correction, money taken out',
   sweep_reversal: 'Moved back from our income account',
@@ -81,10 +83,15 @@ export function ledgerCategoryLabel(category: string | null | undefined): string
  * it back in.
  *
  * 'none' is a deliberate and narrow claim: this row explains something without
- * the account balance changing. Only `earmark_release` qualifies, because an
- * earmark is a reservation held in payout_expenses and was never part of the
- * ledger balance to begin with; releasing it changes what is spoken for, not
- * what is there.
+ * the account balance changing. Two categories qualify. `earmark_release`,
+ * because an earmark is a reservation held in payout_expenses and was never
+ * part of the ledger balance to begin with; releasing it changes what is
+ * spoken for, not what is there. And `sweep_kept`, for the same reason: a
+ * deal's office net is derived from transactions.office_net and was never a
+ * ledger line either. The cash arrived as a deposit, which the balance already
+ * carries, and claiming our share without transferring it moves nothing. The
+ * row says the share stopped being ours to move; the money did not go
+ * anywhere, so neither does the balance.
  *
  * Every other category has to be signed. A category that can be written but
  * sums to zero is money that silently vanishes from the balance: the opening
@@ -108,6 +115,7 @@ const CATEGORY_DIRECTION: Record<LedgerCategory, 'in' | 'out' | 'none'> = {
   transfer_in_expenses: 'in',
   transfer_out: 'out',
   earmark_release: 'none',
+  sweep_kept: 'none',
   adjustment_in: 'in',
   adjustment_out: 'out',
   sweep_reversal: 'in',
@@ -133,6 +141,7 @@ const CATEGORY_ENTRY_TYPE: Record<LedgerCategory, LedgerEntryType> = {
   transfer_in_expenses: 'transfer',
   transfer_out: 'transfer',
   earmark_release: 'transfer',
+  sweep_kept: 'transfer',
   adjustment_in: 'transfer',
   adjustment_out: 'transfer',
   sweep_reversal: 'transfer',

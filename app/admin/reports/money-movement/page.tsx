@@ -833,12 +833,27 @@ export default function MoneyMovementPage() {
                               <p className="text-xs text-luxury-gray-3 mt-0.5">{row.notes}</p>
                             )}
                           </td>
-                          <td className="py-3 px-4 text-right font-medium text-green-700">
-                            {row.direction === 'in' ? formatCurrency(row.amount) : ''}
-                          </td>
-                          <td className="py-3 px-4 text-right font-medium text-red-700">
-                            {row.direction === 'out' ? formatCurrency(row.amount) : ''}
-                          </td>
+                          {/* A directionless row moves no money, so it belongs
+                              in neither column. Printing it in neither left the
+                              figure invisible on desktop while the phone showed
+                              it, so it is shown here in grey, spanning both, to
+                              read as a figure being stated rather than money
+                              going in or out. The balance beside it is
+                              unchanged, which is the real tell. */}
+                          {row.direction === 'none' ? (
+                            <td className="py-3 px-4 text-right font-medium text-luxury-gray-3" colSpan={2}>
+                              {formatCurrency(row.amount)}
+                            </td>
+                          ) : (
+                            <>
+                              <td className="py-3 px-4 text-right font-medium text-green-700">
+                                {row.direction === 'in' ? formatCurrency(row.amount) : ''}
+                              </td>
+                              <td className="py-3 px-4 text-right font-medium text-red-700">
+                                {row.direction === 'out' ? formatCurrency(row.amount) : ''}
+                              </td>
+                            </>
+                          )}
                           <td className="py-3 px-4 text-right text-luxury-gray-1">
                             {formatCurrency(row.balance_after ?? 0)}
                             {row.category === 'sweep' && hasPermission('can_manage_sweeps') && (
@@ -927,7 +942,7 @@ export default function MoneyMovementPage() {
                   {/* Sweeps and their reversals are recorded by the sweep
                       dialog, which reads the amount from the deal. The route
                       refuses them here, so they are not offered. */}
-                  {LEDGER_CATEGORIES.filter(c => c !== 'sweep' && c !== 'sweep_reversal').map(c => (
+                  {LEDGER_CATEGORIES.filter(c => c !== 'sweep' && c !== 'sweep_reversal' && c !== 'sweep_kept').map(c => (
                     <option key={c} value={c}>{ledgerCategoryLabel(c)}</option>
                   ))}
                 </select>

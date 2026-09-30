@@ -439,9 +439,13 @@ export async function POST(request: NextRequest) {
     // side. Letting one in here would accept an amount from the request body.
     // A reversal is the same money going the other way and belongs to the same
     // route, which also clears the swept stamps on the deals.
-    if (category === 'sweep' || category === 'sweep_reversal') {
+    // sweep_kept belongs here too: its amount comes from the deals and it is
+    // meaningless without the swept stamps the sweep route writes alongside
+    // it. Typed by hand it would be a directionless row nothing can undo,
+    // claiming deals it never settled.
+    if (category === 'sweep' || category === 'sweep_reversal' || category === 'sweep_kept') {
       return NextResponse.json(
-        { error: 'Record a sweep, or undo one, from the sweep dialog rather than as a manual entry' },
+        { error: 'Record a sweep, undo one, or settle a share in place, from the sweep dialog rather than as a manual entry' },
         { status: 400 }
       )
     }

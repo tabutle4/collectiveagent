@@ -6,6 +6,7 @@ import { deriveComplianceForTransactions } from '@/lib/compliance/derive'
 import { fetchChecklistProgress } from '@/lib/payouts/checklist'
 import {
   type SweepGates,
+  TITLE_DIRECT_SWEEP_REFUSAL,
   sweepRefusal,
   isSweepReady,
   waitingOn,
@@ -204,6 +205,43 @@ export async function POST(request: NextRequest) {
     // for it. Posting a line as well would take the same money out twice.
     const alreadyMoved = body?.already_moved === true
 
+    // Claiming our share without moving it.
+    //
+    // The button welds two acts together: stamping the deals so they stop
+    // reading as ours to move, and transferring the money to the income
+    // account. Two situations need the first without the second.
+    //
+    // The share stays in the payouts account to pay a bill from there. Writing
+    // the transfer anyway would drop the balance by money that never left, and
+    // then paying the bill would drop it again.
+    //
+    // And a deal where title paid someone at the closing table, where our
+    // share went straight to income and never sat here at all. Those are
+    // refused below, correctly, because there is nothing to transfer - but
+    // until now that refusal was permanent. 6030 Plum Dale Road would have sat
+    // on the list saying "cannot move" for good, clearable only by hand-written
+    // SQL, which is how 17 deals once ended up stamped with no ledger line
+    // behind them.
+    const keepInAccount = body?.keep_in_account === true
+    // Not coerced. The reason is written into the note that becomes the
+    // permanent record, so quietly turning an unrecognised value into
+    // "covering bills" would file a sentence that is simply untrue about the
+    // deal it names.
+    const keepReasonRaw = body?.keep_reason ?? 'covering_bills'
+    if (keepInAccount && keepReasonRaw !== 'covering_bills' && keepReasonRaw !== 'income_at_closing') {
+      return NextResponse.json({ error: 'Pick a reason for keeping this money here' }, { status: 400 })
+    }
+    const keepReason: 'covering_bills' | 'income_at_closing' = keepReasonRaw === 'income_at_closing'
+      ? 'income_at_closing'
+      : 'covering_bills'
+
+    if (keepInAccount && alreadyMoved) {
+      return NextResponse.json(
+        { error: 'Choose one: the money already moved, or it is staying in this account' },
+        { status: 400 }
+      )
+    }
+
     // What actually left the bank, which is not always what the deals add up
     // to.
     //
@@ -245,7 +283,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const refused = chosen.filter(d => d.refusal)
+    // A title-split deal cannot be TRANSFERRED, because our share went to
+    // income at closing and never sat here. It can still be settled in place,
+    // which is the only way one ever leaves this list.
+    //
+    // Only that refusal is waived. The other one means the office net is
+    // negative, i.e. the commission inputs on the deal are wrong, and settling
+    // it would hide a broken deal behind a stamp instead of fixing it.
+    const refused = chosen.filter(
+      d => d.refusal && !(keepInAccount && d.refusal === TITLE_DIRECT_SWEEP_REFUSAL)
+    )
     if (refused.length > 0) {
       return NextResponse.json(
         {
@@ -265,6 +312,100 @@ export async function POST(request: NextRequest) {
     // ordinary case.
     const transferred = actualProvided ? Math.round((actualAmount as number) * 100) / 100 : total
     const partial = Math.abs(transferred - total) > 0.004
+
+    if (keepInAccount) {
+      // Ledger first, deals stamped last, exactly like the ordinary path below
+      // and for the same reason: PostgREST gives no transaction, so the catch
+      // undoes by hand, and it can only undo what it was told about. Writing
+      // this branch the other way round left a deal stamped with no ledger row
+      // behind it the moment an insert failed, which is the precise state the
+      // hoisted parentId and stampedIds exist to prevent.
+      const keptTotal = Math.round(chosen.reduce((s, d) => s + d.office_net, 0) * 100) / 100
+      const { data: keptParent, error: keptParentErr } = await supabaseAdmin
+        .from('brokerage_ledger')
+        .insert({
+          entry_date: entryDate,
+          entry_type: entryTypeForCategory('sweep_kept'),
+          category: 'sweep_kept',
+          description:
+            keepReason === 'income_at_closing'
+              ? `Our share on ${chosen.length} deal${chosen.length === 1 ? '' : 's'} went to income at closing, ${fmtMoney(keptTotal)}`
+              : `Our share on ${chosen.length} deal${chosen.length === 1 ? '' : 's'} kept in this account, ${fmtMoney(keptTotal)}`,
+          // Carried for the record and for anyone reading the row directly.
+          // sweep_kept is directionless, so this figure is never summed into a
+          // balance or an in/out total. Worth knowing: the register's desktop
+          // table prints an amount only in its In or its Out column, so a
+          // directionless row shows the figure on the mobile card and not on
+          // the desktop table. earmark_release has always behaved this way.
+          amount: keptTotal,
+          notes:
+            keepReason === 'income_at_closing'
+              ? 'Title paid at the closing table, so this share never reached the payouts account. Marked settled so the deals stop showing as ours to move. No money moved.'
+              : 'Claimed but deliberately left here to cover bills paid from this account. No money moved, so the balance is unchanged.',
+          bank_date: entryDate,
+          recorded_by: auth.user.id,
+          account: DEFAULT_LEDGER_ACCOUNT,
+        })
+        .select('id')
+        .single()
+      if (keptParentErr) throw keptParentErr
+      parentId = keptParent.id
+
+      const keptChildren = chosen.map(d => ({
+        entry_date: entryDate,
+        entry_type: entryTypeForCategory('sweep_kept'),
+        category: 'sweep_kept',
+        subcategory: 'deal',
+        description: d.property_address || 'Unnamed deal',
+        amount: Math.round(d.office_net * 100) / 100,
+        transaction_id: d.transaction_id,
+        parent_entry_id: parentId,
+        bank_date: entryDate,
+        recorded_by: auth.user.id,
+        account: DEFAULT_LEDGER_ACCOUNT,
+      }))
+      const { error: keptChildErr } = await supabaseAdmin
+        .from('brokerage_ledger')
+        .insert(keptChildren)
+      if (keptChildErr) throw keptChildErr
+
+      // One at a time, so a deal someone else settled in the meantime is
+      // caught by name rather than swallowed by a short bulk match. The
+      // ordinary path treats that race as fatal and so does this one: the
+      // throw reaches the catch, which removes the ledger rows just written.
+      for (const d of chosen) {
+        const { data: stamped, error: stampErr } = await supabaseAdmin
+          .from('transactions')
+          .update({
+            office_net_swept_at: sweptAt,
+            // Nothing transferred, and this column records what did. Zero
+            // rather than null: null on the historic path means nobody knows
+            // the figure, and here everybody does. It is zero.
+            office_net_swept_amount: 0,
+            updated_at: sweptAt,
+          })
+          .eq('id', d.transaction_id)
+          .is('office_net_swept_at', null)
+          .select('id')
+        if (stampErr) throw stampErr
+        if (!stamped || stamped.length === 0) {
+          throw new Error(
+            `${d.property_address || 'A deal'} was settled by someone else while this was open. Nothing has been recorded. Reload and try again.`
+          )
+        }
+        stampedIds.push(d.transaction_id)
+      }
+
+      return NextResponse.json({
+        success: true,
+        kept_in_account: true,
+        reason: keepReason,
+        deals: chosen.length,
+        amount: keptTotal,
+        entry_date: entryDate,
+        ledger_entry_id: parentId,
+      })
+    }
 
     if (alreadyMoved) {
       const sweptAtHistoric = new Date().toISOString()
