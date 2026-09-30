@@ -322,33 +322,46 @@ export default function MoneyMovementPage() {
   return (
     <div className="min-h-screen bg-luxury-cream p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center gap-4 mb-6">
-          <Link href="/admin/reports" className="text-luxury-gray-3 hover:text-luxury-gray-1">
-            <ArrowLeft size={20} />
-          </Link>
-          <h1 className="page-title">Money Movement</h1>
-          {hasPermission('can_manage_ledger') && ledgerStarted === false && (
-            <button onClick={() => setStartOpen(true)} className="btn btn-primary text-xs flex items-center gap-1.5">
-              Start the ledger
-            </button>
-          )}
-          {hasPermission('can_manage_ledger') && ledgerStarted === true && (
-            <button
-              onClick={runSync}
-              disabled={syncing}
-              className="btn btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50"
-              title="Look for anything that has happened but is not on the ledger yet"
-            >
-              {syncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-              Catch up the ledger
-            </button>
-          )}
-          <Link href="/admin/reports/payouts" className="text-xs text-luxury-accent hover:underline">
-            Payouts Report
-          </Link>
-          <Link href="/admin/reports/reconciliation" className="text-xs text-luxury-accent hover:underline">
-            Bank Reconciliation
-          </Link>
+        {/* Heading on its own line, then one row carrying navigation on the
+            left and the actions on the right. The three used to share a single
+            flex row at the same gap, which put "Catch up the ledger" between
+            the title and the links and left nothing aligned to either edge. */}
+        <div className="mb-6">
+          <div className="flex items-center gap-4">
+            <Link href="/admin/reports" className="text-luxury-gray-3 hover:text-luxury-gray-1">
+              <ArrowLeft size={20} />
+            </Link>
+            <h1 className="page-title">Money Movement</h1>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
+            <div className="flex items-center gap-4">
+              <Link href="/admin/reports/payouts" className="text-xs text-luxury-accent hover:underline">
+                Payouts Report
+              </Link>
+              <Link href="/admin/reports/reconciliation" className="text-xs text-luxury-accent hover:underline">
+                Bank Reconciliation
+              </Link>
+            </div>
+            {hasPermission('can_manage_ledger') && ledgerStarted !== null && (
+              <div className="flex items-center gap-2">
+                {ledgerStarted === false ? (
+                  <button onClick={() => setStartOpen(true)} className="btn btn-primary text-xs flex items-center gap-1.5">
+                    Start the ledger
+                  </button>
+                ) : (
+                  <button
+                    onClick={runSync}
+                    disabled={syncing}
+                    className="btn btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50"
+                    title="Look for anything that has happened but is not on the ledger yet"
+                  >
+                    {syncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                    Catch up the ledger
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {syncNote && (

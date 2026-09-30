@@ -149,17 +149,27 @@ export default function ReconciliationPage() {
   return (
     <div className="min-h-screen bg-luxury-cream p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center gap-4 mb-6">
-          <Link href="/admin/reports" className="text-luxury-gray-3 hover:text-luxury-gray-1">
-            <ArrowLeft size={20} />
-          </Link>
-          <h1 className="page-title">Bank Reconciliation</h1>
-          <Link href="/admin/reports/money-movement" className="text-xs text-luxury-accent hover:underline">
-            Money Movement
-          </Link>
-          <Link href="/admin/reports/payouts" className="text-xs text-luxury-accent hover:underline">
-            Payouts Report
-          </Link>
+        {/* Same shape as Money Movement: heading alone, then a row of
+            navigation. The links used to sit inline after the title at the
+            same gap as the back arrow, so they read as part of the heading
+            rather than as a way off the page. */}
+        <div className="mb-6">
+          <div className="flex items-center gap-4">
+            <Link href="/admin/reports" className="text-luxury-gray-3 hover:text-luxury-gray-1">
+              <ArrowLeft size={20} />
+            </Link>
+            <h1 className="page-title">Bank Reconciliation</h1>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
+            <div className="flex items-center gap-4">
+              <Link href="/admin/reports/money-movement" className="text-xs text-luxury-accent hover:underline">
+                Money Movement
+              </Link>
+              <Link href="/admin/reports/payouts" className="text-xs text-luxury-accent hover:underline">
+                Payouts Report
+              </Link>
+            </div>
+          </div>
         </div>
 
         {error && (
