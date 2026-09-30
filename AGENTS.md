@@ -107,7 +107,9 @@ Bare inline HTML email = rejected. Campaign emails always come from
   not flag it as invalid.
 - Icons: `lucide-react` only.
 - NO em dashes or en dashes in any user-facing string (UI, emails, toasts).
-  Use a plain hyphen. This is enforced in CI.
+  Use a plain hyphen. Checked in review, NOT by CI - .github/workflows/ci.yml has
+  no dash guard, and comments are exempt so a plain grep would fail on ~200
+  legitimate comment lines.
 - Reuse `input-luxury`, `select-luxury`, `btn btn-primary/secondary`,
   `container-card`, `inner-card`, `page-title`, `th-luxury` classes. Read 3
   sibling components before styling anything new.

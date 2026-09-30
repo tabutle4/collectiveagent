@@ -15,55 +15,60 @@ export async function GET(
   const auth = await requirePermission(request, 'can_manage_pm')
   if (auth.error) return auth.error
 
-  const supabase = createClient()
-  const { id } = await params
+  try {
+    const supabase = createClient()
+    const { id } = await params
 
-  const { data: repair, error } = await supabase
-    .from('repair_requests')
-    .select(`
-      *,
-      managed_properties (
-        id,
-        property_address,
-        unit,
-        city,
-        state,
-        zip
-      ),
-      tenants (
-        id,
-        first_name,
-        last_name,
-        email,
-        phone
-      ),
-      landlords (
-        id,
-        first_name,
-        last_name,
-        email,
-        phone
-      ),
-      pm_leases (
-        id,
-        lease_start,
-        lease_end,
-        monthly_rent
-      )
-    `)
-    .eq('id', id)
-    .single()
+    const { data: repair, error } = await supabase
+      .from('repair_requests')
+      .select(`
+        *,
+        managed_properties (
+          id,
+          property_address,
+          unit,
+          city,
+          state,
+          zip
+        ),
+        tenants (
+          id,
+          first_name,
+          last_name,
+          email,
+          phone
+        ),
+        landlords (
+          id,
+          first_name,
+          last_name,
+          email,
+          phone
+        ),
+        pm_leases (
+          id,
+          lease_start,
+          lease_end,
+          monthly_rent
+        )
+      `)
+      .eq('id', id)
+      .single()
 
-  if (error) {
+    if (error) {
+      console.error('Error fetching repair request:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    if (!repair) {
+      return NextResponse.json({ error: 'Repair request not found' }, { status: 404 })
+    }
+
+    return NextResponse.json({ repair })
+  } catch (error: any) {
     console.error('Error fetching repair request:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
-
-  if (!repair) {
-    return NextResponse.json({ error: 'Repair request not found' }, { status: 404 })
-  }
-
-  return NextResponse.json({ repair })
 }
 
 // PATCH - Update repair request
@@ -265,18 +270,23 @@ export async function DELETE(
   const auth = await requirePermission(request, 'can_manage_pm')
   if (auth.error) return auth.error
 
-  const supabase = createClient()
-  const { id } = await params
+  try {
+    const supabase = createClient()
+    const { id } = await params
 
-  const { error } = await supabase
-    .from('repair_requests')
-    .delete()
-    .eq('id', id)
+    const { error } = await supabase
+      .from('repair_requests')
+      .delete()
+      .eq('id', id)
 
-  if (error) {
+    if (error) {
+      console.error('Error deleting repair request:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
     console.error('Error deleting repair request:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
-
-  return NextResponse.json({ success: true })
 }

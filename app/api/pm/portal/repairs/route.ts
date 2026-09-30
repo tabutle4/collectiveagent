@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     const supabase = createClient()
     const body = await request.json()
 
-    const { category, urgency, title, description, property_id, landlord_id, lease_id } = body
+    const { category, urgency, title, description } = body
 
     if (!category || !title) {
       return NextResponse.json({ error: 'Category and title are required' }, { status: 400 })
@@ -107,6 +107,35 @@ export async function POST(request: NextRequest) {
     if (!isRepairCategory(category)) {
       return NextResponse.json(
         { error: 'That category is not one we recognize. Please pick one from the list and try again.' },
+        { status: 400 }
+      )
+    }
+
+    // Which property this repair belongs to is decided here, from the session,
+    // not from the request body. The body used to carry property_id, landlord_id
+    // and lease_id and they were written straight onto the row, so a tenant who
+    // edited the payload could file a repair against any property in the system
+    // and put it on another landlord's dashboard. Those three fields are now
+    // ignored. This mirrors how the tenant dashboard picks the lease it shows
+    // (active, most recently created) so the repair lands on the same one.
+    const { data: leases, error: leaseError } = await supabase
+      .from('pm_leases')
+      .select('id, property_id, landlord_id')
+      .eq('tenant_id', session.user_id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (leaseError) {
+      console.error('Error looking up tenant lease:', leaseError)
+      return NextResponse.json({ error: leaseError.message }, { status: 500 })
+    }
+
+    const activeLease = leases?.[0]
+
+    if (!activeLease) {
+      return NextResponse.json(
+        { error: 'We could not find an active lease on your account. Please contact the office and we will get this filed for you.' },
         { status: 400 }
       )
     }
@@ -132,10 +161,10 @@ export async function POST(request: NextRequest) {
     const { data: repair, error } = await supabase
       .from('repair_requests')
       .insert({
-        property_id,
+        property_id: activeLease.property_id,
         tenant_id: session.user_id,
-        landlord_id,
-        lease_id,
+        landlord_id: activeLease.landlord_id,
+        lease_id: activeLease.id,
         created_by_type: 'tenant',
         category,
         urgency: urgency || 'routine',
@@ -158,7 +187,7 @@ export async function POST(request: NextRequest) {
       supabase
         .from('managed_properties')
         .select('property_address, unit, city, state')
-        .eq('id', property_id)
+        .eq('id', activeLease.property_id)
         .single(),
       supabase
         .from('company_settings')

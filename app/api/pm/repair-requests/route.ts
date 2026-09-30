@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requirePermission } from '@/lib/api-auth'
-import { isRepairCategory } from '@/lib/pm/repairCategories'
+import { isRepairCategory, repairCategoryLabel, repairCategoryTenantLabel } from '@/lib/pm/repairCategories'
 
 // GET - List repair requests
 export async function GET(request: NextRequest) {
@@ -73,7 +73,9 @@ export async function GET(request: NextRequest) {
       r.title?.toLowerCase().includes(searchLower) ||
       r.description?.toLowerCase().includes(searchLower) ||
       r.managed_properties?.property_address?.toLowerCase().includes(searchLower) ||
-      r.category?.toLowerCase().includes(searchLower)
+      r.category?.toLowerCase().includes(searchLower) ||
+      repairCategoryLabel(r.category).toLowerCase().includes(searchLower) ||
+      repairCategoryTenantLabel(r.category).toLowerCase().includes(searchLower)
     )
   }
 
