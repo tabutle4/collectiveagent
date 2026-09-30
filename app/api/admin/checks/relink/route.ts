@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
 import { autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
+import { syncPayoutsLedgerQuietly } from '@/lib/payouts/posting'
 
 /**
  * Move a check from one deal to another.
@@ -97,6 +98,15 @@ export async function POST(request: NextRequest) {
         await autoCascadeTransaction(priorTxnId)
         await syncCheckComplianceDate(priorTxnId)
       }
+
+      // Moving a check moves its deposit line to the other deal, so the ledger
+      // is stale until this runs. This is the route the Move Check dialog
+      // posts to, from the payouts report, the checks list and the transaction
+      // page alike; the link_check action that also does this has no callers.
+      // One call covers both deals: the sync rebuilds every managed line for
+      // the whole payouts account, so the line follows the check without being
+      // told which deal it left.
+      await syncPayoutsLedgerQuietly(auth.user?.id || null)
 
       return NextResponse.json({
         success: true,

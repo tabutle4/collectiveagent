@@ -3,7 +3,7 @@ import { FUNDS_DESTINATIONS } from '@/lib/payouts/ledger'
 import { requirePermission, type AuthResult } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { stampActivityActor, activityStampPoint } from '@/lib/transactions/activityActor'
-import { syncPayoutsLedgerQuietly } from '@/lib/payouts/posting'
+import { syncPayoutsLedgerQuietly, checkUpdateTouchesLedger } from '@/lib/payouts/posting'
 import { pickEditableTebFields, tebUpdateTouchesLedger } from '@/lib/transactions/externalBrokerage'
 import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
 import { Resend } from 'resend'
@@ -1287,7 +1287,15 @@ async function handleTransactionPost(
       // register until the 10:45 UTC cron or a manual Catch up the ledger.
       // Quiet: a ledger that cannot be posted must not fail the save that
       // caused it, and the next sync picks up whatever this run missed.
-      await syncPayoutsLedgerQuietly(auth.user?.id || null)
+      //
+      // Gated, unlike the create and delete cases, which always change the set
+      // of lines. The check editor saves one field per blur, thirteen of them
+      // on one card, so an ungated sync here ran a full pass over every check
+      // and every paid payout each time somebody tabbed past the notes field.
+      // mark_brokerage_paid gates its sync the same way.
+      if (checkUpdateTouchesLedger(cleanUpdates)) {
+        await syncPayoutsLedgerQuietly(auth.user?.id || null)
+      }
       return NextResponse.json({ success: true })
     }
 

@@ -67,6 +67,43 @@ const MANAGED_PREFIXES = [
   'payout_batch:',
 ] as const
 
+/**
+ * Columns of a check the deposit line is built from.
+ *
+ * Kept here, beside the checks_received SELECT further down, because the two
+ * have to agree: a column the deposit reads but this list omits is a change
+ * that silently never reaches the register. property_address and check_from
+ * are in the list even though they are not money, because the deposit line's
+ * description is built from them.
+ */
+export const LEDGER_AFFECTING_CHECK_FIELDS = [
+  'check_amount',
+  'hold_amount',
+  'received_date',
+  'deposited_date',
+  'cleared_date',
+  'status',
+  'payment_method',
+  'funds_destination',
+  'transaction_id',
+  'property_address',
+  'check_from',
+] as const
+
+/**
+ * True when an update to a check carries a field the ledger reads.
+ *
+ * Mirrors tebUpdateTouchesLedger. The check editor saves one field per blur,
+ * thirteen of them on one card, so without this, tabbing past the notes field
+ * would run a full pass over every check and every paid payout to produce no
+ * change at all.
+ */
+export function checkUpdateTouchesLedger(fields: Record<string, any>): boolean {
+  return LEDGER_AFFECTING_CHECK_FIELDS.some(f =>
+    Object.prototype.hasOwnProperty.call(fields, f)
+  )
+}
+
 export type PostingCounts = { added: number; reversed: number; updated: number }
 
 export type PostingResult = {
