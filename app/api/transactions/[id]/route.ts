@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { normalizeTransactionEntryFields } from '@/lib/transactions/utils'
 import { pickEditableTebFields, tebUpdateTouchesLedger } from '@/lib/transactions/externalBrokerage'
-import { syncPayoutsLedgerQuietly } from '@/lib/payouts/posting'
+import { syncPayoutsLedgerQuietly, checkUpdateTouchesLedger } from '@/lib/payouts/posting'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { computeCommission } from '@/lib/transactions/math'
@@ -9,6 +9,10 @@ import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 import { resolveGoverningTeamAgreement } from '@/lib/transactions/teamAgreement'
 import { settlePayloadInvoiceForDebt } from '@/lib/payload/settleInvoiceForDebt'
 import { syncEcommissionRecords } from '@/lib/transactions/ecommissionSync'
+
+// A check save here runs a full payouts-ledger sync, the same work the
+// dedicated sync routes allow 300s for.
+export const maxDuration = 300
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission(request, 'can_view_all_transactions')
@@ -326,6 +330,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
        .update({ ...normalizeTransactionEntryFields(cleanUpdates), updated_at: new Date().toISOString() })
        .eq('id', check_id)
      if (error) throw error
+     // Same reason and same guard as the admin route: a check is the source of
+     // a payouts deposit line, and this route was writing checks without ever
+     // telling the ledger.
+     if (checkUpdateTouchesLedger(cleanUpdates)) {
+       await syncPayoutsLedgerQuietly(auth.user?.id || null)
+     }
      return NextResponse.json({ success: true })
    }
 
@@ -338,6 +348,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .select()
         .single()
       if (error) throw error
+      // Ungated: a new check always changes the set of deposit lines.
+      await syncPayoutsLedgerQuietly(auth.user?.id || null)
       return NextResponse.json({ check: data })
     }
 

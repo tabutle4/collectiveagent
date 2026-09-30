@@ -846,7 +846,18 @@ export async function syncPayoutsLedger(recordedBy?: string | null): Promise<Pos
  */
 export async function syncPayoutsLedgerQuietly(recordedBy?: string | null): Promise<void> {
   try {
-    await syncPayoutsLedger(recordedBy)
+    const result = await syncPayoutsLedger(recordedBy)
+    // The quiet callers throw the PostingResult away, which meant a line the
+    // sync refused to touch because it is reconciled was reported to nobody:
+    // the person who caused it saw a normal save and the register kept a
+    // figure the source records no longer agree with. It still must not
+    // interrupt their save, so it goes to the log rather than the screen.
+    if (result.left_for_review.length > 0) {
+      console.warn(
+        'Ledger auto-post left lines for review:',
+        result.left_for_review.join(' | ')
+      )
+    }
   } catch (error: any) {
     console.error('Ledger auto-post failed, will retry on the next run:', error?.message || error)
   }

@@ -1272,22 +1272,78 @@ export async function autoCascadeTransaction(transactionId: string): Promise<voi
 
     const { data: rows } = await supabase
       .from('transaction_internal_agents')
-      .select('id, agent_role, side, payment_status, installment_kind, lead_source, referred_agent_id')
+      .select('id, agent_role, side, payment_status, installment_kind, lead_source, referred_agent_id, agent_basis')
       .eq('transaction_id', transactionId)
       .in('agent_role', ['primary_agent', 'listing_agent', 'co_agent'])
 
-    for (const row of rows || []) {
-      if (row.payment_status === 'paid') continue
-      if (row.installment_kind === 'retainer') continue
-
+    // The side's whole commission, which is what the agents on that side
+    // divide between them.
+    const sideBasis = (side: string | null | undefined): number => {
       let basis = 0
-      if (row.side === 'seller' || row.side === 'landlord') {
+      if (side === 'seller' || side === 'landlord') {
         basis = num(txn.listing_side_commission)
-      } else if (row.side === 'buyer' || row.side === 'tenant') {
+      } else if (side === 'buyer' || side === 'tenant') {
         basis = num(txn.buying_side_commission)
       }
       if (!basis) basis = num(txn.office_gross)
       if (!basis) basis = num(txn.gross_commission)
+      return basis
+    }
+
+    // A co-agent's basis is a negotiated figure somebody typed in. Nothing
+    // here can derive it, so nothing here touches it.
+    //
+    // This loop used to hand EVERY producing agent the side's full commission,
+    // with no notion that they share it. On a two-agent deal both rows ended up
+    // carrying the whole amount: 6030 Plum Dale Road had Courtney and Brea each
+    // holding the full 7,800, written four seconds after a check was linked to
+    // the deal, and it had to be put back by hand.
+    //
+    // What the deals themselves say, consistently: the bases on a side add up
+    // to that side's commission. Plum Dale 6,800 + 1,000 = 7,800, Spring Glen
+    // 2,090 + 18,810 = 20,900, Sioux Trl 7,575 + 1,515 = 9,090, Pennsylvania
+    // 2,750 + 1,650 + 2,200 = 6,600. Tara confirmed the rule: the co-agents'
+    // bases are entered, and the primary or listing agent takes the remainder.
+    const coAgentBasisBySide = new Map<string, number>()
+    // A side where some co-agent's basis is not filled in yet. The remainder
+    // cannot be known until it is, and num(null) is 0, so without this the
+    // primary would be handed the whole side again: the exact bug this is
+    // here to fix, re-armed by a blank field. 2 of the 13 co-agent rows in
+    // the database today have a null or zero basis, so it is not theoretical.
+    const sidesWithUnknownCoAgent = new Set<string>()
+    for (const row of rows || []) {
+      if (row.agent_role !== 'co_agent') continue
+      if (row.installment_kind === 'retainer') continue
+      const key = String(row.side ?? '')
+      const basis = num(row.agent_basis)
+      if (row.agent_basis == null || basis <= 0) {
+        sidesWithUnknownCoAgent.add(key)
+        continue
+      }
+      coAgentBasisBySide.set(key, (coAgentBasisBySide.get(key) || 0) + basis)
+    }
+
+    let wrote = false
+    for (const row of rows || []) {
+      if (row.payment_status === 'paid') continue
+      if (row.installment_kind === 'retainer') continue
+      // Co-agent rows are left exactly as entered.
+      if (row.agent_role === 'co_agent') continue
+
+      const sideKey = String(row.side ?? '')
+      // Leave the whole side alone rather than guess at the remainder.
+      if (sidesWithUnknownCoAgent.has(sideKey)) continue
+
+      const whole = sideBasis(row.side)
+      if (whole <= 0) continue
+
+      // Rounded to cents, the way rebalanceReferralCarveouts rounds the same
+      // shape of subtraction. Without it a float residue can leave a basis of
+      // a fraction of a cent instead of zero.
+      const basis = Math.round((whole - (coAgentBasisBySide.get(sideKey) || 0)) * 100) / 100
+      // The co-agents already account for the side, or more than it. Writing
+      // what is left would be zero or a negative basis, so the deal is left
+      // alone for somebody to sort out rather than being quietly rewritten.
       if (basis <= 0) continue
 
       await cascadePrimarySplit({
@@ -1297,7 +1353,14 @@ export async function autoCascadeTransaction(transactionId: string): Promise<voi
         leadSource: row.lead_source || 'own',
         referredAgentId: row.referred_agent_id || null,
       })
+      wrote = true
     }
+
+    // cascadePrimarySplit recomputes the office net on every row it writes, so
+    // before this change something always did. Now that a whole deal can be
+    // skipped, nothing would, and transactions.office_net would keep a figure
+    // its own agent rows no longer support.
+    if (!wrote) await recomputeOfficeNet(transactionId)
   } catch (err) {
     console.error('autoCascadeTransaction failed for', transactionId, err)
   }

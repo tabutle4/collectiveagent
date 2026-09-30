@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { graphClient } from '@/lib/microsoft-graph'
 import { extractCheckWithClaude, sniffMediaType } from '@/lib/check-extract'
+import { syncPayoutsLedgerQuietly, checkUpdateTouchesLedger } from '@/lib/payouts/posting'
 
 export const dynamic = 'force-dynamic'
+
+// This route already does a Graph upload and a vision call before it runs a
+// full payouts-ledger sync. The platform default of 10s does not cover it.
+export const maxDuration = 300
 
 // Inbound email webhook — receives check photos emailed from phone.
 // Address format: txncheck+{checkId}@coachingbrokeragetools.com
@@ -137,6 +142,14 @@ export async function POST(request: NextRequest) {
       .eq('id', checkId)
 
     if (updateError) throw new Error('Failed to update check record')
+
+    // The extraction writes check_amount, the dates and the payment method,
+    // all of which the payouts deposit line is built from. Without this a
+    // check that arrived by email sat off the register until the next cron.
+    // Gated on the same field list the admin route uses.
+    if (checkUpdateTouchesLedger(updateFields)) {
+      await syncPayoutsLedgerQuietly(null)
+    }
 
     console.log(`Check photo + AI data saved for ${checkId}: ${fileUrl}`)
     return NextResponse.json({ success: true, file_url: fileUrl })

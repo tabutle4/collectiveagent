@@ -264,15 +264,23 @@ export default function AllPayoutsPage() {
   return (
     <div className="min-h-screen bg-luxury-cream p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center gap-4 mb-6">
-          <Link href="/admin/reports" className="text-luxury-gray-3 hover:text-luxury-gray-1">
-            <ArrowLeft size={20} />
-          </Link>
-          <h1 className="page-title">All Payouts</h1>
-          <span className="text-sm text-luxury-gray-3">({currentYear})</span>
-          <Link href="/admin/reports/payouts" className="text-xs text-luxury-accent hover:underline">
-            ← Payouts Report
-          </Link>
+        {/* Heading on its own line, then a row of navigation. Same shape as
+            the other report pages, which left this one the odd one out. */}
+        <div className="mb-6">
+          <div className="flex items-center gap-4">
+            <Link href="/admin/reports" className="text-luxury-gray-3 hover:text-luxury-gray-1">
+              <ArrowLeft size={20} />
+            </Link>
+            <h1 className="page-title">All Payouts</h1>
+            <span className="text-sm text-luxury-gray-3">({currentYear})</span>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
+            <div className="flex items-center gap-4">
+              <Link href="/admin/reports/payouts" className="text-xs text-luxury-accent hover:underline">
+                ← Payouts Report
+              </Link>
+            </div>
+          </div>
         </div>
 
         {/* Pending Summary Cards - Clickable Filters */}

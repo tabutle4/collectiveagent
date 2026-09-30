@@ -13,6 +13,7 @@ import {
 } from '@/lib/payouts/sweep'
 import { entryTypeForCategory, DEFAULT_LEDGER_ACCOUNT } from '@/lib/payouts/ledger'
 import { titleDirectTransactionIds } from '@/lib/payouts/titleDirect'
+import { isUnsweptDeal } from '@/lib/payouts/unswept'
 
 // Money as it belongs on a ledger line: always two decimals.
 //
@@ -92,9 +93,7 @@ async function loadSweepable(): Promise<SweepDeal[]> {
   )
 
   // Unswept, not cancelled, and carrying an office net worth moving.
-  const candidates = (txns || []).filter(
-    t => t.status !== 'cancelled' && !t.office_net_swept_at && Number(t.office_net || 0) !== 0
-  )
+  const candidates = (txns || []).filter(isUnsweptDeal)
   if (candidates.length === 0) return []
 
   const [compliance, checklist] = await Promise.all([

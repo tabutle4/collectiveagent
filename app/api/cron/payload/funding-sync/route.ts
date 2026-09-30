@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { requireCronSecret } from '@/lib/api-auth'
+import { syncPayoutsLedgerQuietly } from '@/lib/payouts/posting'
 
 const plAuth = () => 'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
 
@@ -86,6 +87,15 @@ export async function GET(request: NextRequest) {
         results.checks_cleared++
         console.log('funding-sync: check cleared', check.id, funding.settledDate)
       }
+    }
+
+    // Both branches above write a column the payouts deposit is built from:
+    // a rejected check stops being a deposit, and a cleared date releases the
+    // bank hold that was keeping part of it out of the balance. One sync after
+    // the loop rather than one per check, because the sync rebuilds the whole
+    // account either way.
+    if (results.checks_rejected > 0 || results.checks_cleared > 0) {
+      await syncPayoutsLedgerQuietly(null)
     }
 
     // ── Part 2: PM rent awaiting settlement ─────────────────────────────────

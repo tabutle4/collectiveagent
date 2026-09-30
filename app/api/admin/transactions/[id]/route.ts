@@ -26,6 +26,8 @@ import {
 } from '@/lib/payload/commissionOffset'
 import { buildStatementEmail, buildCdaEmail } from '@/lib/email/buildTransactionEmails'
 import { getEmailLayout } from '@/lib/email/layout'
+import { loadCdaData } from '@/lib/documents/cdaData'
+import { buildCdaPdf, cdaPdfFilename } from '@/lib/documents/buildCdaPdf'
 import { fundingStatus, btsaTotalFromAgentRows, fundingExpectedLabel, effectiveAgentNetTotal, MATH_TOLERANCE } from '@/lib/transactions/funding'
 import { processPayout, previewPayout, payoutStatus, recentPayoutCredits, voidPayout } from '@/lib/payload/processPayout'
 
@@ -1292,7 +1294,9 @@ async function handleTransactionPost(
       // of lines. The check editor saves one field per blur, thirteen of them
       // on one card, so an ungated sync here ran a full pass over every check
       // and every paid payout each time somebody tabbed past the notes field.
-      // mark_brokerage_paid gates its sync the same way.
+      // update_external_brokerage gates its sync the same way, on
+      // tebUpdateTouchesLedger. mark_brokerage_paid does not, and does not need
+      // to: marking a brokerage paid always changes the set of lines.
       if (checkUpdateTouchesLedger(cleanUpdates)) {
         await syncPayoutsLedgerQuietly(auth.user?.id || null)
       }
@@ -2230,7 +2234,16 @@ async function handleTransactionPost(
       // commission-bearing role. Derives basis from the agent's side commission
       // (when known) or falls back to office_gross. Skipped silently if no
       // basis available - admin can click Recalculate later.
-      if (data && ['primary_agent', 'listing_agent', 'co_agent'].includes(data.agent_role) && !agent.skip_auto_stamp) {
+      //
+      // co_agent is deliberately NOT in this list. A co-agent's basis is a
+      // negotiated figure somebody types in; nothing here can derive it, and
+      // stamping the side's whole commission onto the row was the other half
+      // of the bug that gave 6030 Plum Dale Road two agents each holding the
+      // full 7,800. It also defeated the fix in autoCascadeTransaction, which
+      // would then compute a remainder of zero and skip the primary in
+      // silence. A new co-agent now arrives with no basis, and the primary is
+      // left alone until somebody enters one.
+      if (data && ['primary_agent', 'listing_agent'].includes(data.agent_role) && !agent.skip_auto_stamp) {
         const { data: txn } = await supabase
           .from('transactions')
           .select('listing_side_commission, buying_side_commission, office_gross, status')
@@ -4417,6 +4430,47 @@ async function handleTransactionPost(
         )
       }
 
+      // The agent's CDA goes out as a PDF attachment, not a link. It is built
+      // from the same loadCdaData model and the same buildCdaPdf renderer the
+      // send-to-title route uses, so the agent receives the document title
+      // received rather than a web page that re-renders from whatever the deal
+      // says today. The payee table is the whole deal either way.
+      //
+      // Not quite tia-independent, and worth knowing: loadCdaData reads
+      // btsa_amount off the clicked agent's row, and that figure feeds the
+      // BTSA line, the office net and the gross fallback. Every producing
+      // agent on every CDA-eligible deal in the database carries the same
+      // btsa_amount today, so no two renders differ, but two that disagreed
+      // would.
+      //
+      // Resend takes attachments as { filename, content, content_type }, with
+      // contentType in camelCase in the Node SDK; the cap is 40MB per email
+      // after base64 encoding, which a CDA is nowhere near.
+      // https://resend.com/docs/api-reference/emails/send-email
+      //
+      // Base64 rather than a raw Buffer. The docs and the SDK's own types
+      // accept either, but the SDK JSON-stringifies the body, so a Buffer
+      // crosses the wire as {"type":"Buffer","data":[...]} and a mistake there
+      // fails silently: the email sends and the PDF will not open. Base64 is
+      // the form the vendor's Node example uses.
+      let attachments:
+        | { filename: string; contentType: string; content: string }[]
+        | undefined
+      if (email_type === 'cda') {
+        const cdaRes = await loadCdaData(id, internal_agent_id)
+        if (!cdaRes.ok) {
+          return NextResponse.json({ error: cdaRes.error }, { status: cdaRes.status })
+        }
+        const cdaBytes = await buildCdaPdf(cdaRes.model)
+        attachments = [
+          {
+            filename: cdaPdfFilename(cdaRes.model.propertyAddr),
+            contentType: 'application/pdf',
+            content: Buffer.from(cdaBytes).toString('base64'),
+          },
+        ]
+      }
+
       const { error: sendError } = await resend.emails.send({
         from: 'Collective Realty Co. <transactions@coachingbrokeragetools.com>',
         to: [preview.to],
@@ -4424,6 +4478,7 @@ async function handleTransactionPost(
         replyTo: preview.replyTo,
         subject: preview.subject,
         html: preview.html,
+        attachments,
       })
       if (sendError) {
         return NextResponse.json(

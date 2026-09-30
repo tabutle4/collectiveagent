@@ -184,8 +184,6 @@ export async function buildCdaEmail(
     .maybeSingle()
   const agencyName = agencySettings?.agency_name || 'Collective Realty Co.'
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'
-  const cdaUrl = `${appUrl}/api/admin/transactions/${transactionId}/cda/${internalAgentId}`
   const firstName = agent.preferred_first_name || agent.first_name || 'there'
 
   const content = `
@@ -194,15 +192,8 @@ export async function buildCdaEmail(
       Your Commission Disbursement Authorization (CDA) for
       <strong style="color:${EMAIL_COLORS.headingText};">${propertyLabel || 'your recent transaction'}</strong>${
     txn.closing_date || txn.closed_date ? ` closed ${fmtDate(txn.closing_date || txn.closed_date)}` : ''
-  } is ready. View it online below; you can print or save a copy for your records.
+  } is attached to this email as a PDF. It is the same document sent to the title company, so you can save or print it for your records.
     </p>
-    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px auto 0;">
-      <tr>
-        <td style="padding:0 6px;">
-          <a href="${cdaUrl}" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">View CDA</a>
-        </td>
-      </tr>
-    </table>
     <p style="margin:24px 0 0;color:${EMAIL_COLORS.lightText};font-size:12px;">
       Please let us know if anything looks incorrect so we can make it right.
     </p>

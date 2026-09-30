@@ -12,6 +12,7 @@ import { titleDirectTransactionIds } from '@/lib/payouts/titleDirect'
 import { getCentralDateString } from '@/lib/timezone'
 import { signedAmount, DEFAULT_LEDGER_ACCOUNT } from '@/lib/payouts/ledger'
 import { computeAutoHolds, computePayloadPending, type HoldCheck, type PayloadPending } from '@/lib/payouts/holds'
+import { isUnsweptDeal } from '@/lib/payouts/unswept'
 
 export type PayoutsPosition = {
   /** What the statement was last typed as. */
@@ -152,9 +153,11 @@ export async function currentPosition(): Promise<PayoutsPosition> {
       filters: [{ type: 'in', column: 'id', value: payoutsTxnIds }],
     })
     for (const t of txns || []) {
-      if (t.status === 'cancelled' || t.office_net_swept_at) continue
+      // isUnsweptDeal, not a fourth copy of the rule. Same result this line
+      // always produced: skipping an exact zero is what keeping everything
+      // non-zero means. It is shared now so it stays that way.
+      if (!isUnsweptDeal(t)) continue
       const v = Number(t.office_net || 0)
-      if (v === 0) continue
       unsweptAmount += v
       unsweptDeals += 1
     }

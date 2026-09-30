@@ -8,6 +8,7 @@ import { officeNetState } from '@/lib/payouts/ledger'
 import { computeAutoHolds, computePayloadPending, isNotCleared, type HoldCheck } from '@/lib/payouts/holds'
 import { fetchChecklistProgress } from '@/lib/payouts/checklist'
 import { ledgerBalance } from '@/lib/payouts/position'
+import { isUnsweptDeal } from '@/lib/payouts/unswept'
 import { DEFAULT_LEDGER_ACCOUNT } from '@/lib/payouts/ledger'
 import { billsDueWithin, billsDueTotal, type RecurringBill } from '@/lib/payouts/bills'
 import { syncPayoutsLedgerQuietly } from '@/lib/payouts/posting'
@@ -147,7 +148,7 @@ export async function GET(request: NextRequest) {
         ),
         fetchAllRows(
           'transactions',
-          'id, property_address, compliance_status, transaction_type, office_net, office_gross, is_intermediary, office_net_swept_at, office_net_swept_amount, closing_date',
+          'id, property_address, compliance_status, transaction_type, status, office_net, office_gross, is_intermediary, office_net_swept_at, office_net_swept_amount, closing_date',
           { filters: [{ type: 'in', column: 'id', value: txnIds }] }
         ),
       ])
@@ -465,6 +466,9 @@ export async function GET(request: NextRequest) {
           hasPayoutsCheck: !(check.transaction_id && titleDirectTxnIds.has(check.transaction_id)),
           sweptAt: txn?.office_net_swept_at ?? null,
         }),
+        // The deal's own status, so the unswept figure can exclude a cancelled
+        // deal the way the sweep already does.
+        txn_status: txn?.status ?? null,
         office_net_swept_at: txn?.office_net_swept_at ?? null,
         office_net_swept_amount: txn?.office_net_swept_amount ?? null,
         crc_transferred: check.crc_transferred || false,
@@ -679,8 +683,13 @@ export async function GET(request: NextRequest) {
     // in app/api/admin/sweeps/route.ts has never filtered on paid status, so
     // the Move our share to income dialog listed deals this total did not
     // count, and lib/payouts/position.ts computed the same figure a third way
-    // again. All three now agree: unswept, not cancelled, money in this
-    // account.
+    // again.
+    //
+    // The agreement is now structural rather than lucky. All three call
+    // isUnsweptDeal. This one used to have no cancelled check at all and
+    // skipped an amount of zero or less, where the sweep kept anything
+    // non-zero, so a cancelled deal or a negative office net would have shown
+    // here and not moved there.
     const seenTxn = new Set<string>()
     let unsweptOfficeNet = 0
     const unsweptDeals: { transaction_id: string; address: string; amount: number }[] = []
@@ -689,13 +698,20 @@ export async function GET(request: NextRequest) {
       if (!r.transaction_id || !r.is_anchor) continue
       if (seenTxn.has(r.transaction_id)) continue
       seenTxn.add(r.transaction_id)
+      // office_net_state carries the one thing isUnsweptDeal deliberately does
+      // not: whether our share ever reached this account. A title-split deal
+      // has nothing here to move.
       if (r.office_net_state !== 'not_swept') continue
       if (r.crc_amount === null) {
         officeNetUnknown.push({ transaction_id: r.transaction_id, address: r.address })
         continue
       }
+      if (!isUnsweptDeal({
+        status: r.txn_status,
+        office_net: r.crc_amount,
+        office_net_swept_at: r.office_net_swept_at,
+      })) continue
       const amount = Number(r.crc_amount) || 0
-      if (amount <= 0) continue
       unsweptOfficeNet += amount
       unsweptDeals.push({ transaction_id: r.transaction_id, address: r.address, amount })
     }

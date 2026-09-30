@@ -6,6 +6,12 @@ import { applyRetainerShell, retainerProspectName, retainerClientKey } from '@/l
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 import { Resend } from 'resend'
 import { getEmailLayout, emailSection, emailButton } from '@/lib/email/layout'
+import { syncPayoutsLedgerQuietly } from '@/lib/payouts/posting'
+
+// A full payouts-ledger sync runs on a webhook that wrote a check. The two
+// routes that already existed to run that sync both raise this to 300; the
+// platform default of 10s is not enough for it plus the Payload re-fetch.
+export const maxDuration = 300
 
 // The Payload payer is NOT the deal's title company, and nothing here writes a
 // title contact any more.
@@ -134,6 +140,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // Set whenever this webhook writes a check. The payouts deposit line is
+  // built from checks_received, so a webhook that creates or rejects one
+  // leaves the register stale until the next cron. Synced once, at whichever
+  // return this run takes, and only when something actually changed, so a
+  // webhook that touches no check adds nothing to Payload's delivery time.
+  // Declared outside the try so the catch below can see it.
+  let checksChanged = false
   try {
     const body = await request.json()
     console.log('PAYLINK_WEBHOOK_RAW:', JSON.stringify(body))
@@ -141,12 +154,14 @@ export async function POST(request: NextRequest) {
     const trigger = body?.trigger
     const triggeredOn = body?.triggered_on
     if (triggeredOn?.object !== 'transaction' || !triggeredOn?.id) {
+      if (checksChanged) await syncPayoutsLedgerQuietly(null)
       return NextResponse.json({ received: true })
     }
 
     const isPaymentTrigger = trigger === 'processed' || trigger === 'payment'
     const isRejectTrigger = trigger === 'reject'
     if (!isPaymentTrigger && !isRejectTrigger) {
+      if (checksChanged) await syncPayoutsLedgerQuietly(null)
       return NextResponse.json({ received: true })
     }
 
@@ -161,6 +176,7 @@ export async function POST(request: NextRequest) {
     const txn = await txnRes.json()
     if (!txnRes.ok) {
       console.error('Pay-link webhook: transaction fetch failed:', txn)
+      if (checksChanged) await syncPayoutsLedgerQuietly(null)
       return NextResponse.json({ received: true })
     }
     console.log('PAYLINK_TXN_RAW:', JSON.stringify(txn))
@@ -177,6 +193,7 @@ export async function POST(request: NextRequest) {
     const isCommission = !!commissionLinkId && linkId === commissionLinkId
     const isRetainer = !!retainerLinkId && linkId === retainerLinkId
     if (!isCommission && !isRetainer) {
+      if (checksChanged) await syncPayoutsLedgerQuietly(null)
       return NextResponse.json({ received: true })
     }
 
@@ -198,8 +215,10 @@ export async function POST(request: NextRequest) {
             updated_at: new Date().toISOString(),
           })
           .eq('id', existing.id)
+        checksChanged = true
         console.log('Pay-link check marked rejected:', existing.id)
       }
+      if (checksChanged) await syncPayoutsLedgerQuietly(null)
       return NextResponse.json({ received: true })
     }
 
@@ -207,6 +226,7 @@ export async function POST(request: NextRequest) {
     // re-fetched transaction, never the webhook body.
     if (txn.type !== 'payment' || txn.status !== 'processed') {
       console.log('Pay-link webhook: transaction not a processed payment', txn.id, txn.type, txn.status)
+      if (checksChanged) await syncPayoutsLedgerQuietly(null)
       return NextResponse.json({ received: true })
     }
 
@@ -218,6 +238,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
     if (dupe) {
       console.log('Pay-link webhook: check already exists for', txn.id)
+      if (checksChanged) await syncPayoutsLedgerQuietly(null)
       return NextResponse.json({ received: true })
     }
 
@@ -298,6 +319,7 @@ export async function POST(request: NextRequest) {
           .select('id')
           .single()
         if (error) throw error
+        checksChanged = true
         console.log('Pay-link commission check created:', check.id, 'txn:', matchedTxn.id)
 
         // A Payload payment landing as a check can complete the deal's
@@ -390,6 +412,7 @@ export async function POST(request: NextRequest) {
           .select('id')
           .single()
         if (error) throw error
+        checksChanged = true
 
 
         // Best-effort: notify the matched agent, same as the matched-deal path.
@@ -402,6 +425,7 @@ export async function POST(request: NextRequest) {
         }
         console.log('Pay-link commission check created', createdTxn ? `with new txn ${createdTxn.id}:` : 'unmatched:', check.id)
       }
+      if (checksChanged) await syncPayoutsLedgerQuietly(null)
       return NextResponse.json({ received: true })
     }
 
@@ -427,7 +451,9 @@ export async function POST(request: NextRequest) {
         .select('id')
         .single()
       if (error) throw error
+      checksChanged = true
       console.log('Pay-link retainer check created unmatched:', check.id)
+      if (checksChanged) await syncPayoutsLedgerQuietly(null)
       return NextResponse.json({ received: true })
     }
 
@@ -473,7 +499,9 @@ export async function POST(request: NextRequest) {
           .select('id')
           .single()
         if (dupErr) throw dupErr
+        checksChanged = true
         console.log('Pay-link retainer attached to existing prospect:', check.id, 'txn:', already.id)
+        if (checksChanged) await syncPayoutsLedgerQuietly(null)
         return NextResponse.json({ received: true })
       }
     }
@@ -605,6 +633,7 @@ export async function POST(request: NextRequest) {
       .select('id')
       .single()
     if (checkError) throw checkError
+    checksChanged = true
     console.log('Pay-link retainer check created:', check.id, 'txn:', newTxn.id)
 
     // Best-effort: record the payer as the client contact.
@@ -630,9 +659,14 @@ export async function POST(request: NextRequest) {
       console.error('Pay-link notify failed:', err?.message || err)
     }
 
+    if (checksChanged) await syncPayoutsLedgerQuietly(null)
     return NextResponse.json({ received: true })
   } catch (error: any) {
     console.error('Pay-link webhook error:', error)
+    // A check may already be in the table when a later step throws. Payload's
+    // retry then hits the duplicate guard, returns early with the flag back at
+    // false, and never syncs, so the deposit would wait for the next cron.
+    if (checksChanged) await syncPayoutsLedgerQuietly(null)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

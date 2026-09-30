@@ -333,7 +333,14 @@ export default function MoneyMovementPage() {
             </Link>
             <h1 className="page-title">Money Movement</h1>
           </div>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
+          {/* min-h holds the row at button height. ledgerStarted is null until
+              its fetch lands, so the button is absent on first paint and the
+              row used to grow when it appeared, nudging the page down once.
+              Two values because .btn gains 4px of padding at md: roughly 29px
+              below that breakpoint and 33px above, so one figure cannot cover
+              both. Not applied below sm:, where the row stacks and the button
+              takes a line of its own that no min-height would reserve. */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3 sm:min-h-[29px] md:min-h-[33px]">
             <div className="flex items-center gap-4">
               <Link href="/admin/reports/payouts" className="text-xs text-luxury-accent hover:underline">
                 Payouts Report
