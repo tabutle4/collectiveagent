@@ -7,6 +7,7 @@ import {
   Wrench, Search, ArrowLeft, Clock, CheckCircle, AlertTriangle, 
   XCircle, Loader2, DollarSign, Plus, Building2
 } from 'lucide-react'
+import { REPAIR_CATEGORIES, repairCategoryLabel } from '@/lib/pm/repairCategories'
 
 interface Repair {
   id: string
@@ -48,17 +49,6 @@ interface Stats {
   completed: number
   totalCost: number
 }
-
-const CATEGORIES = [
-  { value: 'plumbing', label: 'Plumbing' },
-  { value: 'electrical', label: 'Electrical' },
-  { value: 'hvac', label: 'HVAC' },
-  { value: 'appliance', label: 'Appliance' },
-  { value: 'structural', label: 'Structural' },
-  { value: 'pest', label: 'Pest Control' },
-  { value: 'landscaping', label: 'Landscaping' },
-  { value: 'other', label: 'Other' },
-]
 
 const URGENCIES = [
   { value: 'emergency', label: 'Emergency', color: 'text-red-600' },
@@ -182,7 +172,7 @@ export default function RepairsPage() {
   }
 
   const getCategoryLabel = (category: string) => {
-    return CATEGORIES.find(c => c.value === category)?.label || category
+    return repairCategoryLabel(category)
   }
 
   const getPaymentStatusBadge = (status: string) => {
@@ -276,7 +266,7 @@ export default function RepairsPage() {
             className="select-luxury w-full sm:w-40"
           >
             <option value="all">All Categories</option>
-            {CATEGORIES.map(cat => (
+            {REPAIR_CATEGORIES.map(cat => (
               <option key={cat.value} value={cat.value}>{cat.label}</option>
             ))}
           </select>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Wrench, ArrowLeft, Building2, User, AlertTriangle } from 'lucide-react'
+import { REPAIR_CATEGORIES } from '@/lib/pm/repairCategories'
 
 interface Property {
   id: string
@@ -31,17 +32,6 @@ interface Lease {
   tenant_id: string
   tenants?: Tenant
 }
-
-const CATEGORIES = [
-  { value: 'plumbing', label: 'Plumbing' },
-  { value: 'electrical', label: 'Electrical' },
-  { value: 'hvac', label: 'HVAC' },
-  { value: 'appliance', label: 'Appliance' },
-  { value: 'structural', label: 'Structural' },
-  { value: 'pest', label: 'Pest Control' },
-  { value: 'landscaping', label: 'Landscaping' },
-  { value: 'other', label: 'Other' },
-]
 
 const URGENCIES = [
   { value: 'routine', label: 'Routine', description: 'Non-urgent, can wait for scheduling' },
@@ -271,7 +261,7 @@ export default function NewRepairPage() {
                 required
               >
                 <option value="">Select category...</option>
-                {CATEGORIES.map(cat => (
+                {REPAIR_CATEGORIES.map(cat => (
                   <option key={cat.value} value={cat.value}>{cat.label}</option>
                 ))}
               </select>

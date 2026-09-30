@@ -1702,7 +1702,7 @@ CREATE TABLE public.repair_requests (
   lease_id uuid,
   created_by_type text NOT NULL DEFAULT 'tenant'::text CHECK (created_by_type = ANY (ARRAY['tenant'::text, 'admin'::text])),
   created_by_admin_id uuid,
-  category text NOT NULL CHECK (category = ANY (ARRAY['plumbing'::text, 'electrical'::text, 'hvac'::text, 'appliance'::text, 'structural'::text, 'pest'::text, 'landscaping'::text, 'other'::text])),
+  category text NOT NULL CHECK (category = ANY (ARRAY['plumbing'::text, 'electrical'::text, 'hvac'::text, 'appliance'::text, 'structural'::text, 'pest'::text, 'locks_security'::text, 'landscaping'::text, 'other'::text])),
   urgency text NOT NULL DEFAULT 'routine'::text CHECK (urgency = ANY (ARRAY['emergency'::text, 'urgent'::text, 'routine'::text])),
   title text NOT NULL,
   description text,

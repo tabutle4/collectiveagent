@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
 import { Resend } from 'resend'
 import { pmRepairSubmittedEmail } from '@/lib/email/pm-layout'
+import { isRepairCategory } from '@/lib/pm/repairCategories'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -101,6 +102,13 @@ export async function POST(request: NextRequest) {
 
     if (!category || !title) {
       return NextResponse.json({ error: 'Category and title are required' }, { status: 400 })
+    }
+
+    if (!isRepairCategory(category)) {
+      return NextResponse.json(
+        { error: 'That category is not one we recognize. Please pick one from the list and try again.' },
+        { status: 400 }
+      )
     }
 
     // Get tenant info for initial message

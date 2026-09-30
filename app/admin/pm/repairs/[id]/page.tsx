@@ -8,6 +8,7 @@ import {
   Clock, CheckCircle, Loader2, XCircle, DollarSign, FileText,
   MessageSquare, Send
 } from 'lucide-react'
+import { REPAIR_CATEGORIES } from '@/lib/pm/repairCategories'
 
 interface Message {
   id: string
@@ -65,17 +66,6 @@ interface Repair {
     phone: string | null
   }
 }
-
-const CATEGORIES = [
-  { value: 'plumbing', label: 'Plumbing' },
-  { value: 'electrical', label: 'Electrical' },
-  { value: 'hvac', label: 'HVAC' },
-  { value: 'appliance', label: 'Appliance' },
-  { value: 'structural', label: 'Structural' },
-  { value: 'pest', label: 'Pest Control' },
-  { value: 'landscaping', label: 'Landscaping' },
-  { value: 'other', label: 'Other' },
-]
 
 const URGENCIES = [
   { value: 'routine', label: 'Routine' },
@@ -374,7 +364,7 @@ export default function RepairDetailPage() {
                     onChange={(e) => setForm({ ...form, category: e.target.value })}
                     className="select-luxury w-full"
                   >
-                    {CATEGORIES.map(c => (
+                    {REPAIR_CATEGORIES.map(c => (
                       <option key={c.value} value={c.value}>{c.label}</option>
                     ))}
                   </select>
