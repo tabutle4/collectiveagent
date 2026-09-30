@@ -65,6 +65,8 @@ export type PermissionCode =
   | 'can_manage_transaction_types'
   | 'can_manage_commission_plans'
   | 'can_manage_checklists'
+  | 'can_view_onboarding_checklist'
+  | 'can_manage_onboarding_checklist'
   | 'can_manage_required_documents'
   | 'can_manage_field_definitions'
   | 'can_manage_workflow_steps'
@@ -324,6 +326,8 @@ export async function getPermissionsObject(
     'can_manage_transaction_types',
     'can_manage_commission_plans',
     'can_manage_checklists',
+    'can_view_onboarding_checklist',
+    'can_manage_onboarding_checklist',
     'can_manage_required_documents',
     'can_manage_field_definitions',
     'can_manage_workflow_steps',

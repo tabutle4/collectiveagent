@@ -70,6 +70,8 @@
 | `can_manage_transaction_types` | Manage processing fee types |
 | `can_manage_commission_plans` | Manage commission plan configurations |
 | `can_manage_checklists` | Manage checklist templates and items |
+| `can_view_onboarding_checklist` | View the onboarding checklist and office task lists |
+| `can_manage_onboarding_checklist` | Manage the onboarding checklist and office task lists |
 | `can_manage_required_documents` | Manage required document lists |
 | `can_manage_field_definitions` | Manage custom field definitions |
 | `can_manage_workflow_steps` | Manage workflow step configurations |
