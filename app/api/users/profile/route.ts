@@ -395,10 +395,16 @@ export async function PATCH(request: NextRequest) {
           // dashboard_links lands in an href, so it is validated here and not
           // only in the form. http/https absolute URLs only - a javascript:
           // or data: URL stored here would run in the viewer's browser.
+          // Standing rates arrive from the billing form as strings, and a
+          // cleared box arrives as ''. Postgres rejects '' for a numeric
+          // column, which failed the whole billing save - not just the rate.
+          // Same coercion the self-update branch already applies.
           filteredUpdates[key] =
             key === 'dashboard_links'
               ? sanitizeDashboardLinks(updates[key])
-              : updates[key]
+              : STANDING_RATE_FIELDS.includes(key)
+                ? standingRate(updates[key])
+                : updates[key]
         } else {
           rejectedKeys.push(key)
         }
