@@ -6,6 +6,10 @@ import { findDuplicateTransactions, AGENT_VISIBLE_TRANSACTION_FILTERS } from '@/
 import { autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { verifySessionToken } from '@/lib/session'
 import { getUserPermissions, PermissionCode } from '@/lib/permissions'
+import { fetchComplianceRequestTxnIds } from '@/lib/reporting/complianceRequests'
+import { PRODUCTION_ROLES } from '@/lib/reporting/production'
+import { buildMembershipResolver, governingTeamDate } from '@/lib/reporting/teamAttribution'
+import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 
 export async function GET(request: NextRequest) {
   try {
@@ -43,7 +47,7 @@ export async function GET(request: NextRequest) {
       // it opens only on a closed deal or one where the statement has already
       // gone out. Selected for every caller, not just agents - it is one
       // boolean and the canViewAll branch below already sends far more.
-      'id, transaction_id, agent_id, agent_role, side, sales_volume, units, agent_basis, agent_gross, brokerage_split, processing_fee, coaching_fee, other_fees, btsa_amount, rebate_amount, agent_net, amount_1099_reportable, payment_status, payment_date, agent_statement_sent',
+      'id, transaction_id, agent_id, agent_role, side, installment_kind, sales_volume, units, agent_basis, agent_gross, brokerage_split, processing_fee, coaching_fee, other_fees, btsa_amount, rebate_amount, agent_net, amount_1099_reportable, payment_status, payment_date, agent_statement_sent',
       { filters: tiaFilters },
       supabase
     )
@@ -200,14 +204,93 @@ export async function GET(request: NextRequest) {
       permissionsObject[code] = true
     }
 
+    // Which deals have a compliance request behind them. The list page needs it
+    // to qualify leases the same way the quarterly report does, and it is read
+    // here so the client never touches the submissions table.
+    const complianceRequestTxnIds = Array.from(await fetchComplianceRequestTxnIds())
+
+    // Team per deal, resolved by the date the deal was executed rather than
+    // today's roster, so this page agrees with the quarterly report and the
+    // reconciliation report about which team a deal belonged to.
+    const [teamMemberRows, teamRows, teamLeadRows] = await Promise.all([
+      fetchAllRows<{ agent_id: string; team_id: string; effective_date: string; end_date: string | null }>(
+        'team_member_agreements',
+        'agent_id, team_id, effective_date, end_date',
+        undefined,
+        supabase
+      ),
+      fetchAllRows<{ id: string; team_name: string }>('teams', 'id, team_name', undefined, supabase),
+      // Leading a team is the second way of belonging to one: a lead has no
+      // team_member_agreements row of their own.
+      fetchAllRows<{ team_id: string; agent_id: string; start_date: string | null; end_date: string | null }>(
+        'team_leads',
+        'team_id, agent_id, start_date, end_date',
+        undefined,
+        supabase
+      ),
+    ])
+
+    const resolveTeamForAgent = buildMembershipResolver(teamMemberRows, teamLeadRows)
+    const teamNameById: Record<string, string> = {}
+    for (const t of teamRows) teamNameById[t.id] = t.team_name
+
+    // One team per deal, from its production rows' agents at the deal's
+    // governing date. Every production agent is tried, not just the first:
+    // fetchAllRows orders by id, which is a random uuid, so "first" is
+    // arbitrary, and stopping there labelled 7 deals as teamless when a second
+    // production agent on the same deal did resolve to a team. Deals with no
+    // production row at all carry no team.
+    const productionAgentsByTxn: Record<string, string[]> = {}
+    for (const r of tia as any[]) {
+      if (!r.transaction_id || !r.agent_id) continue
+      if (!PRODUCTION_ROLES.includes(String(r.agent_role || '') as any)) continue
+      if (r.installment_kind) continue
+      if (!productionAgentsByTxn[r.transaction_id]) productionAgentsByTxn[r.transaction_id] = []
+      productionAgentsByTxn[r.transaction_id].push(r.agent_id)
+    }
+    const teamByTxn: Record<string, { id: string; name: string | null }> = {}
+    for (const t of transactions as any[]) {
+      const agentIds = productionAgentsByTxn[t.id]
+      if (!agentIds?.length) continue
+      const date = governingTeamDate(t, isLeaseTransactionType(t.transaction_type))
+      for (const agentId of agentIds) {
+        const teamId = resolveTeamForAgent(agentId, date)
+        if (teamId) {
+          teamByTxn[t.id] = { id: teamId, name: teamNameById[teamId] || null }
+          break
+        }
+      }
+    }
+
+    // The deals this caller can see, used to scope the compliance-request set.
+    const visibleTxnIds = new Set((transactions as any[]).map(t => t.id))
+
     return NextResponse.json({
       transactions,
       tia,
       agents,
       permissions: permissionsObject,
       canViewAll,
+      // Scoped to the deals this caller can already see. The set exists so the
+      // quarter filter can tell a qualifying lease from a non-qualifying one,
+      // and an agent only ever filters their own list - sending them every
+      // compliance-request id in the brokerage (857 of them) would hand each
+      // agent a count of deals they are not on, for no benefit.
+      complianceRequestTxnIds: complianceRequestTxnIds.filter(id => visibleTxnIds.has(id)),
       // Keys present ONLY for canViewAll — the agent payload is unchanged.
-      ...(canViewAll ? { checks: fundingChecks, fundingAgents } : {}),
+      ...(canViewAll
+        ? {
+            checks: fundingChecks,
+            fundingAgents,
+            // Team keys are admin-only. An agent's list is already scoped to
+            // their own deals, so a team filter there can only subtract, and
+            // the full team roster is not theirs to read.
+            teamByTxn,
+            teams: teamRows
+              .map(t => ({ id: t.id, name: t.team_name }))
+              .sort((a, b) => a.name.localeCompare(b.name)),
+          }
+        : {}),
     })
   } catch (error) {
     return NextResponse.json({ error: 'Server error', details: String(error) }, { status: 500 })

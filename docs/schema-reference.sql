@@ -2537,3 +2537,18 @@ CREATE TABLE public.deals (
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT deals_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.quarterly_reconciliation_notes (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  transaction_id uuid NOT NULL,
+  note text NOT NULL,
+  author_id uuid,
+  author_name text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT quarterly_reconciliation_notes_pkey PRIMARY KEY (id),
+  CONSTRAINT quarterly_reconciliation_notes_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES public.transactions(id) ON DELETE CASCADE,
+  CONSTRAINT quarterly_reconciliation_notes_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.users(id) ON DELETE SET NULL
+);
+-- RLS enabled with no policies, matching every other table in public. Server
+-- routes reach it through supabaseAdmin (service_role), which bypasses RLS;
+-- without this the public anon key can read and write the table directly.
+ALTER TABLE public.quarterly_reconciliation_notes ENABLE ROW LEVEL SECURITY;

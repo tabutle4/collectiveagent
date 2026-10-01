@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { BarChart3, Trophy, FileText, Users, Wallet, DollarSign, BookOpen, Scale } from 'lucide-react'
+import { BarChart3, Trophy, FileText, Users, Wallet, DollarSign, BookOpen, Scale, ClipboardCheck } from 'lucide-react'
 import { useAuth } from '@/lib/context/AuthContext'
 
 const REPORTS: {
@@ -54,6 +54,15 @@ const REPORTS: {
     href: '/admin/reports/reconciliation',
     active: true,
     permission: 'can_view_reconciliation',
+  },
+  {
+    id: 'quarterly-reconciliation',
+    icon: ClipboardCheck,
+    title: 'Quarterly Reconciliation',
+    description: 'Every deal on the quarterly report, and what is wrong with it',
+    href: '/admin/reports/quarterly-reconciliation',
+    active: true,
+    permission: 'can_view_quarterly_reconciliation',
   },
   {
     id: 'agent-production',

@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Maximize2, Printer, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useAuth } from '@/lib/context/AuthContext'
+import { DEFAULT_QUARTER_INDEX, quarterOptions } from '@/lib/reporting/quarters'
 
 const GOLD = '#C5A278'
 const GOLD_DARK = '#8B6D3F'
@@ -133,22 +134,15 @@ export default function QuarterlyPresentationPage() {
   const [slide, setSlide] = useState(0)
   const [hoverZone, setHoverZone] = useState<'left' | 'right' | null>(null)
 
-  // ── Quarter selection ──────────────────────────────────────────────────────
-  const now = new Date()
-  const currentYear = now.getFullYear()
-  const currentQuarter = Math.ceil((now.getMonth() + 1) / 3)
-
-  // Build options: Q1–Q4 for current year and previous year
-  const quarterOptions = []
-  for (const yr of [currentYear, currentYear - 1]) {
-    for (const q of [1, 2, 3, 4]) {
-      // Don't show future quarters
-      if (yr === currentYear && q > currentQuarter) continue
-      quarterOptions.push({ year: yr, quarter: q, label: `Q${q} ${yr}` })
-    }
-  }
-  // Default to most recent completed quarter (previous quarter if we're early in Q1)
-  const defaultOption = quarterOptions[0]
+  // Quarter selection. The list comes from lib/reporting/quarters.ts, which the
+  // reconciliation report also uses, so the two reports cannot offer different
+  // quarters or open on different ones. This page used to build its own list:
+  // it offered seven quarters oldest first and opened on Q1, while the
+  // reconciliation report offered eight newest first and opened on the current
+  // quarter, so opening both from the reports index showed two different
+  // quarters without anyone choosing that.
+  const quarterChoices = useMemo(() => quarterOptions(), [])
+  const defaultOption = quarterChoices[DEFAULT_QUARTER_INDEX] || quarterChoices[0]
   const [selectedYear, setSelectedYear] = useState(defaultOption.year)
   const [selectedQuarter, setSelectedQuarter] = useState(defaultOption.quarter)
   
@@ -264,7 +258,7 @@ export default function QuarterlyPresentationPage() {
             className="bg-neutral-900 border border-neutral-700 text-white text-xs font-mono font-bold tracking-widest px-3 py-2 cursor-pointer focus:outline-none"
             style={{ color: GOLD }}
           >
-            {quarterOptions.map(o => (
+            {quarterChoices.map(o => (
               <option key={`${o.quarter}-${o.year}`} value={`${o.quarter}-${o.year}`} style={{ color: '#fff', background: '#111' }}>
                 {o.label}
               </option>

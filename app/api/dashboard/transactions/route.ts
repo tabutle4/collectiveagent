@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
+import { fetchAllRows } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
 import { needsAttentionCounts } from '@/lib/dashboard/needsAttention'
 import { fetchComplianceRequestTxnIds } from '@/lib/reporting/complianceRequests'
+import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
+import {
+  buildMembershipResolver,
+  governingTeamDate,
+} from '@/lib/reporting/teamAttribution'
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,40 +16,77 @@ export async function GET(request: NextRequest) {
     const auth = await requirePermission(request, 'can_view_all_transactions')
     if (auth.error) return auth.error
 
-    const [transactions, agentRows, teamsRes, complianceRequestIds] = await Promise.all([
+    const [transactions, agentRows, teamMembers, teamLeadRows, teamRows, complianceRequestIds] = await Promise.all([
       fetchAllRows(
         'transactions',
-        'id, status, transaction_type, sales_price, monthly_rent, lease_term, closing_date, move_in_date, office_net, office_location, compliance_status, cda_status'
+        'id, status, transaction_type, sales_price, monthly_rent, lease_term, closing_date, move_in_date, acceptance_date, office_net, office_location, compliance_status, cda_status'
       ),
       fetchAllRows(
         'transaction_internal_agents',
         'transaction_id, agent_id, agent_role, agent_net, sales_volume, payment_status'
       ),
-      supabaseAdmin
-        .from('team_member_agreements')
-        .select('agent_id, team:teams(team_name)')
-        .is('end_date', null),
+      // EVERY membership, ended ones included, with the dates that decide which
+      // deal belongs to which team. The old query filtered to end_date IS NULL
+      // and applied one answer to every deal regardless of when it happened,
+      // so these charts disagreed with reality the same way the quarterly
+      // report did. See lib/reporting/teamAttribution.ts.
+      fetchAllRows(
+        'team_member_agreements',
+        'agent_id, team_id, effective_date, end_date, team:teams(team_name)'
+      ),
+      // Leading a team is the second way of belonging to one: a lead has no
+      // team_member_agreements row of their own, so without these rows their
+      // deals are credited to no team on these charts.
+      fetchAllRows<{ team_id: string; agent_id: string; start_date: string | null; end_date: string | null }>(
+        'team_leads',
+        'team_id, agent_id, start_date, end_date'
+      ),
+      // Team names, so a team whose only producer in a period is its lead still
+      // has a label. The map used to be built from the membership rows alone,
+      // which cannot name a team that has no members.
+      fetchAllRows('teams', 'id, team_name'),
       // Which deals have a compliance request behind them. The charts need it
       // to qualify leases, and it is loaded here rather than in the component
       // so the client never has to read the submissions table.
       fetchComplianceRequestTxnIds(),
     ])
 
-    // Build agent_id -> team_name lookup
-    const agentTeamMap: Record<string, string> = {}
-    if (teamsRes.data) {
-      teamsRes.data.forEach((row: any) => {
-        if (row.agent_id && row.team?.team_name) {
-          agentTeamMap[row.agent_id] = row.team.team_name
-        }
-      })
-    }
+    // team_id -> display name, so the charts keep grouping by name as before
+    const teamNameById: Record<string, string> = {}
+    teamRows.forEach((row: any) => {
+      if (row?.id && row?.team_name) teamNameById[row.id] = row.team_name
+    })
+    teamMembers.forEach((row: any) => {
+      const team = Array.isArray(row.team) ? row.team[0] : row.team
+      if (row.team_id && team?.team_name && !teamNameById[row.team_id]) {
+        teamNameById[row.team_id] = team.team_name
+      }
+    })
 
-    // Enrich agent rows with team names
-    const enrichedAgentRows = agentRows.map((row: any) => ({
-      ...row,
-      team_name: agentTeamMap[row.agent_id] || null,
-    }))
+    const resolveTeamForAgent = buildMembershipResolver(teamMembers, teamLeadRows)
+
+    // The governing date per transaction, computed once. Execution date for
+    // sales, move-in for leases, falling back to closing - the same date the
+    // commission split uses, and the same the quarterly report uses.
+    const governingDateByTxn = new Map<string, string | null>()
+    transactions.forEach((txn: any) => {
+      governingDateByTxn.set(
+        txn.id,
+        governingTeamDate(txn, isLeaseTransactionType(txn.transaction_type))
+      )
+    })
+
+    // Enrich agent rows with the team that governed THAT deal
+    const enrichedAgentRows = agentRows.map((row: any) => {
+      const teamId = resolveTeamForAgent(
+        row.agent_id,
+        governingDateByTxn.get(row.transaction_id)
+      )
+      return {
+        ...row,
+        team_name: teamId ? teamNameById[teamId] || null : null,
+      }
+    })
 
     // Needs Attention counts come from the SHARED definition in
     // lib/dashboard/needsAttention.ts, which the owner dashboard also calls.

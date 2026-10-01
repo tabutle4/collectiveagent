@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Download } from 'lucide-react'
+import { Search, Plus, Download, X } from 'lucide-react'
 import StatusBadge from '@/components/transactions/StatusBadge'
 import NewTransactionModal from '@/components/transactions/NewTransactionModal'
 import { TransactionStatus } from '@/lib/transactions/types'
@@ -13,6 +13,58 @@ import {
   FUNDING_FILTER_LABELS,
   type FundingState,
 } from '@/lib/transactions/funding'
+import {
+  countsTowardProduction,
+  hasComplianceRequest,
+  productionDate,
+  productionToday,
+  PRODUCTION_ROLES,
+} from '@/lib/reporting/production'
+
+
+/** The dropdown's own wording, so a chip never shows the raw group key. */
+const STATUS_GROUP_LABELS: Record<string, string> = {
+  active: 'Active',
+  compliance: 'In Compliance',
+  processing: 'Processing',
+  complete: 'Complete',
+}
+
+/**
+ * Selected filter values, each removable.
+ *
+ * Declared at module scope on purpose. Inside the page component its identity
+ * would change on every render, so React would treat it as a new component
+ * type and tear the chips down and rebuild them on each keystroke in the
+ * search box, dropping keyboard focus every time a chip was activated.
+ */
+function FilterChips({
+  values,
+  label,
+  onRemove,
+}: {
+  values: { id: string; label: string }[]
+  label: string
+  onRemove: (id: string) => void
+}) {
+  if (values.length === 0) return null
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-xs text-luxury-gray-3">{label}:</span>
+      {values.map(v => (
+        <button
+          key={v.id}
+          onClick={() => onRemove(v.id)}
+          className="text-xs px-2 py-0.5 rounded border bg-luxury-gray-1 text-white border-luxury-gray-1 inline-flex items-center gap-1"
+          title={`Remove ${v.label}`}
+          aria-label={`Remove ${v.label}`}
+        >
+          {v.label} <X size={10} />
+        </button>
+      ))}
+    </div>
+  )
+}
 
 export default function TransactionsPage() {
   const router = useRouter()
@@ -22,11 +74,18 @@ export default function TransactionsPage() {
   const [transactionTypes, setTransactionTypes] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [agentFilter, setAgentFilter] = useState('all')
-  const [typeFilter, setTypeFilter] = useState('all')
+  // Multi-select: an empty set means no narrowing, which is what 'all' used to
+  // mean. Tara, 2026-09-30 - comparing two agents or two types side by side
+  // needed a second pass through the page every time.
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set())
+  const [agentFilter, setAgentFilter] = useState<Set<string>>(new Set())
+  const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set())
+  const [teamFilter, setTeamFilter] = useState<Set<string>>(new Set())
   const [quarterFilter, setQuarterFilter] = useState('all')
   const [tia, setTia] = useState<any[]>([])
+  const [complianceRequestIds, setComplianceRequestIds] = useState<Set<string>>(new Set())
+  const [teamByTxn, setTeamByTxn] = useState<Record<string, { id: string; name: string | null }>>({})
+  const [teams, setTeams] = useState<{ id: string; name: string }[]>([])
   // Admin-only: the deal's checks, for the funding filter. Agents never
   // receive this key from the API.
   const [checks, setChecks] = useState<any[]>([])
@@ -95,6 +154,9 @@ export default function TransactionsPage() {
         const data = await res.json()
         setTransactions(data.transactions || [])
         setTia(data.tia || [])
+        setComplianceRequestIds(new Set(data.complianceRequestTxnIds || []))
+        setTeamByTxn(data.teamByTxn || {})
+        setTeams(data.teams || [])
         setChecks(data.checks || [])
         setFundingAgents(data.fundingAgents || [])
         setAgents(data.agents || [])
@@ -140,16 +202,25 @@ export default function TransactionsPage() {
     return getTransactionTypeLabel(type)
   }
 
-  // ── Quarter qualification - the EXACT rules the quarterly report uses ────
-  // Leases (type mentions tenant/landlord/lease): counted by move-in date
-  // (falling back to closing date), any status except cancelled. Sales:
-  // counted by closing date and only when closed.
-  const isLeaseTxn = (t: any) => /tenant|landlord|lease/i.test(String(t.transaction_type || ''))
-  const qualDate = (t: any) => (isLeaseTxn(t) ? t.move_in_date || t.closing_date : t.closing_date)
+  // ── Quarter qualification - the rules from lib/reporting/production.ts ────
+  //
+  // This block used to be a hand copy that claimed to be "the EXACT rules the
+  // quarterly report uses" and was not: it counted a lease on status alone,
+  // where the real rule also needs the move-in to have passed AND a compliance
+  // request to exist. Filtering this page to a quarter therefore over-counted
+  // against the report it was quoting - 2 deals and $56,400 in Q1 2026, 1 deal
+  // and $32,400 in Q3 (10014 Nectar Path, which has no compliance request), and
+  // 6 deals in Q4 whose tenants have not moved in yet. A comment asserting a
+  // match is not a match; importing the rule is.
+  const today = productionToday()
+  const qualDate = (t: any) => productionDate(t)
   const qualifiesInRange = (t: any, start: string, end: string) => {
-    const d = qualDate(t)
+    const d = productionDate(t)
     if (!d || d < start || d > end) return false
-    return isLeaseTxn(t) ? t.status !== 'cancelled' : t.status === 'closed'
+    return countsTowardProduction(t, {
+      complianceRequested: hasComplianceRequest(t, complianceRequestIds),
+      today,
+    })
   }
   const quarterRange = (q: string): [string, string] | null => {
     const m = q.match(/^(\d{4})-Q([1-4])$/)
@@ -303,21 +374,52 @@ export default function TransactionsPage() {
       )
     }
 
-    if (statusFilter !== 'all') {
-      const group = STATUS_GROUPS[statusFilter as keyof typeof STATUS_GROUPS]
-      if (group) list = list.filter(t => group.includes(t.status))
+    if (statusFilter.size > 0) {
+      const allowed = new Set<string>()
+      for (const key of statusFilter) {
+        const group = STATUS_GROUPS[key as keyof typeof STATUS_GROUPS]
+        if (group) for (const st of group) allowed.add(st)
+      }
+      list = list.filter(t => allowed.has(t.status))
     }
 
-    if (canViewAll && agentFilter !== 'all') {
-      list = list.filter(t => t.submitted_by === agentFilter)
+    // Deals the agent is ON, in any role, rather than deals they submitted.
+    //
+    // This filter used to read submitted_by. That missed 281 non-cancelled
+    // deals where someone holds a row without having submitted it, and was
+    // blind to 257 role rows outright - team leads alone hold 219 and submit
+    // almost none of them, so filtering to a lead showed nearly nothing of what
+    // they earn on. Tara, 2026-09-30: it says a person's name, it should mean
+    // deals that person is on.
+    if (canViewAll && agentFilter.size > 0) {
+      const dealsForAgents = new Set<string>()
+      for (const r of tia) {
+        if (r.agent_id && agentFilter.has(r.agent_id) && r.transaction_id) {
+          dealsForAgents.add(r.transaction_id)
+        }
+      }
+      list = list.filter(t => dealsForAgents.has(t.id))
     }
 
-    if (canViewAll && typeFilter !== 'all') {
-      list = list.filter(t => t.transaction_type === typeFilter)
+    if (canViewAll && typeFilter.size > 0) {
+      list = list.filter(t => typeFilter.has(t.transaction_type))
+    }
+
+    // Admin only. A team lead in this app is an ordinary agent-role user, so
+    // canViewAll is false for them and the API already scoped this page to
+    // their own deals before it arrived - a team filter there could only
+    // subtract from an already-narrow list, and for a lead with no
+    // team_member_agreements row it would empty the page.
+    if (canViewAll && teamFilter.size > 0) {
+      list = list.filter(t => {
+        const team = teamByTxn[t.id]
+        return !!team && teamFilter.has(team.id)
+      })
     }
 
     return list
-  }, [visible, quarterFilter, searchQuery, statusFilter, agentFilter, typeFilter, agents, canViewAll, fundingFilter, fundingByTxn])
+  }, [visible, quarterFilter, searchQuery, statusFilter, agentFilter, typeFilter, teamFilter,
+      agents, canViewAll, fundingFilter, fundingByTxn, tia, teamByTxn])
 
   const statusCounts = useMemo(
     () => ({
@@ -345,13 +447,13 @@ export default function TransactionsPage() {
   // report counts: production roles' commission rows, units defaulting to 1.
   const totals = useMemo(() => {
     const ids = new Set(filtered.map(t => t.id))
-    const prodRoles = ['primary_agent', 'listing_agent']
+    const prodRoles = PRODUCTION_ROLES
     let units = 0
     let volume = 0
     let myNet = 0
     for (const r of tia) {
       if (!ids.has(r.transaction_id)) continue
-      if (canViewAll && agentFilter !== 'all' && r.agent_id !== agentFilter) continue
+      if (canViewAll && agentFilter.size > 0 && !agentFilter.has(r.agent_id)) continue
       if (prodRoles.includes(r.agent_role)) {
         units += r.units == null ? 1 : parseFloat(String(r.units)) || 0
         volume += parseFloat(String(r.sales_volume ?? 0)) || 0
@@ -365,6 +467,21 @@ export default function TransactionsPage() {
       myNet: Math.round(myNet * 100) / 100,
     }
   }, [filtered, tia, canViewAll, agentFilter])
+
+
+  // One pattern for every multi-select filter: pick from the dropdown to add,
+  // click a chip to remove. Works the same for five statuses and eighty
+  // agents, where a row of pills would not.
+  const toggleIn = (
+    set: Set<string>,
+    setter: (s: Set<string>) => void,
+    value: string
+  ) => {
+    const next = new Set(set)
+    if (next.has(value)) next.delete(value)
+    else next.add(value)
+    setter(next)
+  }
 
   const formatVolume = (t: any) => {
     const amount = t.sales_volume
@@ -391,7 +508,11 @@ export default function TransactionsPage() {
   const downloadReport = () => {
     const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`
     const header = [
-      'Property', ...(canViewAll ? ['Agent'] : []), 'Type', 'Client', 'Status', 'Compliance',
+      // 'Submitted By', not 'Agent': this column has always printed submitted_by,
+      // and the Agent filter above now means every deal the person holds a
+      // commission row on. Leaving the old header would have 143 of Briana
+      // Thomas's 242 filtered rows naming somebody else under 'Agent'.
+      'Property', ...(canViewAll ? ['Submitted By'] : []), 'Type', 'Client', 'Status', 'Compliance',
       'Closing Date', 'Move In Date', 'Sales Volume', ...(canViewAll ? [] : ['My Net', 'Payment Status']),
     ]
     const lines = [header.map(esc).join(',')]
@@ -589,11 +710,11 @@ export default function TransactionsPage() {
             </select>
 
             <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
+              value=""
+              onChange={e => { if (e.target.value) toggleIn(statusFilter, setStatusFilter, e.target.value) }}
               className="select-luxury text-xs flex-1 min-w-[140px]"
             >
-              <option value="all">All Status ({statusCounts.all})</option>
+              <option value="">All Status ({statusCounts.all})</option>
               <option value="active">Active ({statusCounts.active})</option>
               <option value="compliance">In Compliance ({statusCounts.compliance})</option>
               <option value="processing">Processing ({statusCounts.processing})</option>
@@ -602,11 +723,11 @@ export default function TransactionsPage() {
 
             {canViewAll && (
               <select
-                value={agentFilter}
-                onChange={e => setAgentFilter(e.target.value)}
+                value=""
+                onChange={e => { if (e.target.value) toggleIn(agentFilter, setAgentFilter, e.target.value) }}
                 className="select-luxury text-xs flex-1 min-w-[140px]"
               >
-                <option value="all">All Agents</option>
+                <option value="">All Agents</option>
                 {agents.map(a => (
                   <option key={a.id} value={a.id}>
                     {a.preferred_first_name || a.first_name} {a.preferred_last_name || a.last_name}
@@ -617,11 +738,11 @@ export default function TransactionsPage() {
 
             {canViewAll && transactionTypes.length > 0 && (
               <select
-                value={typeFilter}
-                onChange={e => setTypeFilter(e.target.value)}
+                value=""
+                onChange={e => { if (e.target.value) toggleIn(typeFilter, setTypeFilter, e.target.value) }}
                 className="select-luxury text-xs flex-1 min-w-[140px]"
               >
-                <option value="all">All Types</option>
+                <option value="">All Types</option>
                 {transactionTypes.map(t => (
                   <option key={t} value={t}>
                     {formatTransactionType(t)}
@@ -629,7 +750,49 @@ export default function TransactionsPage() {
                 ))}
               </select>
             )}
+
+            {/* Teams. Admin only - see the team filter note in the memo above. */}
+            {canViewAll && teams.length > 0 && (
+              <select
+                value=""
+                onChange={e => { if (e.target.value) toggleIn(teamFilter, setTeamFilter, e.target.value) }}
+                className="select-luxury text-xs flex-1 min-w-[140px]"
+              >
+                <option value="">All Teams</option>
+                {teams.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            )}
           </div>
+
+          {(statusFilter.size > 0 || agentFilter.size > 0 || typeFilter.size > 0 || teamFilter.size > 0) && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3">
+              <FilterChips
+                label="Status"
+                values={[...statusFilter].map(v => ({ id: v, label: STATUS_GROUP_LABELS[v] || v }))}
+                onRemove={v => toggleIn(statusFilter, setStatusFilter, v)}
+              />
+              <FilterChips
+                label="Agents"
+                values={[...agentFilter].map(v => ({ id: v, label: getAgentName(v) || v }))}
+                onRemove={v => toggleIn(agentFilter, setAgentFilter, v)}
+              />
+              <FilterChips
+                label="Types"
+                values={[...typeFilter].map(v => ({ id: v, label: formatTransactionType(v) }))}
+                onRemove={v => toggleIn(typeFilter, setTypeFilter, v)}
+              />
+              <FilterChips
+                label="Teams"
+                values={[...teamFilter].map(v => ({
+                  id: v,
+                  label: teams.find(t => t.id === v)?.name || v,
+                }))}
+                onRemove={v => toggleIn(teamFilter, setTeamFilter, v)}
+              />
+            </div>
+          )}
 
           {/* Funding chips — canViewAll ONLY. Agents never see these chips
               or the Expected/Received columns below. */}

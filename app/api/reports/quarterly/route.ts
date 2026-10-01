@@ -13,6 +13,13 @@ import {
 } from '@/lib/reporting/production'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 import { fetchComplianceRequestTxnIds } from '@/lib/reporting/complianceRequests'
+import { quarterOf, quarterRange } from '@/lib/reporting/quarters'
+import {
+  buildMembershipResolver,
+  buildTeamLeadResolver,
+  governingTeamDate,
+  membersDuringRange,
+} from '@/lib/reporting/teamAttribution'
 
 // Referral Collective is a separate entity (an LFRO under TREC), not a
 // Collective Realty Co. office. This report covers CRC only, so RC agents are
@@ -38,18 +45,14 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     
-    // Determine quarter date range
+    // Determine quarter date range. The boundaries come from
+    // lib/reporting/quarters.ts so this route and the reconciliation route
+    // cannot drift apart about where a quarter starts and ends.
     const now = new Date()
-    const currentQuarter = Math.ceil((now.getMonth() + 1) / 3)
-    const year = parseInt(searchParams.get('year') || String(now.getFullYear()))
-    const quarter = parseInt(searchParams.get('quarter') || String(currentQuarter))
-    
-    const quarterStartMonth = (quarter - 1) * 3
-    const startDate = new Date(year, quarterStartMonth, 1)
-    const endDate = new Date(year, quarterStartMonth + 3, 0, 23, 59, 59) // Last day of quarter
-    
-    const startDateStr = startDate.toISOString().split('T')[0]
-    const endDateStr = endDate.toISOString().split('T')[0]
+    const year = parseInt(searchParams.get('year') || String(now.getUTCFullYear()))
+    const quarter = parseInt(searchParams.get('quarter') || String(quarterOf(now)))
+
+    const { startDate: startDateStr, endDate: endDateStr } = quarterRange(year, quarter)
 
     // Run all queries in parallel (all batched)
     const [
@@ -96,7 +99,7 @@ export async function GET(request: NextRequest) {
       // for sales (require closed) vs leases (just need move_in_date in past)
       fetchAllRows(
         'transactions',
-        'id, transaction_type, sales_price, monthly_rent, lease_term, closing_date, move_in_date, office_location, status, compliance_status',
+        'id, transaction_type, sales_price, monthly_rent, lease_term, closing_date, move_in_date, acceptance_date, office_location, status, compliance_status',
         {
           filters: [{ type: 'neq', column: 'status', value: 'cancelled' }],
         }
@@ -126,22 +129,26 @@ export async function GET(request: NextRequest) {
          )`
       ),
       
-      // Active team memberships
+      // EVERY team membership, ended ones included. Filtering to the currently
+      // active ones is what credited teams for deals their members did before
+      // joining, and erased the deals of members who have since left. The dates
+      // decide which deal belongs to which team - see lib/reporting/teamAttribution.ts.
       fetchAllRows(
         'team_member_agreements',
-        'agent_id, team_id',
-        {
-          filters: [{ type: 'is', column: 'end_date', value: null }],
-        }
+        'agent_id, team_id, effective_date, end_date'
       ),
-      
-      // Teams with leads
+
+      // Teams with leads. Lead dates are selected for the same reason: the
+      // lead named beside a team's production has to be the lead who held the
+      // role when those deals happened.
       fetchAllRows(
         'teams',
         `id,
          team_name,
          team_leads(
            agent_id,
+           start_date,
+           end_date,
            agent:users!team_leads_agent_id_fkey(
              id,
              first_name,
@@ -197,10 +204,26 @@ export async function GET(request: NextRequest) {
     // so they contribute nothing to totals here without needing a special filter.
     const relevantAgentRows = allRelevantRows.filter(ia => PRODUCTION_ROLES.includes(ia.agent_role))
 
-    // Build agent -> team lookup
-    const agentTeamMap: Record<string, string> = {}
-    teamMembers.forEach(tm => {
-      agentTeamMap[tm.agent_id] = tm.team_id
+    // Build agent -> team lookup, resolved per deal by the deal's own date
+    // rather than by who is on the team today.
+    // Flattened lead rows, used twice: to name the lead beside a team's
+    // production, and as the second way of belonging to a team. A lead has no
+    // team_member_agreements row of their own, so without this their deals are
+    // credited to nobody - see lib/reporting/teamAttribution.ts.
+    const leadRows = teams.flatMap((team: any) =>
+      (team.team_leads || []).map((lead: any) => ({ ...lead, team_id: team.id }))
+    )
+    const resolveTeamForAgent = buildMembershipResolver(teamMembers, leadRows)
+    const resolveTeamLeads = buildTeamLeadResolver(leadRows)
+
+    // The governing date per transaction, computed once. Execution date for
+    // sales, move-in for leases, falling back to closing.
+    const governingDateByTxn = new Map<string, string | null>()
+    transactions.forEach(txn => {
+      governingDateByTxn.set(
+        txn.id,
+        governingTeamDate(txn, isLeaseTransactionType(txn.transaction_type))
+      )
     })
 
     // Calculate totals
@@ -362,7 +385,10 @@ export async function GET(request: NextRequest) {
     const teamStats: Record<string, { volume: number, units: number }> = {}
     
     allRelevantRows.forEach(row => {
-      const teamId = agentTeamMap[row.agent_id]
+      const teamId = resolveTeamForAgent(
+        row.agent_id,
+        governingDateByTxn.get(row.transaction_id)
+      )
       if (!teamId) return
       // Team stats: primary + listing only (consistent with firm totals)
       if (!PRODUCTION_ROLES.includes(row.agent_role)) return
@@ -382,19 +408,43 @@ export async function GET(request: NextRequest) {
       .slice(0, 2)
       .map(([teamId, stats]) => {
         const team = teams.find(t => t.id === teamId)
-        
-        // Get ALL active team leads
-        const activeLeads = (team?.team_leads as any[])?.filter(l => l.agent) || []
+
+        // The leads who held the role at the close of this quarter, not
+        // whoever holds it today. A lead who took over in May does not belong
+        // on a Q1 team.
+        const activeLeads = resolveTeamLeads(teamId, endDateStr).filter(l => l.agent)
         const leadAgents = activeLeads.map(l => ({
           name: formatName(l.agent),
           initials: formatInitials(l.agent),
         }))
-        
-        // Get team members (excluding leads) - show ALL members, not just those with deals
+
+        // Team members (excluding leads) - everyone who was on the team at any
+        // point in the quarter, whether or not they wrote a deal. Membership is
+        // ranged rather than current so a member who has since left still
+        // appears beside the production they earned.
+        //
+        // activeAgents alone was not enough to keep that promise: it requires
+        // status active AND is_active, so a member who left the firm vanished
+        // from the roster while their deals stayed in the team total. Keeon
+        // Bland is the live case - 4 deals and $108,060 of Q1 production for
+        // Clutch City Realty Group, and no name beside it. Anyone who earned
+        // production for this team in the quarter is added back from the deal
+        // rows, which carry their own agent record.
         const leadIds = activeLeads.map(l => l.agent?.id)
-        const memberIds = teamMembers.filter(tm => tm.team_id === teamId).map(tm => tm.agent_id)
-        const memberAgents = activeAgents
-          .filter(agent => memberIds.includes(agent.id) && !leadIds.includes(agent.id))
+        const memberIds = membersDuringRange(teamMembers, teamId, startDateStr, endDateStr, leadRows)
+        const rosterById = new Map<string, any>()
+        for (const agent of activeAgents) {
+          if (memberIds.includes(agent.id)) rosterById.set(agent.id, agent)
+        }
+        for (const row of allRelevantRows) {
+          const agent: any = Array.isArray(row.agent) ? row.agent[0] : row.agent
+          if (!agent?.id || rosterById.has(agent.id)) continue
+          if (!memberIds.includes(agent.id)) continue
+          if (!PRODUCTION_ROLES.includes(row.agent_role)) continue
+          if (resolveTeamForAgent(row.agent_id, governingDateByTxn.get(row.transaction_id)) !== teamId) continue
+          rosterById.set(agent.id, agent)
+        }
+        const memberAgents = [...rosterById.values()].filter(a => !leadIds.includes(a.id))
         
         return {
           id: teamId,

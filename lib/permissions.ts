@@ -46,6 +46,9 @@ export type PermissionCode =
   | 'can_view_reconciliation'
   | 'can_manage_reconciliation'
   | 'can_manage_recurring_bills'
+  // Quarterly report reconciliation
+  | 'can_view_quarterly_reconciliation'
+  | 'can_manage_quarterly_reconciliation'
   // 1099
   | 'can_view_1099_data'
   | 'can_generate_1099_reports'
@@ -310,6 +313,9 @@ export async function getPermissionsObject(
     'can_view_reconciliation',
     'can_manage_reconciliation',
     'can_manage_recurring_bills',
+    // Quarterly report reconciliation
+    'can_view_quarterly_reconciliation',
+    'can_manage_quarterly_reconciliation',
     // 1099
     'can_view_1099_data',
     'can_generate_1099_reports',
