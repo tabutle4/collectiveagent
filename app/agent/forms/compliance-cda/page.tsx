@@ -616,6 +616,14 @@ export default function ComplianceCdaForm() {
       if (!form.acceptance_date) { setError('Acceptance date is required.'); return }
       if (!form.closing_or_movein_date) { setError('Closing or move-in date is required.'); return }
       if (!form.representing) { setError('Representation is required.'); return }
+      // Without a unit, two leases in the same building produce the same
+      // address key and the second filing attaches to the first deal. Check the
+      // unit the payload actually carries: on a new deal that is the one inside
+      // AddressInput, which overwrites form.unit in the body below.
+      if (form.tenant_transaction_type === 'apartment'
+          && !(needsPropertyAddress ? newAddress.unit : form.unit).trim()) {
+        setError('Unit number is required for an apartment lease, so this deal is not confused with another unit in the same building.'); return
+      }
       if (form.representing !== 'referred_out' && !form.crc_both_sides) {
         setError('Please answer whether Collective Realty Co. represents both sides of this deal.'); return
       }
@@ -640,6 +648,11 @@ export default function ComplianceCdaForm() {
         // The form holds 'yes' / 'no'; the server tests for a real boolean.
         crc_both_sides: form.crc_both_sides === 'yes',
         property_address: foundTransaction?.property_address || addressSearch,
+        // What the agent typed into the search box, sent separately and never
+        // overwritten by matching. property_address above resolves to the
+        // MATCHED deal's address, so it cannot show that a filing landed on the
+        // wrong deal - which is the one thing the compliance card needs it for.
+        address_typed: addressSearch.trim() || null,
         // Attaching to a retainer prospect counts as an existing transaction,
         // but the address parts still go along: the prospect has no real
         // address yet and the server writes this one onto it.
@@ -1064,7 +1077,9 @@ export default function ComplianceCdaForm() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1">Unit</label>
+                  <label className="block text-xs text-luxury-gray-3 mb-1">
+                    Unit {form.tenant_transaction_type === 'apartment' && !needsPropertyAddress && <span className="text-red-500">*</span>}
+                  </label>
                   <input className="input-luxury w-full text-sm" value={form.unit} onChange={e => setField('unit', e.target.value)} placeholder="Unit / Apt #" />
                 </div>
                 <div>

@@ -76,6 +76,14 @@ function today(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
+// The two ways a deal's share gets settled, and the only two rows the reversal
+// endpoint accepts. Kept as one list so the two Undo controls and the endpoint
+// cannot drift apart: a row that offers Undo and is then refused by the route
+// is a dead end the person cannot act on.
+function isUndoable(category: string | null | undefined): boolean {
+  return category === 'sweep' || category === 'sweep_kept'
+}
+
 // A single overnight change. Zero is stated rather than hidden, because "this
 // did not move" is information on a screen whose job is explaining movement.
 function Change({ label, amount }: { label: string; amount: number }) {
@@ -709,7 +717,7 @@ export default function MoneyMovementPage() {
                           {row.warnings.length} flagged
                         </span>
                       )}
-                      {row.category === 'sweep' && hasPermission('can_manage_sweeps') && (
+                      {isUndoable(row.category) && hasPermission('can_manage_sweeps') && (
                         <button
                           onClick={() => { setUndoing(row); setUndoReason('') }}
                           className="text-xs text-luxury-gray-3 hover:text-luxury-accent inline-flex items-center gap-1"
@@ -856,11 +864,11 @@ export default function MoneyMovementPage() {
                           )}
                           <td className="py-3 px-4 text-right text-luxury-gray-1">
                             {formatCurrency(row.balance_after ?? 0)}
-                            {row.category === 'sweep' && hasPermission('can_manage_sweeps') && (
+                            {isUndoable(row.category) && hasPermission('can_manage_sweeps') && (
                               <button
                                 onClick={() => { setUndoing(row); setUndoReason('') }}
                                 className="ml-3 text-luxury-gray-3 hover:text-luxury-accent transition-colors"
-                                title="Undo this transfer"
+                                title={row.category === 'sweep_kept' ? 'Unclaim these deals' : 'Undo this transfer'}
                               >
                                 <Undo2 size={14} />
                               </button>
@@ -942,7 +950,7 @@ export default function MoneyMovementPage() {
                   {/* Sweeps and their reversals are recorded by the sweep
                       dialog, which reads the amount from the deal. The route
                       refuses them here, so they are not offered. */}
-                  {LEDGER_CATEGORIES.filter(c => c !== 'sweep' && c !== 'sweep_reversal' && c !== 'sweep_kept').map(c => (
+                  {LEDGER_CATEGORIES.filter(c => c !== 'sweep' && c !== 'sweep_reversal' && c !== 'sweep_kept' && c !== 'sweep_kept_reversal').map(c => (
                     <option key={c} value={c}>{ledgerCategoryLabel(c)}</option>
                   ))}
                 </select>
@@ -1022,16 +1030,20 @@ export default function MoneyMovementPage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-white w-full sm:max-w-sm rounded-t-xl sm:rounded-xl shadow-xl max-h-[92vh] sm:max-h-[85vh] overflow-y-auto">
             <div className="px-5 py-4 border-b border-luxury-gray-5">
-              <h3 className="text-sm font-semibold text-luxury-gray-1">Undo this transfer</h3>
+              <h3 className="text-sm font-semibold text-luxury-gray-1">
+                {undoing.category === 'sweep_kept' ? 'Unclaim these deals' : 'Undo this transfer'}
+              </h3>
               <p className="text-xs text-luxury-gray-3 mt-0.5">
                 {formatCurrency(undoing.amount)} on {formatDate(undoing.entry_date)}
               </p>
             </div>
             <div className="px-5 py-4">
+              {/* A kept claim never moved a cent, so the copy must not promise
+                  money coming back or ask for a matching bank transfer. */}
               <p className="text-xs text-luxury-gray-2 mb-3">
-                This writes a line putting the money back and reopens the deals so their share can
-                be moved again. Nothing is deleted, so the original transfer stays on the record. A
-                deal that has already been moved again since is left alone.
+                {undoing.category === 'sweep_kept'
+                  ? 'This withdraws the claim and reopens the deals so their share can be settled again. No money moves, and the balance does not change. Nothing is deleted, so the original line stays on the record. A deal that has already been settled again since is left alone.'
+                  : 'This writes a line putting the money back and reopens the deals so their share can be moved again. Nothing is deleted, so the original transfer stays on the record. A deal that has already been moved again since is left alone.'}
               </p>
               <label className="field-label">Why (optional)</label>
               <input
@@ -1042,7 +1054,9 @@ export default function MoneyMovementPage() {
                 placeholder="Recorded against the wrong deals"
               />
               <p className="text-xs text-luxury-gray-3 mt-3">
-                This records the undo. Move the money back in the bank as well.
+                {undoing.category === 'sweep_kept'
+                  ? 'Nothing to do in the bank. This only changes what the report says is ours.'
+                  : 'This records the undo. Move the money back in the bank as well.'}
               </p>
             </div>
             <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 px-5 py-4 border-t border-luxury-gray-5">
@@ -1055,7 +1069,7 @@ export default function MoneyMovementPage() {
                 className="btn btn-primary text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 w-full sm:w-auto"
               >
                 {undoSaving ? <Loader2 size={12} className="animate-spin" /> : <Undo2 size={12} />}
-                Undo the transfer
+                {undoing.category === 'sweep_kept' ? 'Unclaim these deals' : 'Undo the transfer'}
               </button>
             </div>
           </div>

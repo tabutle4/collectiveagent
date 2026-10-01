@@ -100,6 +100,46 @@ export async function hasAnyCompleteSide(transactionId: string): Promise<boolean
 }
 
 /**
+ * Is this deal finished paying out?
+ *
+ * A third per-deal lock, alongside transactions.is_locked, and the one that
+ * would have stopped 12111 South Main. On Sep 28 2026 a compliance request for
+ * a different lease at the same building attached to a deal that had closed in
+ * May 2025 and been paid in July 2025, rewrote its gross commission from
+ * $1,359 to $1,478, replaced the client, the rent and the dates with the new
+ * deal's, and added the filing agent as a second primary agent. Nothing asked
+ * whether the deal was already done.
+ *
+ * is_locked did not stop it and never will: the column is false on all 1,313
+ * transactions and has never once been set. A lock nobody sets is not a lock,
+ * which is why this is derived from what actually happened to the deal instead
+ * of from a flag someone has to remember to tick.
+ *
+ * Closed AND paid, deliberately, not either alone. A closed deal whose agent
+ * has not been paid is still live work and must keep accepting corrections -
+ * that is the ordinary case where compliance is filed after the close date and
+ * the check arrives later. Once an agent has been paid, the numbers produced a
+ * payment and a 1099 line, and an agent form is not where they change.
+ *
+ * Like every other lock here, this does NOT reject the submission. The filing
+ * is recorded and the office is emailed; what stops is the deal's own data
+ * being rewritten underneath a payment that has already gone out.
+ */
+export async function isDealSettled(
+  transactionId: string,
+  status: string | null | undefined
+): Promise<boolean> {
+  if (String(status || '').toLowerCase() !== 'closed') return false
+  const { data } = await supabaseAdmin
+    .from('transaction_internal_agents')
+    .select('id')
+    .eq('transaction_id', transactionId)
+    .eq('payment_status', 'paid')
+    .limit(1)
+  return (data || []).length > 0
+}
+
+/**
  * Whether the given side of the deal is locked, and why.
  *
  * `reason` is null when unlocked. It is carried onto the recorded submission as

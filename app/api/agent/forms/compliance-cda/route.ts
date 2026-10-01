@@ -16,7 +16,7 @@ import { syncEcommissionRecords } from '@/lib/transactions/ecommissionSync'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 import { findDuplicateTransactions, findPartialAddressMatches } from '@/lib/transactions/dedupe'
 import { canonicalSide } from '@/lib/compliance/derive'
-import { getSideLock, hasAnyCompleteSide, type SideLockReason } from '@/lib/compliance/sideLock'
+import { getSideLock, hasAnyCompleteSide, isDealSettled, type SideLockReason } from '@/lib/compliance/sideLock'
 
 // Convert compliance-form commission inputs into a gross commission dollar
 // amount. commission_basis_price is the PRICE the commission is computed on
@@ -608,9 +608,15 @@ export async function POST(request: NextRequest) {
         representing: formFields.representing || txn.representing,
       })
       const sideLockedSub = subLock.locked
+      // Same third lock as the full form. This path writes the same money -
+      // price, gross commission, that side's commission, dates, BTSA, rebate -
+      // and re-runs the cascade, so a settled deal has to stop it here too.
+      const dealSettledSub = await isDealSettled(txn.id, txn.status)
       const submissionData = {
         ...formFields, notes: notes || null, changed_fields: changedFields, submission_mode: 'subsequent',
-        ...(sideLockedSub ? { locked_transaction: true, locked_reason: subLock.reason } : {}),
+        ...(sideLockedSub || dealSettledSub
+          ? { locked_transaction: true, locked_reason: dealSettledSub && !sideLockedSub ? 'deal_settled' : subLock.reason }
+          : {}),
       }
       const { data: submission } = await supabaseAdmin.from('agent_form_submissions')
         .insert({ form_id: formRecord?.id || null, agent_id: agentId, submitted_at: now, status: 'submitted', transaction_id: txn.id, data: submissionData, updated_at: now })
@@ -619,10 +625,10 @@ export async function POST(request: NextRequest) {
       // diffed (see skipKeys), so an agent whose only correction is "yes, we hold
       // both sides" has an empty changedFields and would never reach the write
       // block below. They still do not get to clear a flag the office set.
-      if (!txn.is_locked && !sideLockedSub && formFields.crc_both_sides === true) {
+      if (!txn.is_locked && !sideLockedSub && !dealSettledSub && formFields.crc_both_sides === true) {
         await supabaseAdmin.from('transactions').update({ is_intermediary: true, updated_at: now }).eq('id', txn.id)
       }
-      if (!txn.is_locked && !sideLockedSub && changedFields.length > 0) {
+      if (!txn.is_locked && !sideLockedSub && !dealSettledSub && changedFields.length > 0) {
         // Only write the fields that actually changed plus the compliance status fields
         // Same rule as the first submission: a referred-out lease is still a
         // lease. When the resubmission does not say what kind of client was
@@ -1126,8 +1132,8 @@ export async function POST(request: NextRequest) {
       const changedHtml = changedFields.length
         ? `<div style="background:#fff8e6;padding:14px 18px;margin:0 0 20px;border-left:3px solid #C5A278;"><p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#1a1a1a;">Changed fields:</p><ul style="margin:0;padding-left:18px;">${changedFields.map(f => `<li style="font-size:13px;color:#555;">${formatLabel(f)}</li>`).join('')}</ul></div>`
         : '<p style="font-size:13px;color:#555;margin:0 0 16px;">No field changes detected.</p>'
-      const lockedNote = (txn.is_locked || sideLockedSub)
-        ? `<p style="font-size:13px;color:#C5A278;margin:0 0 16px;"><strong>Note:</strong> ${txn.is_locked ? 'Transaction is locked' : subLock.reason === 'checklist_complete' ? `The ${repForLock} side is filed and the checklist is complete` : `The ${repForLock} side has already been reviewed`}. Manual update required.</p>`
+      const lockedNote = (txn.is_locked || sideLockedSub || dealSettledSub)
+        ? `<p style="font-size:13px;color:#C5A278;margin:0 0 16px;"><strong>Note:</strong> ${txn.is_locked ? 'Transaction is locked' : dealSettledSub && !sideLockedSub ? 'The deal is closed and an agent has already been paid' : subLock.reason === 'checklist_complete' ? `The ${repForLock} side is filed and the checklist is complete` : `The ${repForLock} side has already been reviewed`}. Manual update required.</p>`
         : ''
       const notifyHtml = getEmailLayout(
         `<p style="margin:0 0 16px;font-size:14px;color:#555555;">Resubmission received for <strong style="color:#1a1a1a;">${txn.property_address}</strong>.</p>
@@ -1139,8 +1145,10 @@ export async function POST(request: NextRequest) {
       )
       await sendNotifications(notificationEmails, 'Compliance Resubmission', notifyHtml, txn.property_address)
       return NextResponse.json({
-        success: true, locked: txn.is_locked || sideLockedSub, submission_id: submission?.id || null, changed_fields: changedFields,
-        message: (txn.is_locked || sideLockedSub) ? 'Your resubmission has been received. Because this transaction has been reviewed by the office, any updates will be applied manually. No action is needed from you.' : 'Resubmission received. The office has been notified.',
+        success: true, locked: txn.is_locked || sideLockedSub || dealSettledSub, submission_id: submission?.id || null, changed_fields: changedFields,
+        message: dealSettledSub && !txn.is_locked && !sideLockedSub
+          ? 'Your resubmission has been received. This deal is already closed and paid, so the office will review it by hand before anything changes. No action is needed from you.'
+          : (txn.is_locked || sideLockedSub) ? 'Your resubmission has been received. Because this transaction has been reviewed by the office, any updates will be applied manually. No action is needed from you.' : 'Resubmission received. The office has been notified.',
       })
     }
 
@@ -1163,6 +1171,17 @@ export async function POST(request: NextRequest) {
     if (!expedite_acknowledged) return NextResponse.json({ error: 'You must acknowledge the expedite policy' }, { status: 400 })
     if (!acceptance_date) return NextResponse.json({ error: 'Acceptance date is required' }, { status: 400 })
     if (!closing_or_movein_date) return NextResponse.json({ error: 'Closing or move-in date is required' }, { status: 400 })
+    // An apartment lease without a unit is not a full address, and the address
+    // is what decides which deal this submission attaches to. Two leases in one
+    // building with no unit on either build identical address keys, so the
+    // matcher calls them the same property and the second filing lands on the
+    // first deal. That is how a Sep 2026 request for one lease at 12111 South
+    // Main overwrote a different lease there that had closed and paid in 2025.
+    // buildAddressKeys keeps the unit token precisely so two units never
+    // collapse into each other; it can only do that if the unit is collected.
+    if (String(tenant_transaction_type || '').toLowerCase() === 'apartment' && !String(body.unit || unit || '').trim()) {
+      return NextResponse.json({ error: 'Unit number is required for an apartment lease' }, { status: 400 })
+    }
 
     const { data: agentProfile } = await supabaseAdmin.from('users').select('office, commission_plan, lease_commission_plan').eq('id', agentId).single()
     // A referred out deal is still a lease if the client referred was a tenant
@@ -1522,6 +1541,11 @@ export async function POST(request: NextRequest) {
 
     const submissionData = {
       submission_mode: 'compliance', property_address: resolvedAddress,
+      // What the AGENT typed, before matching. resolvedAddress above prefers the
+      // matched deal's own address, so on an existing deal it echoes that deal
+      // back and can never show that the filing landed on the wrong one. This is
+      // the field the compliance card reads.
+      address_entered: body.address_typed || buildDisplayAddress(addrParts) || null,
       team_or_office, unit: unit || null, in_matrix, mls_link, client_name, client_email, client_phone: client_phone || null,
       lead_source, closing_or_movein_date, acceptance_date: acceptance_date || null, representing,
       tenant_transaction_type: tenant_transaction_type || null, lease_term_months: lease_term_months || null,
@@ -1597,6 +1621,10 @@ export async function POST(request: NextRequest) {
         })
       : { locked: false, reason: null as SideLockReason | null }
     const sideLocked = fullLock.locked
+    // Closed and already paid out. Checked here next to the other locks so the
+    // single guard below covers all three; see isDealSettled for why is_locked
+    // was never going to catch this.
+    const dealSettled = txn ? await isDealSettled(txn.id, txn.status) : false
 
     if (!txn) {
       const { data: newTxn, error: createErr } = await supabaseAdmin.from('transactions')
@@ -1635,16 +1663,27 @@ export async function POST(request: NextRequest) {
       // commission, client details, dates, the agent's BTSA and rebate, and
       // stamped compliance_status back to 'submitted' - all without anyone in
       // the office touching it. On 3006 Brooks Ct that happened three times.
-      if (txn.is_locked || sideLocked) {
+      if (txn.is_locked || sideLocked || dealSettled) {
         const lockReason = txn.is_locked
           ? `transaction is locked`
-          : fullLock.reason === 'checklist_complete'
-            ? `the ${representing} side is filed and the checklist is complete`
-            : `the ${representing} side is already signed off`
-        await supabaseAdmin.from('agent_form_submissions').insert({ form_id: formRecord?.id || null, agent_id: agentId, submitted_at: now, status: 'submitted', transaction_id: transactionId, data: { ...submissionData, locked_transaction: true, locked_reason: txn.is_locked ? 'transaction' : fullLock.reason }, updated_at: now })
-        const notifyHtml = getEmailLayout(`<p style="font-size:14px;color:#555;">Compliance submission for <strong>${txn.property_address}</strong> - ${lockReason}. Manual review required.</p>${buildFormAnswersHtml(submissionData)}`, { title: 'Locked Transaction - Compliance Submission', preheader: `Locked: ${txn.property_address}` })
+          : dealSettled
+            ? `the deal is closed and an agent has already been paid`
+            : fullLock.reason === 'checklist_complete'
+              ? `the ${representing} side is filed and the checklist is complete`
+              : `the ${representing} side is already signed off`
+        const lockedReasonCode = txn.is_locked ? 'transaction' : dealSettled ? 'deal_settled' : fullLock.reason
+        await supabaseAdmin.from('agent_form_submissions').insert({ form_id: formRecord?.id || null, agent_id: agentId, submitted_at: now, status: 'submitted', transaction_id: transactionId, data: { ...submissionData, locked_transaction: true, locked_reason: lockedReasonCode }, updated_at: now })
+        // A settled deal is the case where the agent has most likely picked the
+        // wrong deal rather than genuinely needing a correction, so the office
+        // alert says the address they typed. Two leases in one building with
+        // no unit number read as the same property, which is exactly how this
+        // landed on a paid deal in the first place.
+        const settledNote = dealSettled
+          ? `<p style="font-size:14px;color:#555;">Address the agent entered: <strong>${body.address_typed || buildDisplayAddress(addrParts) || '(none)'}</strong>. If this is a different deal at the same property, create it as its own transaction rather than applying these figures here.</p>`
+          : ''
+        const notifyHtml = getEmailLayout(`<p style="font-size:14px;color:#555;">Compliance submission for <strong>${txn.property_address}</strong> - ${lockReason}. Manual review required.</p>${settledNote}${buildFormAnswersHtml(submissionData)}`, { title: 'Locked Transaction - Compliance Submission', preheader: `Locked: ${txn.property_address}` })
         await sendNotifications(notificationEmails, 'Compliance Submission (Locked)', notifyHtml, txn.property_address)
-        return NextResponse.json({ success: true, transaction_id: transactionId, locked: true, message: 'Your compliance request has been received. Because this transaction has been reviewed by the office, any updates will be applied manually. No action is needed from you.' })
+        return NextResponse.json({ success: true, transaction_id: transactionId, locked: true, message: dealSettled ? 'Your compliance request has been received. This deal is already closed and paid, so the office will review it by hand before anything changes. No action is needed from you.' : 'Your compliance request has been received. Because this transaction has been reviewed by the office, any updates will be applied manually. No action is needed from you.' })
       }
       // Attaching to a retainer prospect: give it the real property address the
       // agent just entered, the deal's actual type, and move it out of prospect

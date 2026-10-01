@@ -38,19 +38,30 @@ export async function POST(
     if (!original) {
       return NextResponse.json({ error: 'Sweep not found' }, { status: 404 })
     }
-    if (original.category !== 'sweep') {
+    if (original.category !== 'sweep' && original.category !== 'sweep_kept') {
       return NextResponse.json({ error: 'That ledger entry is not a sweep' }, { status: 400 })
     }
+
+    // A sweep_kept claimed our share without moving a cent, so undoing one must
+    // stay directionless too. Reusing sweep_reversal here, which is signed
+    // 'in', would credit the account money it never lost and leave the balance
+    // permanently overstated by the amount claimed. See CATEGORY_DIRECTION.
+    const keptClaim = original.category === 'sweep_kept'
+    const reversalCategory = keptClaim ? 'sweep_kept_reversal' : 'sweep_reversal'
 
     const { data: existingReversal } = await supabaseAdmin
       .from('brokerage_ledger')
       .select('id')
-      .eq('category', 'sweep_reversal')
+      .eq('category', reversalCategory)
       .eq('external_id', `reversal:${id}`)
       .maybeSingle()
     if (existingReversal) {
       return NextResponse.json(
-        { error: 'This sweep has already been reversed' },
+        {
+          error: keptClaim
+            ? 'These deals have already been unclaimed'
+            : 'This sweep has already been reversed',
+        },
         { status: 409 }
       )
     }
@@ -69,9 +80,11 @@ export async function POST(
         // Written as 'adjustment' this row summed to zero, so a reversed sweep
         // left the balance permanently down by the amount it was meant to
         // return.
-        entry_type: entryTypeForCategory('sweep_reversal'),
-        category: 'sweep_reversal',
-        description: `Reversed a sweep of ${original.description || 'office net'}`,
+        entry_type: entryTypeForCategory(reversalCategory),
+        category: reversalCategory,
+        description: keptClaim
+          ? `No longer claiming ${original.description || 'office net'}`
+          : `Reversed a sweep of ${original.description || 'office net'}`,
         amount: original.amount,
         bank_reference: original.bank_reference,
         external_id: `reversal:${id}`,
@@ -88,8 +101,8 @@ export async function POST(
       const { error: rowsError } = await supabaseAdmin.from('brokerage_ledger').insert(
         (children || []).map(c => ({
           entry_date: entryDate,
-          entry_type: entryTypeForCategory('sweep_reversal'),
-          category: 'sweep_reversal',
+          entry_type: entryTypeForCategory(reversalCategory),
+          category: reversalCategory,
           description: c.description,
           amount: c.amount,
           transaction_id: c.transaction_id,
@@ -117,7 +130,10 @@ export async function POST(
       const { data: laterSweeps, error: laterError } = await supabaseAdmin
         .from('brokerage_ledger')
         .select('transaction_id, parent_entry_id, created_at')
-        .eq('category', 'sweep')
+        // Both settle a deal's share, so both count as "touched since". Looking
+        // only for 'sweep' here would miss a deal that was unclaimed and then
+        // claimed again in place, and unstamp it out from under that newer row.
+        .in('category', ['sweep', 'sweep_kept'])
         .in('transaction_id', txnIds)
         .neq('parent_entry_id', id)
         .gt('created_at', original.created_at)

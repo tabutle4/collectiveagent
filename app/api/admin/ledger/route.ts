@@ -443,7 +443,7 @@ export async function POST(request: NextRequest) {
     // meaningless without the swept stamps the sweep route writes alongside
     // it. Typed by hand it would be a directionless row nothing can undo,
     // claiming deals it never settled.
-    if (category === 'sweep' || category === 'sweep_reversal' || category === 'sweep_kept') {
+    if (category === 'sweep' || category === 'sweep_reversal' || category === 'sweep_kept' || category === 'sweep_kept_reversal') {
       return NextResponse.json(
         { error: 'Record a sweep, undo one, or settle a share in place, from the sweep dialog rather than as a manual entry' },
         { status: 400 }

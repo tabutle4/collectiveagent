@@ -47,6 +47,7 @@ export const LEDGER_CATEGORIES = [
   'adjustment_in',
   'adjustment_out',
   'sweep_reversal',
+  'sweep_kept_reversal',
 ] as const
 export type LedgerCategory = (typeof LEDGER_CATEGORIES)[number]
 
@@ -69,6 +70,7 @@ const CATEGORY_LABELS: Record<LedgerCategory, string> = {
   adjustment_in: 'Correction, money added',
   adjustment_out: 'Correction, money taken out',
   sweep_reversal: 'Moved back from our income account',
+  sweep_kept_reversal: 'Our share, no longer claimed',
 }
 
 export function ledgerCategoryLabel(category: string | null | undefined): string {
@@ -83,7 +85,7 @@ export function ledgerCategoryLabel(category: string | null | undefined): string
  * it back in.
  *
  * 'none' is a deliberate and narrow claim: this row explains something without
- * the account balance changing. Two categories qualify. `earmark_release`,
+ * the account balance changing. Three categories qualify. `earmark_release`,
  * because an earmark is a reservation held in payout_expenses and was never
  * part of the ledger balance to begin with; releasing it changes what is
  * spoken for, not what is there. And `sweep_kept`, for the same reason: a
@@ -92,6 +94,13 @@ export function ledgerCategoryLabel(category: string | null | undefined): string
  * carries, and claiming our share without transferring it moves nothing. The
  * row says the share stopped being ours to move; the money did not go
  * anywhere, so neither does the balance.
+ *
+ * `sweep_kept_reversal` is the third, and it is directionless for exactly the
+ * reason its parent is. Undoing a sweep_kept must NOT reuse sweep_reversal:
+ * that category is signed 'in', so reversing a claim that moved nothing would
+ * credit the account money it never lost and leave the balance permanently
+ * overstated by the amount. The claim is withdrawn, the deals become sweepable
+ * again, and the balance is untouched at both ends.
  *
  * Every other category has to be signed. A category that can be written but
  * sums to zero is money that silently vanishes from the balance: the opening
@@ -119,6 +128,7 @@ const CATEGORY_DIRECTION: Record<LedgerCategory, 'in' | 'out' | 'none'> = {
   adjustment_in: 'in',
   adjustment_out: 'out',
   sweep_reversal: 'in',
+  sweep_kept_reversal: 'none',
 }
 
 export function ledgerDirection(category: string | null | undefined): 'in' | 'out' | 'none' {
@@ -145,6 +155,7 @@ const CATEGORY_ENTRY_TYPE: Record<LedgerCategory, LedgerEntryType> = {
   adjustment_in: 'transfer',
   adjustment_out: 'transfer',
   sweep_reversal: 'transfer',
+  sweep_kept_reversal: 'transfer',
 }
 
 export function entryTypeForCategory(category: LedgerCategory): LedgerEntryType {

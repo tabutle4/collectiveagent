@@ -8,6 +8,26 @@
 export const fmtDate = (d: string | null) =>
   d ? new Date((d.length === 10 ? d + 'T12:00:00' : d)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null
 
+/**
+ * Date AND time, for the moment a submission was filed.
+ *
+ * fmtDate above deliberately drops the time, which is right for a closing or
+ * move-in date. It is wrong for a filing: when two things happened to a deal
+ * within the same second - a submission attaching, then the money being
+ * rewritten - the day alone cannot tell you which came first, and that
+ * ordering is the whole story when a filing lands on the wrong deal. Rendered
+ * in the viewer's local zone, same as every other timestamp in the app.
+ */
+export const fmtDateTime = (d: string | null | undefined) => {
+  if (!d) return null
+  const parsed = new Date(d)
+  if (isNaN(parsed.getTime())) return null
+  return parsed.toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit',
+  })
+}
+
 export const fmtMoney = (v: any) => {
   const n = parseFloat(v)
   if (isNaN(n)) return String(v)
@@ -25,6 +45,12 @@ export const FIELD_GROUPS: { title: string; fields: { key: string; label: string
   {
     title: 'Deal',
     fields: [
+      // The address the AGENT typed, before matching. Not always the address of
+      // the deal this attached to: when a filing lands on the wrong deal - two
+      // units in one building, no unit number on either - this is the only
+      // thing on the screen that shows it. Older submissions predate this key
+      // and simply render nothing, which is correct: it was never captured.
+      { key: 'address_entered', label: 'Address entered' },
       { key: 'team_or_office', label: 'Team / office' },
       { key: 'representing', label: 'Representing', fmt: v => cap(String(v)) },
       { key: 'unit', label: 'Unit' },

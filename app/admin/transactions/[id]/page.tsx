@@ -51,7 +51,7 @@ import AgentBillingPanel from '@/components/transactions/AgentBillingPanel'
 import AgentCardFinancials, { OverridableField } from '@/components/transactions/AgentCardFinancials'
 import { AGENT_ROLE_OPTIONS, SIDE_OPTIONS, CONTACT_TYPES, PAYMENT_METHOD_OPTIONS, INCOMING_PAYMENT_METHOD_OPTIONS, paymentMethodLabel } from '@/lib/transactions/constants'
 import { getTransactionTypeLabel } from '@/lib/transactions/transactionTypes'
-import { FIELD_GROUPS, hasValue } from '@/lib/compliance/fieldGroups'
+import { FIELD_GROUPS, fmtDateTime, hasValue } from '@/lib/compliance/fieldGroups'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1699,7 +1699,23 @@ function ComplianceDocumentsTab({
           working the document slots below. */}
       {side?.form_data && FIELD_GROUPS.some(group => group.fields.some(f => hasValue(side.form_data[f.key]))) && (
         <div className="container-card">
-          <p className="section-title mb-3">Compliance Request</p>
+          <p className="section-title mb-1">Compliance Request</p>
+          {/* Who filed it and exactly when. Both already arrive on the side
+              object; the card simply never printed them. The side header above
+              carries the agent name but only renders on a deal with more than
+              one side, so on an ordinary deal there was nothing on screen
+              saying who filed this or when. */}
+          {/* The side header above already prints the agent name, but only on a
+              deal with more than one side. Repeat it only when that header is
+              absent, so a two-sided deal does not show it twice. The whole line
+              is skipped when it would be empty. */}
+          {(() => {
+            const when = fmtDateTime(side.submitted_at)
+            const line = showSideHeader
+              ? (when ? `Submitted ${when}` : '')
+              : `${side.agent_name || 'Unknown agent'}${when ? ` submitted ${when}` : ''}`
+            return line ? <p className="text-[11px] text-luxury-gray-3 mb-3">{line}</p> : null
+          })()}
           <div className="space-y-3">
             {FIELD_GROUPS.map(group => {
               const filled = group.fields.filter(f => hasValue(side.form_data[f.key]))

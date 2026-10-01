@@ -151,6 +151,12 @@ const FIELD_GROUPS: { title: string; fields: { key: string; label: string; fmt?:
   {
     title: 'Deal',
     fields: [
+      // The address the AGENT typed, before matching. Not always the address of
+      // the deal this attached to: when a filing lands on the wrong deal - two
+      // units in one building, no unit number on either - this is the only
+      // thing on the screen that shows it. Older submissions predate this key
+      // and simply render nothing, which is correct: it was never captured.
+      { key: 'address_entered', label: 'Address entered' },
       { key: 'team_or_office', label: 'Team / office' },
       { key: 'representing', label: 'Representing', fmt: v => cap(String(v)) },
       { key: 'unit', label: 'Unit' },
@@ -267,6 +273,13 @@ export default function AdminCompliancePage() {
   const [linkResults, setLinkResults] = useState<any[]>([])
   const [linkSearching, setLinkSearching] = useState(false)
   const [linkBusy, setLinkBusy] = useState(false)
+  // Submissions whose create was refused because a deal already exists at the
+  // address. The route offers confirm_new_deal for exactly this, and its error
+  // text tells the reader to "use Create anyway" - but this page never sent
+  // the flag and had no such button, so the message pointed at a control that
+  // did not exist here and the only way through was the create-missing page.
+  // Two leases in one building with no unit number hit this every time.
+  const [dupBlocked, setDupBlocked] = useState<Record<string, boolean>>({})
   const [expandedId, setExpandedId] = useState<string | null>(null)
   // Funding status renders as text; clicking it swaps in the dropdown.
   const [editingFundingId, setEditingFundingId] = useState<string | null>(null)
@@ -697,17 +710,28 @@ export default function AdminCompliancePage() {
     }
   }
 
-  const createTransactionForRow = async (submissionId: string) => {
+  const createTransactionForRow = async (submissionId: string, confirmNewDeal = false) => {
     setLinkBusy(true)
     setError('')
     try {
       const res = await fetch('/api/admin/compliance/link-transaction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create', submission_id: submissionId }),
+        body: JSON.stringify({ action: 'create', submission_id: submissionId, confirm_new_deal: confirmNewDeal }),
       })
       const data = await res.json()
-      if (!res.ok || !data.success) throw new Error(data.error || 'Could not create transaction')
+      if (!res.ok || !data.success) {
+        // A duplicate block is recoverable: this may genuinely be a second deal
+        // at the same property. Remember it so the panel can offer the way
+        // through rather than dead-ending on the error text.
+        if (data.duplicate_check) setDupBlocked(prev => ({ ...prev, [submissionId]: true }))
+        throw new Error(data.error || 'Could not create transaction')
+      }
+      setDupBlocked(prev => {
+        const next = { ...prev }
+        delete next[submissionId]
+        return next
+      })
       setLinkPanelId(null)
       await loadRows()
     } catch (err: any) {
@@ -911,6 +935,15 @@ export default function AdminCompliancePage() {
                                 <Plus size={12} /> Create new transaction
                               </button>
                             )}
+                            {!r.transaction_id && dupBlocked[r.id] && (
+                              <button
+                                onClick={() => createTransactionForRow(r.id, true)}
+                                disabled={linkBusy}
+                                className="btn btn-secondary text-xs disabled:opacity-50"
+                              >
+                                Create anyway - this is a different deal
+                              </button>
+                            )}
                             {r.transaction_id && (
                               <button
                                 onClick={() => unlinkTransaction(r.id)}
@@ -930,6 +963,9 @@ export default function AdminCompliancePage() {
                           {!r.transaction_id && (
                             <p className="text-xs text-luxury-gray-3">
                               Creating a transaction uses this submission&apos;s address, client, and closing date.
+                              {dupBlocked[r.id]
+                                ? ' A deal already exists at this address. If this is a different unit, add the unit number to the new deal right after you create it, or the two will keep matching each other.'
+                                : ''}
                             </p>
                           )}
                         </div>
